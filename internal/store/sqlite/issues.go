@@ -535,6 +535,7 @@ func ClaimIssueWithMode(ctx context.Context, db *sql.DB, issueID, holder string,
 		return core.ClaimResponse{}, err
 	}
 
+	runCoordinationProofHook(ctx, coordinationProofClaimBeforeCommit)
 	if err := tx.Commit(); err != nil {
 		return core.ClaimResponse{}, fmt.Errorf("commit tx: %w", err)
 	}
@@ -574,6 +575,7 @@ func HeartbeatLease(ctx context.Context, db *sql.DB, issueID, leaseToken string,
 		return "", leaseOwnershipError(ctx, tx, issueID, leaseToken, leaseGeneration)
 	}
 
+	runCoordinationProofHook(ctx, coordinationProofHeartbeatBeforeCommit)
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("commit tx: %w", err)
 	}
@@ -781,6 +783,7 @@ func HandoffLease(ctx context.Context, db *sql.DB, issueID string, req core.Hand
 		return core.HandoffResponse{}, err
 	}
 
+	runCoordinationProofHook(ctx, coordinationProofHandoffBeforeCommit)
 	if err := tx.Commit(); err != nil {
 		return core.HandoffResponse{}, fmt.Errorf("commit handoff: %w", err)
 	}
@@ -890,6 +893,8 @@ func UpdateIssue(ctx context.Context, db *sql.DB, issueID string, req core.Updat
 			return core.Issue{}, err
 		}
 	}
+
+	runCoordinationProofHook(ctx, coordinationProofUpdateAfterAuthorize)
 
 	// Build dynamic SET clause for non-zero / non-empty fields.
 	var sets []string
