@@ -262,6 +262,59 @@ Verification in the sibling worktree:
 General graph analytics, cached ready state, parent/related/discovered-from
 semantics changes, and UI remain out of scope per AFC-SDD-0155.
 
+## AFC-SDD-0158 / afc-110 implementation review
+
+Implementation commit `f9590f3` is delivered through PR `#64`.
+
+The pre-idempotency concurrency matrix is implemented with two independent
+SQLite handles opened through the production `Open` path and the real embedded
+migrations. Private context-scoped proof hooks hold an immediate transaction at
+the named claim, heartbeat, handoff, or update boundary; callers outside the
+SQLite package cannot activate them, and normal runtime execution remains a
+no-op.
+
+`TestCoordinationRaceMatrix` repeats each scenario for 100 schedules without
+`time.Sleep`:
+
+- concurrent claims produce one token/generation/event and one typed
+  `lease_held` loser;
+- heartbeat/reclaim proves both commit orders: renewal prevents replacement,
+  or replacement commits and the old heartbeat returns `lease_expired` without
+  changing the new deadline;
+- a close queued behind reclaim returns `lease_expired` and cannot write its
+  note, close event, or terminal state;
+- heartbeat/handoff proves both commit orders with exactly one handoff note,
+  one release event, no lease, and no partial audit sequence;
+- context cancellation after update authorization but before its write leaves
+  issue, version, lease, and events unchanged;
+- a close whose successful response is treated as lost commits exactly one
+  note/event/state transition; replay returns `version_conflict` and does not
+  duplicate the effect.
+
+`TestMultiConnectionDependencyCycleSerialization` additionally repeats 100
+opposite-edge schedules through separate handles: exactly one edge/event
+commits, the loser receives `dependency_cycle`, and exactly one issue is
+blocked.
+
+The last two boundaries are intentionally progressive evidence. Context
+cancellation is not a daemon process kill; black-box termination remains
+`afc-114`. The committed-close replay is non-duplicating but cannot return the
+original success until `afc-111` through `afc-113` add operation IDs and stored
+outcomes. This review therefore does not claim R-09 idempotency or the R-10
+crash/restart matrix.
+
+Focused verification in the sibling worktree:
+
+- `go test ./internal/store/sqlite -run '^TestCoordinationRaceMatrix$' -count=1 -v` — pass in 4.00s;
+- `go test -race ./internal/store/sqlite -run '^TestCoordinationRaceMatrix$' -count=1` — pass in 81.307s;
+- `make test-concurrency` — pass in 5.819s;
+- `git diff --check` — pass;
+- `make build` — pass;
+- `go vet ./...` — pass;
+- `go test ./... -count=1` — pass;
+- `go test -race ./... -count=1` — pass; the SQLite package, including the
+  repeated matrix, completed in 88.501s.
+
 ## Planning outcome
 
 - Preserved the 2026-08-11 evidence-based technical audit in `audit.md`.
@@ -278,11 +331,13 @@ semantics changes, and UI remain out of scope per AFC-SDD-0155.
 
 ## What has not shipped
 
-Packet 015 remains incomplete. Lease-bound mutation fencing, durable
-idempotency, the complete race/crash matrices, integrity and backup recovery,
-and operational observability remain assigned to their later leaves. The race
-classifications in `audit.md` remain current until each corresponding leaf is
-implemented and verified.
+Packet 015 remains incomplete. Lease-bound mutation fencing and the
+pre-idempotency concurrency matrix are now implemented, while durable
+idempotency, black-box crash/restart proof, integrity and backup recovery, and
+operational observability remain assigned to later leaves. The historical race
+classifications in `audit.md` retain the original audit result; current
+implementation evidence and remaining boundaries are recorded in this review
+and `traceability.md`.
 
 ## Implementation review gate
 

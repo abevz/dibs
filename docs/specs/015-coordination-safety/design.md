@@ -302,3 +302,15 @@ it does not rely on sleeps to make races likely.
 
 Every leaf adds focused regressions. The matrix leaf proves interactions after
 the component fixes land.
+
+The table states the final packet outcome, while the dependency DAG proves it
+progressively. `afc-110` owns the pre-idempotency multi-connection matrix:
+races 1-4 must satisfy their final safety result, race 5 injects request
+cancellation after authorization but before the write to prove rollback at the
+transaction seam, and race 6 must characterize the current lost-response
+ambiguity without duplicating state or audit effects. Real daemon termination
+at the same boundary remains `afc-114`; original-outcome replay for the same
+operation ID becomes testable only after `afc-111` through `afc-113`. The later
+leaves replace those two bounded proofs with the final process-kill and
+idempotent-replay outcomes rather than making `afc-110` depend on tasks it
+unblocks.

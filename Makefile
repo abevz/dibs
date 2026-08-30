@@ -5,7 +5,7 @@ SYSTEMCTL_USER ?= sh contrib/install/systemctl-user.sh
 GIT_REVISION := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 LD_VERSION_FLAG = -ldflags "-X github.com/abevz/af-coordinator/internal/build.Revision=$(GIT_REVISION)"
 
-.PHONY: preflight fmt vet lint build test build-install install-service uninstall-service restart-service install-launchd uninstall-launchd install-backup uninstall-backup install-backup-systemd uninstall-backup-systemd install-backup-launchd uninstall-backup-launchd install-hooks
+.PHONY: preflight fmt vet lint build test test-concurrency build-install install-service uninstall-service restart-service install-launchd uninstall-launchd install-backup uninstall-backup install-backup-systemd uninstall-backup-systemd install-backup-launchd uninstall-backup-launchd install-hooks
 
 preflight:
 	sh contrib/install/check-deps.sh
@@ -34,6 +34,9 @@ build-install:
 
 test:
 	$(GO) test -race ./...
+
+test-concurrency:
+	$(GO) test ./internal/store/sqlite -run '^(TestCoordinationRaceMatrix|TestMultiConnectionDependencyCycleSerialization)$$' -count=1
 
 install-service:
 	@mkdir -p $(HOME)/.config/systemd/user

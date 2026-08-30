@@ -295,20 +295,34 @@ tests include claim reattach (`issues_test.go:3956+`), handoff rollback
 unsafe. This is the gate from code plausibility to concurrent-agent trust.
 
 **Scope.** Build reusable barriers/failpoints and real multi-connection
-fixtures; cover all six races from `design.md`; assert state, lease, generation,
-event count/order, and error code; run repeatedly and under `-race`; document
-which serialization point won.
+fixtures; exercise all six races from `design.md`; assert state, lease,
+generation, event count/order, and error code; run repeatedly and under
+`-race`; document which serialization point won. At this pre-idempotency stage,
+race 5 proves rollback through request cancellation at the transaction seam and
+race 6 characterizes the committed-response-loss gap without duplicating the
+effect. Process-kill proof remains `afc-114`; stored original-outcome replay
+remains `afc-111` through `afc-113`.
 
 **Out of scope.** Load benchmarking; randomized chaos as the only evidence;
 multi-host tests; fixes unrelated to a failing required scenario.
 
-**Acceptance criteria.** The six scenarios deterministically pass for at least
-100 repeated schedules without sleeps or flakes. Each has explicit assertions
-for no dual owner and no partial audit state. `go test -race ./... -count=1`
-and the repeated concurrency target pass.
+**Acceptance criteria.** The six scenarios deterministically execute for at
+least 100 repeated schedules without sleeps or flakes. Races 1-4 assert no
+dual owner or partial audit state; race 5 leaves the authorized-but-cancelled
+transaction wholly absent; race 6 commits one close/note/event sequence and
+returns a deterministic typed conflict on replay, explicitly leaving R-09 open.
+The afc-107 opposite-edge invariant is also repeated through independent
+production-initialized SQLite handles. `go test -race ./... -count=1` and the
+repeated `make test-concurrency` target pass.
 
 **Dependencies.** `afc-101`, `afc-104`, `afc-105`, `afc-106`, `afc-107`,
 `afc-108`, `afc-109`.
+
+**Status.** Implemented in `afc-110`: `TestCoordinationRaceMatrix` exercises
+the six pre-idempotency scenarios for 100 schedules each, and
+`TestMultiConnectionDependencyCycleSerialization` repeats the afc-107 graph
+invariant across two production-initialized SQLite handles. Final verification
+and merge evidence are recorded in `review.md`.
 
 ## AFC-SDD-0159 / afc-111 — Durable mutation idempotency ledger
 
