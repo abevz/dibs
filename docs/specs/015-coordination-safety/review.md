@@ -264,6 +264,8 @@ semantics changes, and UI remain out of scope per AFC-SDD-0155.
 
 ## AFC-SDD-0158 / afc-110 implementation review
 
+Implementation commit `f9590f3` is delivered through PR `#64`.
+
 The pre-idempotency concurrency matrix is implemented with two independent
 SQLite handles opened through the production `Open` path and the real embedded
 migrations. Private context-scoped proof hooks hold an immediate transaction at
