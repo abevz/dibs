@@ -46,6 +46,10 @@ type CoordinatorStore interface {
 	ClaimIssue(ctx context.Context, issueID, holder string, ttlSeconds int) (core.ClaimResponse, error)
 	ClaimIssueWithSession(ctx context.Context, issueID, holder string, ttlSeconds int, sessionID string) (core.ClaimResponse, error)
 	ClaimIssueWithMode(ctx context.Context, issueID, holder string, ttlSeconds int, sessionID, invocationMode string) (core.ClaimResponse, error)
+	// ClaimIssueWithOperation is the full claim entry point and the only one
+	// that participates in the AFC-SDD-0159 idempotency ledger. The older
+	// variants delegate to it with an empty OperationID.
+	ClaimIssueWithOperation(ctx context.Context, issueID string, req core.ClaimRequest) (core.ClaimResponse, error)
 	// HeartbeatLease renews the current unexpired lease. now is the daemon's UTC
 	// wall-clock boundary; the renewal must affect exactly the lease identified
 	// by issueID, leaseToken, and leaseGeneration or it fails with lease_expired.

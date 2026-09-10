@@ -275,6 +275,48 @@ Migration `0008_lease_generation.sql` assigns generation `1` to an active
 pre-upgrade lease and its issue. Issues without an active lease remain at `0`,
 so their first fresh claim receives generation `1`.
 
+### operations
+
+```sql
+create table operations (
+  operation_id     text primary key,
+  operation_kind   text not null,
+  target_id        text not null,
+  actor            text not null default '',
+  fingerprint      text not null,
+  status           text not null check (status in ('completed')),
+  outcome_json     text not null default '{}',
+  created_at       text not null,
+  retain_until     text not null
+);
+```
+
+The AFC-SDD-0159 idempotency ledger. One row is one client-identified logical
+mutation and the public outcome it committed. Migration
+`0009_operation_ledger.sql` creates it; existing databases gain an empty table
+and unchanged behavior.
+
+`status` admits only `completed` by design. The row is inserted inside the
+mutation's own transaction, so there is no pending state to represent: if the
+transaction rolls back the row disappears with the effect it describes, and the
+ledger can never report a mutation that did not commit.
+
+`fingerprint` is a SHA-256 over the canonical, length-prefixed request
+arguments. A retry matching `operation_id`, `operation_kind`, `target_id`, and
+`fingerprint` replays `outcome_json`; any mismatch is `idempotency_conflict`
+and mutates nothing.
+
+`outcome_json` for a claim contains that claim's `lease_token`. The table is
+therefore never read by any list, issue-read, export, or diagnostic path — an
+exact operation replay is the only way to retrieve it. `operation_id` is a
+client-generated capability, not an identity: it is never written to events or
+returned by issue reads.
+
+`retain_until` is `created_at + 30 days` and marks when a stored outcome
+becomes eligible for deletion. No automatic reaper runs yet, so rows persist
+until a future cleanup task removes expired ones; growth is bounded by
+operation volume.
+
 ### notes
 
 ```sql

@@ -46,8 +46,28 @@ Every agent session follows this cycle:
 
    `holder`/`actor` is attribution, not authentication. Repeating `claim` with
    the same name while a lease is active returns `lease_held`; it never returns
-   or renews the existing token. Persist the original token immediately. If it
-   is lost, wait for TTL expiry or ask an operator to use `operator-release`.
+   or renews the existing token. Persist the original token immediately.
+
+   **If the response is lost, retry the same operation.** Every `afctl issue
+   claim` records an `operation_id` under
+   `~/.local/state/af-coordinator/operations/` *before* sending the request, so
+   a lost stdout or a timed-out reply does not lose the only copy. Recover the
+   original response — same token, same generation, same attempt — with:
+
+   ```
+   afctl issue claim <short_id> --retry-last
+   ```
+
+   This is **operation retry, not lease recovery**. It works because you hold
+   the secret `operation_id` you generated before the request; it does not
+   authenticate your actor or session, and it grants nothing to anyone else.
+   A retry with different arguments fails `idempotency_conflict` rather than
+   guessing. A *new* `operation_id` against an active lease is a new logical
+   claim and gets `lease_held` as usual.
+
+   If the `operation_id` itself is genuinely lost, wait for TTL expiry or ask
+   an operator to use `operator-release` — that remains the separate audited
+   break-glass path, not a routine recovery step.
 
    Every claim, note, and close records an `invocation_mode` on its audit
    event alongside the actor (`issue_claimed`, `note_added`, `issue_closed`,

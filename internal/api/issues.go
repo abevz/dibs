@@ -185,10 +185,19 @@ func handleClaimIssue(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 			return
 		}
 
-		resp, err := st.ClaimIssueWithMode(r.Context(), issueID, req.Holder, req.TTLSeconds, req.SessionID, invocationMode)
+		if err := core.ValidateOperationID(req.OperationID); err != nil {
+			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
+			return
+		}
+
+		req.InvocationMode = invocationMode
+		resp, err := st.ClaimIssueWithOperation(r.Context(), issueID, req)
 		if err != nil {
 			if apiErr, ok := errAsAPIError(err); ok {
 				switch apiErr.Code {
+				case core.ErrIdempotencyConflict:
+					writeError(w, http.StatusConflict, core.ErrIdempotencyConflict, apiErr.Message)
+					return
 				case core.ErrLeaseHeld:
 					writeError(w, http.StatusConflict, core.ErrLeaseHeld, apiErr.Message)
 					return

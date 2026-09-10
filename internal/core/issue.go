@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -215,6 +216,39 @@ type ClaimRequest struct {
 	TTLSeconds     int    `json:"ttl_seconds"`
 	SessionID      string `json:"session_id,omitempty"`
 	InvocationMode string `json:"invocation_mode,omitempty"`
+	// OperationID is an opaque client-generated idempotency key
+	// (AFC-SDD-0159). Retrying a claim with the same OperationID and the same
+	// arguments returns the original committed ClaimResponse — including its
+	// lease token and generation — instead of attempting a second claim.
+	// Omitting it preserves the pre-ledger behavior exactly.
+	//
+	// It is a capability, not an identity: it is never returned by issue reads
+	// or listings, and holder/session_id can neither substitute for it nor
+	// override it.
+	OperationID string `json:"operation_id,omitempty"`
+}
+
+// ClaimFingerprintFields returns the canonical request arguments that define a
+// claim for idempotency purposes. Two claims are the same logical operation
+// exactly when these match.
+//
+// TTL is included because it determines the committed expiry: replaying a
+// 60-second claim in answer to a 3600-second request would silently hand back
+// the wrong deadline, so that mismatch must fail closed instead.
+//
+// Holder and session_id are included to make replay stricter, never to
+// authorize it. Ownership proof remains the operation_id; these fields only
+// ensure a differently-attributed request is treated as a different request.
+// The resolved issue ID is used so that a short ID and its UUID do not look
+// like two different operations.
+func ClaimFingerprintFields(issueID string, req ClaimRequest, invocationMode string) map[string]string {
+	return map[string]string{
+		"issue_id":        issueID,
+		"holder":          req.Holder,
+		"ttl_seconds":     strconv.Itoa(req.TTLSeconds),
+		"session_id":      req.SessionID,
+		"invocation_mode": invocationMode,
+	}
 }
 
 // ClaimResponse is returned on successful claim.
