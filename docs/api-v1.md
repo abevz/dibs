@@ -68,6 +68,7 @@ Errors use one envelope:
 | 409  | `lease_held`       | another holder has an unexpired lease              |
 | 409  | `issue_not_ready`  | status/type/dependencies make the issue ineligible  |
 | 409  | `already_linked`   | artifact is already linked to the issue            |
+| 409  | `idempotency_conflict` | `operation_id` reused with a different request |
 | 409  | `short_id_taken`   | an issue with this short_id already exists         |
 | 410  | `lease_expired`    | supplied `lease_token` is expired or unknown       |
 | 422  | `dependency_cycle` | a `blocks` edge would create a cycle               |
@@ -76,7 +77,9 @@ Errors use one envelope:
 Clients handle `version_conflict` by rereading and retrying;
 `lease_held` by backing off or picking other ready work;
 `issue_not_ready` by rereading dependencies and picking ready work;
-`lease_expired` by re-claiming.
+`lease_expired` by re-claiming;
+`idempotency_conflict` by using a fresh `operation_id` for a genuinely new
+request, never by retrying the same one.
 
 ## Health
 
@@ -296,6 +299,25 @@ This is the compact route-to-implementation inventory for the current daemon.
   `issue_not_ready`.
   Ready-list output is advisory; claim repeats the shared eligibility predicate
   inside its transaction and is the authoritative decision.
+
+  Claim also accepts an optional `operation_id`: an opaque, high-entropy,
+  client-generated idempotency key (afctl uses a UUIDv4). Retrying a claim with
+  the same `operation_id` and identical arguments returns the original
+  committed response — same `lease_token`, `lease_generation`, `attempt_id`,
+  `expires_at`, and `version` — without claiming again and without advancing
+  the fencing generation. The outcome is recorded in the claim's own
+  transaction, so it survives daemon restart. Reusing an `operation_id` with a
+  different target or different arguments returns `idempotency_conflict` and
+  performs no mutation. Omitting `operation_id` preserves the previous
+  behavior exactly.
+
+  This is **operation retry, not lease recovery**. It answers "what did my
+  committed operation do?" using a secret the caller generated before sending
+  the request. A caller that never had the `operation_id` gets ordinary
+  `lease_held` no matter how exactly it reproduces `holder` or `session_id` —
+  those remain attribution, never authentication. To clear a lease whose
+  operation ID is genuinely lost, `operator-release` remains the separate,
+  audited break-glass path.
 - `POST /v1/issues/{issue_id}/heartbeat` — body: `lease_token`,
   `ttl_seconds`; extends `expires_at`; appends no event
 - `POST /v1/issues/{issue_id}/release` — body: `lease_token`; deletes the

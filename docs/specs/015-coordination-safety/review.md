@@ -378,3 +378,48 @@ After merge and closure of `afc-101`, the expected first manual ready leaf is
 `afc-103`; independent `exec/auto` routing may expose only `afc-107` until the
 lease-contract blockers close. That post-close view is verified during issue
 handoff, not predicted as current live state.
+
+## AFC-SDD-0159 / afc-111 — durable mutation idempotency ledger
+
+**Shipped.** An `operations` ledger (`migrations/0009_operation_ledger.sql`)
+recording operation ID, kind, target, actor, canonical request fingerprint,
+completion state, serialized public outcome, and retention timestamps. Claim
+accepts an optional client-generated `operation_id` and is the representative
+mutation this task requires; a new `idempotency_conflict` code covers reuse
+with a different request.
+
+**Verified.** Replay of a committed claim returns the original `lease_token`,
+`lease_generation`, `attempt_id`, `expires_at`, and `version`, executes no
+second mutation, and leaves the fencing generation unchanged. Replay still
+works after the lease is released and after a daemon restart. Reuse of an
+operation ID with a different target, TTL, holder, session, or operation kind
+fails closed with no mutation. Two concurrent identical operations across
+independent production-initialized SQLite handles yield one lease, one claim
+event, one ledger row, and one token, over 100 schedules; two concurrent
+conflicting operations yield exactly one success and one typed conflict over
+100 schedules. Lease tokens and operation IDs appear in no event, issue read,
+or listing. An end-to-end run against a scratch daemon and CLI reproduced the
+original operational failure and recovered from it across a daemon restart
+without `operator-release`.
+
+**Security boundary held.** The ledger authorizes replay on possession of the
+`operation_id` plus request equivalence — never on `holder`, `actor`, or
+`session_id`, which remain attribution. A claim carrying identical holder and
+session but a different (or absent) operation ID still receives `lease_held`
+and never sees the active token, so the same-holder reattach removed by
+AFC-SDD-0154 is not reintroduced. `operator-release` is unchanged and remains
+the separate audited break-glass path.
+
+**A client-side bug found and fixed during end-to-end validation.** `afctl`
+journals each claim's operation ID before sending, so a lost response does not
+lose the key. The first implementation overwrote that journal on every attempt,
+so a later claim that the daemon *rejected* destroyed the recovery key of an
+earlier claim that had actually committed. The journal now returns the
+displaced key and restores it whenever the daemon answers with a typed error,
+since a rejected request never committed. Regression tests cover it.
+
+**Open.** Retention is recorded per row (`retain_until`, 30 days) and
+documented, but no automatic reaper deletes expired rows yet. Endpoint
+adoption beyond claim stays with `afc-112` (create) and `afc-113` (lifecycle
+mutations), and the black-box crash/restart matrix remains `afc-114`.
+

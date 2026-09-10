@@ -36,7 +36,7 @@ test:
 	$(GO) test -race ./...
 
 test-concurrency:
-	$(GO) test ./internal/store/sqlite -run '^(TestCoordinationRaceMatrix|TestMultiConnectionDependencyCycleSerialization)$$' -count=1
+	$(GO) test ./internal/store/sqlite -run '^(TestCoordinationRaceMatrix|TestMultiConnectionDependencyCycleSerialization|TestConcurrentIdenticalClaimOperations|TestConcurrentConflictingClaimOperations)$$' -count=1
 
 install-service:
 	@mkdir -p $(HOME)/.config/systemd/user

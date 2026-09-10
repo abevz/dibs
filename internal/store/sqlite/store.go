@@ -120,6 +120,10 @@ func (s *Store) ClaimIssueWithMode(ctx context.Context, issueID, holder string, 
 	return ClaimIssueWithMode(ctx, s.db, issueID, holder, ttlSeconds, sessionID, invocationMode)
 }
 
+func (s *Store) ClaimIssueWithOperation(ctx context.Context, issueID string, req core.ClaimRequest) (core.ClaimResponse, error) {
+	return ClaimIssueWithOperation(ctx, s.db, issueID, req)
+}
+
 func (s *Store) HeartbeatLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int, now time.Time) (string, error) {
 	return HeartbeatLease(ctx, s.db, issueID, leaseToken, leaseGeneration, ttlSeconds, now)
 }

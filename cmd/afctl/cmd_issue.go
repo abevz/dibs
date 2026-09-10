@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -475,7 +476,12 @@ func runIssueReady(ctx context.Context, c *client.Client, args []string) error {
 	return nil
 }
 
-const issueClaimUsage = "Usage: afctl issue claim <issue-id> [--holder <name>|--actor <name>] [--ttl <seconds>] [--session-id <id>] [--invocation-mode interactive|scheduled|unknown]\n" + lifecycleHint
+const issueClaimUsage = "Usage: afctl issue claim <issue-id> [--holder <name>|--actor <name>] [--ttl <seconds>] [--session-id <id>] [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>] [--retry-last]\n" +
+	"\n" +
+	"  --operation-id  reuse an explicit idempotency key; an exact retry returns the\n" +
+	"                  original claim outcome instead of claiming again\n" +
+	"  --retry-last    retry the previous claim for this issue using its journaled\n" +
+	"                  operation ID; use this when a claim's response was lost\n" + lifecycleHint
 
 func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -491,6 +497,8 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 	ttl := 3600
 	sessionID := ""
 	invocationMode := ""
+	operationID := ""
+	retryLast := false
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -514,6 +522,13 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 				invocationMode = args[i+1]
 				i++
 			}
+		case "--operation-id":
+			if i+1 < len(args) {
+				operationID = args[i+1]
+				i++
+			}
+		case "--retry-last":
+			retryLast = true
 		}
 	}
 
@@ -530,14 +545,72 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 		invocationMode = normalized
 	}
 
-	resp, err := c.ClaimIssueWithSessionAndMode(ctx, issueID, holder, ttl, sessionID, invocationMode)
+	// Resolve the idempotency key before sending. --retry-last reuses the key
+	// journaled by the previous attempt, which is what makes a lost response
+	// recoverable; anything else is a new logical operation and gets a new key.
+	journalPath := ""
+	if retryLast {
+		if operationID != "" {
+			return usageErr(issueClaimUsage, "--retry-last and --operation-id are mutually exclusive")
+		}
+		journaled, path, jerr := readJournaledOperationID("claim", issueID)
+		if jerr != nil {
+			return fmt.Errorf("%s", jerr)
+		}
+		if journaled == "" {
+			return fmt.Errorf("no journaled claim operation for %s (expected %s)", issueID, path)
+		}
+		operationID = journaled
+		journalPath = path
+	}
+	if operationID == "" {
+		operationID = newOperationID()
+	}
+	previousOperationID := ""
+	journaled := false
+	if journalPath == "" {
+		path, previous, jerr := journalOperationID("claim", issueID, operationID)
+		if jerr != nil {
+			return fmt.Errorf("%s", jerr)
+		}
+		journalPath = path
+		previousOperationID = previous
+		journaled = true
+	}
+
+	resp, err := c.ClaimIssueWithRequest(ctx, issueID, core.ClaimRequest{
+		Holder:         holder,
+		TTLSeconds:     ttl,
+		SessionID:      sessionID,
+		InvocationMode: invocationMode,
+		OperationID:    operationID,
+	})
 	if err != nil {
+		// A typed error means the daemon answered: the claim definitively did
+		// not commit, so this operation ID is worthless and must not keep
+		// displacing an earlier key whose outcome is still unknown.
+		var clientErr *client.ClientError
+		if errors.As(err, &clientErr) {
+			if journaled {
+				restoreJournaledOperationID(journalPath, previousOperationID)
+			}
+			fail(err)
+		}
+
+		// No answer arrived. This is the ambiguous case the operation ID
+		// exists for: the claim may already have committed. Point at the
+		// durable copy rather than letting the caller assume nothing happened.
+		fmt.Fprintf(os.Stderr, "\nclaim outcome is unconfirmed; it may already have committed.\n")
+		fmt.Fprintf(os.Stderr, "operation_id: %s\n", operationID)
+		fmt.Fprintf(os.Stderr, "journaled at: %s\n", journalPath)
+		fmt.Fprintf(os.Stderr, "retry safely: afctl issue claim %s --retry-last\n", issueID)
 		fail(err)
 	}
 	if jsonOutput {
 		json.NewEncoder(os.Stdout).Encode(resp)
 		return nil
 	}
+	fmt.Printf("Operation ID: %s\n", operationID)
 	fmt.Printf("Lease Token: %s\n", resp.LeaseToken)
 	fmt.Printf("Attempt ID:  %s\n", resp.AttemptID)
 	fmt.Printf("Generation:  %d\n", resp.LeaseGeneration)

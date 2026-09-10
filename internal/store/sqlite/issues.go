@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -394,7 +395,54 @@ func ClaimIssueWithSession(ctx context.Context, db *sql.DB, issueID, holder stri
 // normalizes to the conservative "unknown" default; the mode is never
 // inferred from the process tree.
 func ClaimIssueWithMode(ctx context.Context, db *sql.DB, issueID, holder string, ttlSeconds int, sessionID, invocationMode string) (core.ClaimResponse, error) {
-	invocationMode, err := core.NormalizeInvocationMode(invocationMode)
+	return ClaimIssueWithOperation(ctx, db, issueID, core.ClaimRequest{
+		Holder:         holder,
+		TTLSeconds:     ttlSeconds,
+		SessionID:      sessionID,
+		InvocationMode: invocationMode,
+	})
+}
+
+// ClaimIssueWithOperation is the full claim entry point. When req.OperationID
+// is set, the claim participates in the durable idempotency ledger
+// (AFC-SDD-0159): the committed outcome is recorded in the claim's own
+// transaction, and an exact retry of the same operation returns that stored
+// outcome instead of claiming again.
+//
+// This is operation retry, not lease recovery. It answers "what did MY
+// committed operation do?" using a secret the caller generated before it ever
+// sent the request. It never answers "who owns this lease?", so it does not
+// reintroduce the holder-only reattach removed by AFC-SDD-0154: a caller
+// without the original operation_id gets normal lease_held behavior no matter
+// what holder or session_id it presents.
+//
+// An empty OperationID preserves pre-ledger behavior exactly.
+func ClaimIssueWithOperation(ctx context.Context, db *sql.DB, issueID string, req core.ClaimRequest) (core.ClaimResponse, error) {
+	if err := core.ValidateOperationID(req.OperationID); err != nil {
+		return core.ClaimResponse{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
+	}
+
+	// A lost race against a concurrent transaction using the same operation_id
+	// is resolved by retrying once: the second attempt's ledger lookup sees the
+	// winner's committed row and replays it. Only one outcome can ever exist,
+	// so this loop cannot claim twice.
+	for attempt := 0; attempt < 2; attempt++ {
+		resp, err := claimIssueAttempt(ctx, db, issueID, req)
+		if errors.Is(err, errOperationRace) {
+			continue
+		}
+		return resp, err
+	}
+	return core.ClaimResponse{}, core.NewAPIError(core.ErrConflict,
+		"claim raced a concurrent operation; retry")
+}
+
+func claimIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core.ClaimRequest) (core.ClaimResponse, error) {
+	holder := req.Holder
+	ttlSeconds := req.TTLSeconds
+	sessionID := req.SessionID
+
+	invocationMode, err := core.NormalizeInvocationMode(req.InvocationMode)
 	if err != nil {
 		return core.ClaimResponse{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
 	}
@@ -404,6 +452,24 @@ func ClaimIssueWithMode(ctx context.Context, db *sql.DB, issueID, holder string,
 		return core.ClaimResponse{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	fingerprint := core.OperationFingerprint(core.ClaimFingerprintFields(issueID, req, invocationMode))
+
+	// Replay check runs before any state validation. A committed operation's
+	// outcome must still be retrievable after the lease was released or the
+	// issue closed, because the caller is asking about its own past commit.
+	if req.OperationID != "" {
+		rec, err := lookupOperation(ctx, tx, req.OperationID)
+		if err != nil {
+			return core.ClaimResponse{}, err
+		}
+		if rec != nil {
+			if err := authorizeReplay(rec, core.OperationKindClaim, issueID, fingerprint); err != nil {
+				return core.ClaimResponse{}, err
+			}
+			return decodeClaimOutcome(rec)
+		}
+	}
 
 	// Check issue exists and is open.
 	var status, issueType string
@@ -507,6 +573,12 @@ func ClaimIssueWithMode(ctx context.Context, db *sql.DB, issueID, holder string,
 		// Constraint violation (PK on issue_id) means another claim won while
 		// both deferred transactions were reading the same "open" state.
 		if isSQLiteConstraintError(err) {
+			// With an operation_id in play the winner may be this very
+			// operation committing on another connection. Retry so the ledger
+			// lookup can replay it rather than reporting a false conflict.
+			if req.OperationID != "" {
+				return core.ClaimResponse{}, errOperationRace
+			}
 			return core.ClaimResponse{}, core.NewAPIError(core.ErrLeaseHeld,
 				"issue is already claimed: "+issueID)
 		}
@@ -535,12 +607,23 @@ func ClaimIssueWithMode(ctx context.Context, db *sql.DB, issueID, holder string,
 		return core.ClaimResponse{}, err
 	}
 
+	resp := core.ClaimResponse{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, ExpiresAt: expiresAt, AttemptID: attemptID, Version: version + 1}
+
+	// Same transaction as the lease insert, status change, and claim event:
+	// the ledger row and the effect it describes commit together or not at all.
+	if req.OperationID != "" {
+		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindClaim,
+			issueID, holder, fingerprint, resp, now); err != nil {
+			return core.ClaimResponse{}, err
+		}
+	}
+
 	runCoordinationProofHook(ctx, coordinationProofClaimBeforeCommit)
 	if err := tx.Commit(); err != nil {
 		return core.ClaimResponse{}, fmt.Errorf("commit tx: %w", err)
 	}
 
-	return core.ClaimResponse{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, ExpiresAt: expiresAt, AttemptID: attemptID, Version: version + 1}, nil
+	return resp, nil
 }
 
 // HeartbeatLease renews the current unexpired lease identified by issue_id,

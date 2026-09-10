@@ -342,6 +342,18 @@ func (c *Client) ClaimIssueWithSessionAndMode(ctx context.Context, issueID, hold
 	return result, nil
 }
 
+// ClaimIssueWithRequest sends a fully specified claim, including any
+// AFC-SDD-0159 operation_id. Retrying the same request with the same
+// operation_id returns the original committed ClaimResponse rather than
+// attempting a second claim.
+func (c *Client) ClaimIssueWithRequest(ctx context.Context, issueID string, req core.ClaimRequest) (core.ClaimResponse, error) {
+	var result core.ClaimResponse
+	if err := c.doJSON(ctx, http.MethodPost, "/v1/issues/"+issueID+"/claim", req, &result); err != nil {
+		return core.ClaimResponse{}, err
+	}
+	return result, nil
+}
+
 // HeartbeatLease sends a POST /v1/issues/{issueID}/heartbeat request with the
 // lease generation from the claim that created the lease.
 func (c *Client) HeartbeatLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int) (string, error) {

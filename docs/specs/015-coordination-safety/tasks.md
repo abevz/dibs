@@ -355,6 +355,20 @@ retention behavior is documented.
 
 **Dependencies.** `afc-101`, `afc-110`.
 
+**Status.** Done. The ledger, its migration (`0009_operation_ledger.sql`), the
+`operation_id` contract, and `idempotency_conflict` are implemented, with
+**claim** adopted as the representative mutation this task calls for.
+Verification: `internal/store/sqlite/operations_test.go` (replay, fail-closed
+conflict binding, concurrent duplicate and conflicting operations across
+independent connections at 100 schedules each, restart durability, token and
+operation-ID secrecy), `internal/api/api_test.go` (HTTP replay, `lease_held`
+for a new operation ID, no ledger exposure through issue reads), and
+`cmd/afctl/operation_journal_test.go` (client-side key persistence).
+
+Adoption of the remaining endpoints stays where the packet put it: create is
+`afc-112`, and heartbeat/release/update/handoff/close are `afc-113`. Those
+tasks now inherit a working ledger rather than needing to build one.
+
 ## AFC-SDD-0160 / afc-112 — Retry-safe create and claim
 
 **Problem.** Retrying create allocates a new short ID and issue. Claim's
@@ -372,6 +386,12 @@ claim; persist exact committed outcomes; return the original short ID or lease
 on retry; remove holder-only recovery; expose CLI guidance and JSON; test
 timeout-after-commit, concurrent retry, retry after later state change, and
 payload mismatch.
+
+**Remaining after `afc-111`.** The claim half is delivered: `afc-111` adopted
+claim as its representative mutation, and holder-only recovery was already
+removed by AFC-SDD-0154. What is left here is **create**: operation IDs on
+`CreateIssue` so a retried create returns the original issue and short ID
+instead of allocating a second one.
 
 **Out of scope.** Importer-level natural keys; deduplicating deliberately
 distinct tasks with identical titles; lifecycle mutations after claim.

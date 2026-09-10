@@ -14,6 +14,10 @@ const (
 	ErrDependencyCycle  = "dependency_cycle"
 	ErrAlreadyLinked    = "already_linked"
 	ErrAlreadyTagged    = "already_tagged"
+	// ErrIdempotencyConflict is returned when an operation_id is reused with a
+	// request that does not match the one it originally recorded
+	// (AFC-SDD-0159). It always fails closed: the second mutation never runs.
+	ErrIdempotencyConflict = "idempotency_conflict"
 )
 
 // APIError is the standard error envelope returned by the daemon.

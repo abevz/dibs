@@ -2714,3 +2714,131 @@ func TestConcurrentClaimSameIssue(t *testing.T) {
 		t.Errorf("expected exactly 1 conflict (409), got %d", conflictCount)
 	}
 }
+
+// claimOverHTTP posts a claim body and returns the status plus decoded fields.
+func claimOverHTTP(t *testing.T, serverURL, issueID, body string) (int, map[string]any) {
+	t.Helper()
+	req, err := http.NewRequest("POST", serverURL+"/v1/issues/"+issueID+"/claim", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var decoded map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode claim response: %v", err)
+	}
+	return resp.StatusCode, decoded
+}
+
+func seedClaimableIssueRow(t *testing.T, db *sql.DB, issueID, shortID string) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := db.Exec(
+		`INSERT OR IGNORE INTO projects (id, key, name, description, next_issue_seq, created_at, updated_at)
+		 VALUES ('proj-op', 'op', 'Op', '', 1, ?, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO issues (id, short_id, project_id, scope_kind, title, description, status, priority, assignee, version, created_at, updated_at)
+		 VALUES (?, ?, 'proj-op', 'project', 'Claimable', '', 'open', 3, '', 1, ?, ?)`,
+		issueID, shortID, now, now); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestClaimIdempotentReplayOverHTTP exercises AFC-SDD-0159 end to end through
+// the transport: the same operation_id replays the original outcome, a new
+// operation_id gets normal lease_held, and a mismatched reuse fails closed.
+func TestClaimIdempotentReplayOverHTTP(t *testing.T) {
+	server, db := newTestServer(t)
+	issueID := "issue-op-1"
+	seedClaimableIssueRow(t, db, issueID, "op-1")
+
+	const operationID = "op-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	body := `{"holder":"agent-1","ttl_seconds":3600,"operation_id":"` + operationID + `"}`
+
+	status, first := claimOverHTTP(t, server.URL, issueID, body)
+	if status != http.StatusOK {
+		t.Fatalf("first claim status = %d, want 200", status)
+	}
+	token, _ := first["lease_token"].(string)
+	if token == "" {
+		t.Fatal("expected a lease token")
+	}
+
+	status, replay := claimOverHTTP(t, server.URL, issueID, body)
+	if status != http.StatusOK {
+		t.Fatalf("replay status = %d, want 200", status)
+	}
+	if replay["lease_token"] != first["lease_token"] {
+		t.Error("replay did not return the original lease token")
+	}
+	if replay["lease_generation"] != first["lease_generation"] {
+		t.Error("replay did not preserve the original lease generation")
+	}
+	if replay["attempt_id"] != first["attempt_id"] {
+		t.Error("replay did not preserve the original attempt id")
+	}
+
+	// A different operation ID is a new logical operation: normal conflict,
+	// and it must not disclose the active token.
+	newOp := `{"holder":"agent-1","ttl_seconds":3600,"operation_id":"op-11112222-3333-4444-5555-666677778888"}`
+	status, conflict := claimOverHTTP(t, server.URL, issueID, newOp)
+	if status != http.StatusConflict {
+		t.Fatalf("new operation status = %d, want 409", status)
+	}
+	if encoded, _ := json.Marshal(conflict); strings.Contains(string(encoded), token) {
+		t.Error("lease_held response disclosed the active lease token")
+	}
+
+	// Same operation ID, different arguments: typed idempotency conflict.
+	mismatch := `{"holder":"agent-1","ttl_seconds":60,"operation_id":"` + operationID + `"}`
+	status, conflictBody := claimOverHTTP(t, server.URL, issueID, mismatch)
+	if status != http.StatusConflict {
+		t.Fatalf("mismatched reuse status = %d, want 409", status)
+	}
+	errObj, _ := conflictBody["error"].(map[string]any)
+	if errObj == nil || errObj["code"] != core.ErrIdempotencyConflict {
+		t.Fatalf("mismatched reuse error = %v, want %s", conflictBody, core.ErrIdempotencyConflict)
+	}
+}
+
+// TestIssueReadNeverExposesOperationID confirms the ledger stays invisible to
+// ordinary agent-facing reads.
+func TestIssueReadNeverExposesOperationID(t *testing.T) {
+	server, db := newTestServer(t)
+	issueID := "issue-op-2"
+	seedClaimableIssueRow(t, db, issueID, "op-2")
+
+	const operationID = "op-secret00-1111-2222-3333-444455556666"
+	status, claimed := claimOverHTTP(t, server.URL, issueID,
+		`{"holder":"agent-1","ttl_seconds":3600,"session_id":"s-1","operation_id":"`+operationID+`"}`)
+	if status != http.StatusOK {
+		t.Fatalf("claim status = %d, want 200", status)
+	}
+	token, _ := claimed["lease_token"].(string)
+
+	for _, path := range []string{"/v1/issues/" + issueID, "/v1/issues"} {
+		resp, err := http.Get(server.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(payload), operationID) {
+			t.Errorf("%s exposed the operation_id", path)
+		}
+		if token != "" && strings.Contains(string(payload), token) {
+			t.Errorf("%s exposed the lease token", path)
+		}
+	}
+}
