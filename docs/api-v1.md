@@ -222,7 +222,15 @@ This is the compact route-to-implementation inventory for the current daemon.
 - `POST /v1/issues` — create; daemon allocates `short_id`; body includes
   `project`, `scope_kind`, optional `repo`/`worktree`, `title`,
   optional `external_key`, `description`, `acceptance_criteria`, `priority`, `issue_type`
-  (`task` default, `bug`, `feature`, `epic`, `chore`)
+  (`task` default, `bug`, `feature`, `epic`, `chore`). An optional
+  `operation_id` uses the durable operation ledger: the same ID and canonical
+  request return the original issue and short ID, including after later issue
+  changes or daemon restart, without a second issue, event, or sequence
+  increment. The fingerprint binds project, actor, and all issue fields;
+  defaults and tag order are normalized. A changed request or operation kind
+  returns `idempotency_conflict` (409). Omitting the ID preserves legacy
+  create behavior. The caller must retain the ID before sending the request
+  to recover from an ambiguous timeout.
 - `GET  /v1/issues/{issue_id}` — fetch one, including current lease if any
 - dependency payloads inside issue responses use explicit identity fields:
   `issue_id`, `issue_short_id`, `depends_on_id`, `depends_on_short_id`

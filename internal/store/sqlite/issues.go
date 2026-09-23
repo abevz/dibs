@@ -15,48 +15,77 @@ import (
 	"github.com/google/uuid"
 )
 
-// CreateIssue inserts a new issue, allocating a short_id from the project's sequence.
+// CreateIssue inserts a new issue, allocating a short_id from the project's
+// sequence. An operation ID replays the exact committed result.
 func CreateIssue(ctx context.Context, db *sql.DB, projectKey string, req core.CreateIssueRequest) (core.Issue, error) {
-	// Resolve project by key.
-	proj, err := GetProjectByKey(ctx, db, projectKey)
-	if err != nil {
-		return core.Issue{}, fmt.Errorf("resolve project: %w", err)
+	if err := core.ValidateOperationID(req.OperationID); err != nil {
+		return core.Issue{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
 	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	id := uuid.New().String()
-
-	// Resolve repository and worktree references.
-	var repoID, worktreeID interface{} = nil, nil
-	if req.Repo != "" {
-		repo, err := GetRepoInProject(ctx, db, proj.ID, req.Repo)
-		if err != nil {
-			return core.Issue{}, fmt.Errorf("resolve repo: %w", err)
+	for attempt := 0; attempt < 2; attempt++ {
+		issue, err := createIssueAttempt(ctx, db, projectKey, req)
+		if errors.Is(err, errOperationRace) {
+			continue
 		}
-		repoID = repo.ID
+		return issue, err
 	}
-	if req.Worktree != "" {
-		wt, err := GetWorktree(ctx, db, req.Worktree)
-		if err != nil {
-			return core.Issue{}, fmt.Errorf("resolve worktree: %w", err)
-		}
-		worktreeID = wt.ID
-	}
+	return core.Issue{}, core.NewAPIError(core.ErrConflict, "create raced a concurrent operation; retry")
+}
 
+func createIssueAttempt(ctx context.Context, db *sql.DB, projectKey string, req core.CreateIssueRequest) (core.Issue, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return core.Issue{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-
-	// Read current sequence value.
-	var seq int64
-	err = tx.QueryRowContext(ctx, `SELECT next_issue_seq FROM projects WHERE id = ?`, proj.ID).Scan(&seq)
-	if err != nil {
-		return core.Issue{}, fmt.Errorf("select next_issue_seq: %w", err)
+	fingerprint := core.OperationFingerprint(core.CreateFingerprintFields(projectKey, req))
+	if req.OperationID != "" {
+		rec, err := lookupOperation(ctx, tx, req.OperationID)
+		if err != nil {
+			return core.Issue{}, err
+		}
+		if rec != nil {
+			if err := authorizeReplay(rec, core.OperationKindCreate, projectKey, fingerprint); err != nil {
+				return core.Issue{}, err
+			}
+			return decodeCreateOutcome(rec)
+		}
 	}
 
-	shortID := fmt.Sprintf("%s-%d", proj.Key, seq)
+	// Resolve references after replay lookup: a committed result remains
+	// replayable even if its worktree was later unregistered.
+	var projectID string
+	var seq int64
+	err = tx.QueryRowContext(ctx, `SELECT id, next_issue_seq FROM projects WHERE key = ?`, projectKey).Scan(&projectID, &seq)
+	if err == sql.ErrNoRows {
+		return core.Issue{}, core.NewAPIError(core.ErrNotFound, "project not found")
+	}
+	if err != nil {
+		return core.Issue{}, fmt.Errorf("resolve project: %w", err)
+	}
+	var repoID, worktreeID interface{}
+	if req.Repo != "" {
+		resolved, err := resolveCreateRepo(ctx, tx, projectID, req.Repo)
+		if err != nil {
+			return core.Issue{}, fmt.Errorf("resolve repo: %w", err)
+		}
+		repoID = resolved
+	}
+	if req.Worktree != "" {
+		var resolved string
+		err := tx.QueryRowContext(ctx, `SELECT id FROM worktrees WHERE id = ?`, req.Worktree).Scan(&resolved)
+		if err == sql.ErrNoRows {
+			return core.Issue{}, core.NewAPIError(core.ErrNotFound, "worktree not found: "+req.Worktree)
+		}
+		if err != nil {
+			return core.Issue{}, fmt.Errorf("resolve worktree: %w", err)
+		}
+		worktreeID = resolved
+	}
+	nowTime := time.Now().UTC()
+	now := nowTime.Format(time.RFC3339)
+	id := uuid.New().String()
+
+	shortID := fmt.Sprintf("%s-%d", projectKey, seq)
 
 	status := "open"
 	priority := req.Priority
@@ -73,7 +102,7 @@ func CreateIssue(ctx context.Context, db *sql.DB, projectKey string, req core.Cr
 		                    issue_type, title, external_key, description, acceptance_criteria, status, priority, assignee, version,
 		                    claimed_at, closed_at, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1, NULL, NULL, ?, ?)`,
-		id, shortID, proj.ID, repoID, worktreeID, req.ScopeKind,
+		id, shortID, projectID, repoID, worktreeID, req.ScopeKind,
 		issueType, req.Title, req.ExternalKey, req.Description, req.AcceptanceCriteria, status, priority, now, now,
 	)
 	if err != nil {
@@ -81,7 +110,7 @@ func CreateIssue(ctx context.Context, db *sql.DB, projectKey string, req core.Cr
 	}
 
 	// Increment the sequence.
-	_, err = tx.ExecContext(ctx, `UPDATE projects SET next_issue_seq = ?, updated_at = ? WHERE id = ?`, seq+1, now, proj.ID)
+	_, err = tx.ExecContext(ctx, `UPDATE projects SET next_issue_seq = ?, updated_at = ? WHERE id = ?`, seq+1, now, projectID)
 	if err != nil {
 		return core.Issue{}, fmt.Errorf("update next_issue_seq: %w", err)
 	}
@@ -119,17 +148,54 @@ func CreateIssue(ctx context.Context, db *sql.DB, projectKey string, req core.Cr
 		return core.Issue{}, fmt.Errorf("insert event: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return core.Issue{}, fmt.Errorf("commit tx: %w", err)
-	}
-
-	created := scanIssueRow(id, shortID, proj.ID, repoID, worktreeID, req.ScopeKind,
+	created := scanIssueRow(id, shortID, projectID, repoID, worktreeID, req.ScopeKind,
 		issueType, req.Title, req.ExternalKey, req.Description, req.AcceptanceCriteria, status, priority, "", 1, "", "", "", "", now, now)
 	if len(req.Tags) > 0 {
 		created.Tags = append([]string(nil), req.Tags...)
 		sort.Strings(created.Tags)
 	}
+	if req.OperationID != "" {
+		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindCreate,
+			projectKey, req.Actor, fingerprint, created, nowTime); err != nil {
+			return core.Issue{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return core.Issue{}, fmt.Errorf("commit tx: %w", err)
+	}
 	return created, nil
+}
+
+func resolveCreateRepo(ctx context.Context, tx *sql.Tx, projectID, ref string) (string, error) {
+	var id string
+	err := tx.QueryRowContext(ctx, `SELECT id FROM repositories WHERE id = ?`, ref).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM repositories WHERE project_id = ? AND logical_name = ? ORDER BY id LIMIT 2`, projectID, ref)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return "", err
+		}
+		return "", core.NewAPIError(core.ErrNotFound, "repository not found: "+ref)
+	}
+	if err := rows.Scan(&id); err != nil {
+		return "", err
+	}
+	if rows.Next() {
+		return "", core.NewAPIError(core.ErrValidationFailed, "repository name is ambiguous: "+ref)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
 // ResolveIssueID resolves an issue by either its UUID id or short_id, returning the UUID id.

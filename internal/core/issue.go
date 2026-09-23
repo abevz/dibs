@@ -153,6 +153,7 @@ type IssueLease struct {
 
 // CreateIssueRequest is the JSON body for POST /v1/issues.
 type CreateIssueRequest struct {
+	OperationID        string   `json:"operation_id,omitempty"`
 	Project            string   `json:"project"`
 	ScopeKind          string   `json:"scope_kind"`
 	IssueType          string   `json:"issue_type,omitempty"`

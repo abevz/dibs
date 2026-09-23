@@ -128,7 +128,7 @@ func runIssue(ctx context.Context, c *client.Client, args []string) error {
 	}
 }
 
-const issueCreateUsage = "Usage: dibs issue create --project <key> --scope-kind <project|repository|worktree> --title <title> [--type <task|bug|feature|epic|chore>] [--repo <repo>] [--worktree <worktree>] [--external-key <key>] [--description <desc>] [--acceptance <criteria>] [--priority <n>] [--tag <namespace/value>]... [--allow-duplicate]"
+const issueCreateUsage = "Usage: dibs issue create --project <key> --scope-kind <project|repository|worktree> --title <title> [--type <task|bug|feature|epic|chore>] [--repo <repo>] [--worktree <worktree>] [--external-key <key>] [--description <desc>] [--acceptance <criteria>] [--priority <n>] [--tag <namespace/value>]... [--allow-duplicate] [--operation-id <id> | --retry-last]"
 
 func runIssueCreate(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -141,10 +141,18 @@ func runIssueCreate(ctx context.Context, c *client.Client, args []string) error 
 
 	var req core.CreateIssueRequest
 	allowDuplicate := false
+	retryLast := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--allow-duplicate":
 			allowDuplicate = true
+		case "--retry-last":
+			retryLast = true
+		case "--operation-id":
+			if i+1 < len(args) {
+				req.OperationID = args[i+1]
+				i++
+			}
 		case "--project":
 			if i+1 < len(args) {
 				req.Project = args[i+1]
@@ -208,6 +216,36 @@ func runIssueCreate(ctx context.Context, c *client.Client, args []string) error 
 		return usageErr(issueCreateUsage, err.Error())
 	}
 	req.Actor = actor
+	if retryLast && req.OperationID != "" {
+		return usageErr(issueCreateUsage, "--retry-last and --operation-id are mutually exclusive")
+	}
+	if err := core.ValidateOperationID(req.OperationID); err != nil {
+		return usageErr(issueCreateUsage, err.Error())
+	}
+	journalTarget := req.Project + "-" + core.OperationFingerprint(core.CreateFingerprintFields(req.Project, req))
+	journalPath := ""
+	if retryLast {
+		journaled, path, err := readJournaledOperationID("create", journalTarget)
+		if err != nil {
+			return err
+		}
+		if journaled == "" {
+			return fmt.Errorf("no journaled create operation for this request (expected %s)", path)
+		}
+		req.OperationID, journalPath = journaled, path
+	}
+	if req.OperationID == "" {
+		req.OperationID = newOperationID()
+	}
+	previousOperationID := ""
+	journaled := false
+	if journalPath == "" {
+		path, previous, err := journalOperationID("create", journalTarget, req.OperationID)
+		if err != nil {
+			return err
+		}
+		journalPath, previousOperationID, journaled = path, previous, true
+	}
 
 	// Duplicate title warning: flag open/in_progress issues with the same title
 	// in the same project, unless --allow-duplicate is explicitly passed.
@@ -228,12 +266,28 @@ func runIssueCreate(ctx context.Context, c *client.Client, args []string) error 
 
 	issue, err := c.CreateIssue(ctx, req)
 	if err != nil {
+		var clientErr *client.ClientError
+		if errors.As(err, &clientErr) {
+			if journaled {
+				restoreJournaledOperationID(journalPath, previousOperationID)
+			}
+			fail(err)
+		}
+		guidance := fmt.Sprintf("create outcome is unconfirmed; operation_id: %s; journaled at: %s; retry safely: dibs issue create [same arguments] --retry-last", req.OperationID, journalPath)
+		if jsonOutput {
+			fail(fmt.Errorf("%s: %w", guidance, err))
+		}
+		fmt.Fprintln(os.Stderr, guidance)
 		fail(err)
 	}
 	if jsonOutput {
-		json.NewEncoder(os.Stdout).Encode(issue)
+		json.NewEncoder(os.Stdout).Encode(struct {
+			core.Issue
+			OperationID string `json:"operation_id"`
+		}{issue, req.OperationID})
 		return nil
 	}
+	fmt.Printf("Operation ID: %s\n", req.OperationID)
 	printIssue(issue)
 	return nil
 }

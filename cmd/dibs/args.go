@@ -33,7 +33,7 @@ var commandRoutes = map[string]argRoute{
 	"artifact register": {"--repo --relative-path --kind --worktree --artifact-root --title --external-key --status", 0},
 	"artifact list":     {"--repo", 0}, "export jsonl": {"", 0},
 	"stats":             {"--project --repo --since --until", 0},
-	"issue create":      {"--project --scope-kind --title --type --repo --worktree --external-key --description --acceptance --priority --tag --allow-duplicate?", 0},
+	"issue create":      {"--project --scope-kind --title --type --repo --worktree --external-key --description --acceptance --priority --tag --allow-duplicate? --operation-id --retry-last?", 0},
 	"issue create-form": {"--allow-duplicate?", 0},
 	"issue get":         {"--full?", 1}, "issue list": {"--project --status --type --repo --worktree --assignee --external-key --tag --limit --offset --columns", 0},
 	"issue ready":     {"--project --repo --tag --columns", 0},
@@ -217,6 +217,9 @@ func validateCommandArgs(args []string) error {
 	if key == "issue claim" && seen["--retry-last"] && seen["--operation-id"] {
 		return argumentError("--retry-last and --operation-id are mutually exclusive")
 	}
+	if key == "issue create" && seen["--retry-last"] && seen["--operation-id"] {
+		return argumentError("--retry-last and --operation-id are mutually exclusive")
+	}
 	if (key == "issue edit" || key == "issue update") && seen["--lease-token"] && !seen["--lease-generation"] {
 		return argumentError("--lease-generation is required with --lease-token")
 	}
@@ -225,6 +228,10 @@ func validateCommandArgs(args []string) error {
 
 func validateFlagValue(command, flag, value string) error {
 	switch flag {
+	case "--operation-id":
+		if err := core.ValidateOperationID(value); err != nil {
+			return argumentError(err.Error())
+		}
 	case "--priority", "--ttl", "--lease-generation", "--limit", "--offset", "--expected-version":
 		if flag == "--expected-version" && value == "latest" && command != "issue close" {
 			return nil

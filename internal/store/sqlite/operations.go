@@ -122,3 +122,11 @@ func decodeClaimOutcome(rec *operationRecord) (core.ClaimResponse, error) {
 	}
 	return resp, nil
 }
+
+func decodeCreateOutcome(rec *operationRecord) (core.Issue, error) {
+	var issue core.Issue
+	if err := json.Unmarshal([]byte(rec.OutcomeJSON), &issue); err != nil {
+		return core.Issue{}, fmt.Errorf("decode create outcome: %w", err)
+	}
+	return issue, nil
+}

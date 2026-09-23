@@ -6,6 +6,19 @@ Any `dibs issue` lifecycle subcommand (`claim`, `heartbeat`, `release`,
 accepts `-h`/`--help` to print the same usage without side effects or a
 daemon round trip.
 
+## Creating an issue after an ambiguous response
+
+`dibs issue create` journals a new `operation_id` before sending the request
+and includes it in JSON success output. If the response is lost, repeat the
+same create arguments with `--retry-last` (or pass the original ID with
+`--operation-id <id>`). The daemon returns the original issue and short ID;
+changed arguments return `idempotency_conflict`. A normal new create uses a
+new ID and remains a new issue even when its title matches. The interactive
+`create-form` also journals its ID and prints it on success or an ambiguous
+failure. The journal is under `~/.local/state/dibs/operations/` or the active
+legacy path; it must stay private because claim operation IDs can recover
+lease tokens. This is operation retry, not title-based deduplication.
+
 ## Session loop
 
 Every agent session follows this cycle:

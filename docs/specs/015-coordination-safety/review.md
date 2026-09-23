@@ -4,6 +4,52 @@
 
 Specification and backlog slicing complete; implementation in progress.
 
+## AFC-SDD-0160 / afc-112 — retry-safe create
+
+The claim half was delivered by `afc-111`. Create now accepts an optional
+client `operation_id` through core, HTTP, client, and CLI. The CLI generates
+and fsyncs a new ID before sending, journals by project and canonical request
+fingerprint, and exposes `--operation-id` / `--retry-last`; `create-form` also
+journals its create ID. The operation ledger stores the original public issue
+in the same transaction as its issue row, one `issue_created` event, tags, and
+project sequence increment. Replay checks the ledger before live references,
+so later issue changes cannot change the old outcome.
+The fingerprint binds project, actor, every issue field and tag set; default
+type/priority and tag order are normalized. A changed payload or operation
+kind fails `idempotency_conflict`. Requests without an ID retain the legacy
+behavior, following the existing claim compatibility contract in
+`docs/api-v1.md`.
+Repository and worktree references are fingerprinted as supplied: switching
+between a name and UUID on retry fails closed rather than guessing that the
+requests are equivalent.
+
+`TestCreateOperationReplayAfterLaterStateChange` proves the original issue and
+short ID survive a later claim; `TestCreateOperationPayloadMismatch` varies
+all material create fields; `TestConcurrentCreateOperations` runs 30 identical
+and 30 conflicting races through independent `Open` handles with embedded
+migrations; `TestCreateOperationReplayAfterReopen` reopens the database;
+`TestCreateOperationKindAndWeakIDFailClosed` and
+`TestCreateOperationFailedTransactionHasNoLedgerOrSequenceEffect` cover kind
+binding, validation, and rollback. The HTTP test proves 201 replay, 409
+`idempotency_conflict`, 400 weak-ID rejection, and one issue/event/ledger row.
+All database fixtures use the real embedded migration set.
+
+Scratch binary check (separate temporary HOME, DB, Unix socket, and `dibsd`):
+`go build -o <tmp>/dibsd ./cmd/dibsd`,
+`go build -o <tmp>/dibs ./cmd/dibs`, then `dibs project add --key smoke
+--name Smoke`, `dibs --json issue create --project smoke --scope-kind project
+--title 'lost response'` with its output discarded, and the same create with
+`--retry-last`. Output: `scratch_create smoke-1 replay_same=True
+conflict=idempotency_conflict issues=1`. No installed binary or live daemon
+was changed.
+
+`make build`, `make test` (race), `make vet`, and
+`GOTOOLCHAIN=go1.26.4 make lint` passed. The first full test run identified
+that the embedded CLI protocol copy lagged the canonical document; the files
+were synchronized and the full checks passed on the final implementation.
+R-09 remains open for lifecycle mutations in `afc-113`; crash/restore proof
+remains `afc-114`. This PR awaits owner review and has not been merged.
+
 ## afc-122 — CLI argument parsing
 
 The CLI now validates the complete command route before its daemon revision
