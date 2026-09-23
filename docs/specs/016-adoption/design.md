@@ -6,10 +6,10 @@ and gates; implementation details remain with the corresponding child slice.
 ## Boundaries and flow
 
 ```text
-newcomer: release install -> dibs init -> dibs issue claim
-                                  |             |
-                                  v             v
-                            local dibsd -> Unix socket API -> SQLite
+newcomer: release install -> dibs init -> dibs issue create -> dibs issue claim
+                                  |                   |                    |
+                                  v                   v                    v
+                            local dibsd --------> Unix socket API ------> SQLite
 
 agent: ready view -> selected issue -> issue run -> fenced lease lifecycle
 swarm: N isolated worktrees -> N issue-run children -> distinct branches
@@ -20,16 +20,18 @@ watch: daemon API -> read-only terminal view
 as the sole writer; first-use convenience may launch it but must use the same
 DB singleton lock and startup checks as explicit start. The CLI waits for a
 healthy socket, handles concurrent first calls without two writers, and
-reports startup errors. Existing `AF_*` environment variables and old socket
-and DB locations are deprecated aliases. Migration must select one canonical
-database and avoid splitting live state; exact precedence and migration steps
-belong to the rename slice and require an owner-visible compatibility test.
+reports startup errors. New `DIBS_*` environment variables are introduced;
+existing `AF_*` variables and old socket and DB locations are deprecated
+aliases. The old live DB remains canonical
+until an explicit migration; the rename slice must prove no second DB is
+silently created. Its compatibility test covers legacy and new names.
 
 `init` derives identifiers from Git metadata, including the actual worktree,
 then shows the detected mapping before creating coordinator records. Ambiguous
-or missing Git context must produce an actionable error, not a guessed global
-project. The clean-machine measurement includes the tested release install and
-this setup, then a successful claim against the started daemon.
+Git context must ask the user; missing Git context must produce an actionable
+error, never a guessed global project. The clean-machine measurement includes
+the tested release install, init, issue creation, and successful claim against
+the started daemon.
 
 `watch` uses existing list/ready/event APIs where sufficient; if lease/TTL or
 blocked data are unavailable, add a bounded read-only API surface in its own
@@ -39,21 +41,23 @@ refreshing. A disconnected view labels its data stale.
 
 Hooks are thin client-side integrations over `issue run`. SessionStart presents
 ready items and does not claim by default. The selected issue enters the
-normal claim/heartbeat/cancel/close-or-handoff path. The Stop-hook's unfinished
-work behavior is still an owner decision below. Any hook unable to prove lease
-ownership must stop work; it must not assume success from an absent response.
+normal claim/heartbeat/cancel/close-or-handoff path. For unfinished work, the
+Stop hook checks ownership, then writes a `HANDOFF:` note through the atomic
+handoff path. Any hook unable to prove lease ownership must stop work; it must
+not assume success from an absent response.
 
 `swarm` takes `-n N -- <cmd>` and launches at most N workers. Each worker gets
 one coordinator-selected, atomically claimed issue, one sibling Git worktree,
 and the `issue run` environment (`AF_ISSUE_ID`, `AF_LEASE_TOKEN`,
 `AF_LEASE_GENERATION`, `AF_ATTEMPT_ID`, `AF_EXPECTED_VERSION`, with compatible
-new aliases if introduced). These variables are process-private: never place
+`DIBS_*` aliases). These variables are process-private: never place
 lease tokens in logs, branches, PRs, or shared worktree metadata. The claim
 remains the authority; a directory or process existing is not ownership.
 Workers return issue/branch/result records. A Claude Code preset is an adapter
 to this generic command contract. A worker failure hands off according to the
-resolved lifecycle policy and does not close its issue or cancel unrelated
-workers. Worktree cleanup policy is open below.
+handoff lifecycle policy and does not close its issue or cancel unrelated
+workers. Failed and incomplete worktrees remain for inspection. An explicit
+cleanup command may remove only verified, merged, unreferenced worktrees.
 
 ## Wave B dependency contract
 
@@ -85,6 +89,19 @@ one must document the required capability, why stdlib/current packages do not
 suffice, version/license, and maintenance cost before adoption. No framework,
 DI container, daemon plugin system, or network service is introduced.
 
+## Distribution
+
+The primary quickstart install is
+`curl -fsSL <release URL>/install.sh | sh`. `install.sh` is a release asset
+pinned to the selected tag, not fetched from `main`; it reuses the existing
+checksum-verifying `contrib/install/install-release.sh`. It installs to
+`~/.local/bin` without sudo and prints a PATH hint. The newcomer README must
+also show how to download that same asset, inspect it, and run it separately.
+Release verification exercises the actual asset and checksum manifest before
+publication. The next channels are a Homebrew tap, `go install`, and an AUR
+package. Other channels wait for observed demand. The owner pushes the public
+tag.
+
 ## Owner decisions recorded from `afc-127` notes (2026-09-23)
 
 1. **Launch identity:** product/CLI `dibs`, daemon `dibsd`, intended repo
@@ -100,21 +117,19 @@ DI container, daemon plugin system, or network service is introduced.
 4. **Daemon start:** `dibs` forks `dibsd` on demand if socket is absent;
    explicit `dibs daemon start/stop` remains. Service-manager units are
    optional. Concurrent first calls must pass a lock-file singleton test.
-
-## Open owner decisions
-
-These are questions, with options and a recommendation, not implementation
-authorization. The first four prompts from the original note are resolved
-above and must not be silently reopened.
-
-| Question | Options and trade-offs | Recommendation |
-| --- | --- | --- |
-| Stop-hook when work is unfinished | Handoff records context and frees the lease; bare release loses structured context; letting lease expire delays ready work and obscures intent. | Handoff with a concise `HANDOFF:` note through the atomic lifecycle path, after verifying ownership. Owner to confirm. |
-| Worktree cleanup after swarm | Keep all for inspection but consume disk; remove on success but risk losing uncommitted evidence; explicit cleanup command makes lifecycle visible. | Keep failed/incomplete worktrees; clean only verified, merged, unreferenced worktrees through explicit cleanup. Owner to confirm. |
-| Distribution beyond GitHub release | Homebrew tap and `go install` serve macOS/Go users; AUR broadens Arch reach but adds packaging maintenance; other channels raise ongoing support cost. | Prove Homebrew and `go install` in wave A; defer AUR and further channels until demand is measured. Owner to confirm channel set. |
-| Public tagline | A short outcome-oriented line improves newcomer comprehension; technical wording may be precise but less inviting. | Use a factual line about preventing duplicate work by parallel coding agents; owner chooses final copy. |
-| Exact Git/record naming and legacy-path precedence | Git remote name is convenient but may collide; directory name is local but unstable. Prefer explicit overrides for ambiguity. Old and new DB paths must never silently diverge. | Show inferred values and require confirmation on ambiguous repositories; preserve old live DB as canonical until an explicit migration. Owner to approve exact rules. |
-| First ready issue within three commands | Install, init, create, claim is four operations; a fresh coordinator cannot claim without an existing issue. Options: measure a newcomer joining a pre-populated project (honest but narrower), seed an explicit demo issue during opt-in init (extra behavior), or add an onboarding command that creates and claims atomically (larger product change). | Measure a new user joining a prepared demo project first; label that scenario explicitly. Owner must decide whether the broader fresh-project claim target needs an additional product slice before README promises it. |
+5. **First claim target:** install, init, create, claim in four user commands
+   and at most two minutes; no `make`, service manager, demo issue, or seed
+   issue is needed.
+6. **Stop hook:** unfinished work uses atomic `HANDOFF:` after an ownership
+   check.
+7. **Swarm cleanup:** retain failed/incomplete worktrees; remove only
+   verified, merged, unreferenced worktrees through explicit cleanup.
+8. **Distribution:** the release-pinned `install.sh` asset is the primary
+   one-line install; also provide the inspect-before-run alternative, Homebrew
+   tap, `go install`, and AUR package. Defer other channels.
+9. **Public tagline:** "Your AI agents call dibs on work. Exactly one wins."
+10. **Legacy paths and Git context:** the old live DB remains canonical until
+    explicit migration. Ask on ambiguous Git context; never guess.
 
 The public repository rename and topics are owner-side publication actions,
 not actions in `afc-127`.

@@ -1,10 +1,13 @@
 # 016 Adoption: First External Users
 
+Your AI agents call dibs on work. Exactly one wins.
+
 Status: draft for owner approval. Planning issue: `afc-127`; epic: `afc-126`.
 
 The first external user should be able to install the released CLI, initialize
-coordination inside a Git repository, and make a successful first claim in at
-most three user commands and two minutes on a clean supported machine. A
+coordination inside a Git repository, create an issue, and make a successful
+first claim in four user commands and at most two minutes on a clean supported
+machine, without `make` or a service manager. A
 recorded demonstration should show several agents draining one ready queue
 without duplicate ownership. Measure both outcomes; a passing unit test is not
 a substitute for the clean-machine or multi-agent demonstration.
@@ -18,7 +21,7 @@ contract. The coordinator's live issues own execution status.
 
 | Wave | Scope | Gate |
 | --- | --- | --- |
-| A | `dibs`/`dibsd` rename; `afc-128` release path; `afc-129` init and first-use daemon start; `afc-130` read-only watch; `afc-131` newcomer README | Can proceed alongside `afc-102`; public tag and README claims wait for verified release and clean-machine path. |
+| A | `afc-137` `dibs`/`dibsd` rename; `afc-128` release path; `afc-129` init and first-use daemon start; `afc-130` read-only watch; `afc-131` newcomer README | Can proceed alongside `afc-102`; `afc-137` blocks `afc-128` and `afc-129`. Public tag and README claims wait for verified release and clean-machine path. |
 | B | `afc-132` Claude Code/Codex hooks; `afc-133` swarm with isolated worktrees | Wait for `afc-102` and `afc-120`–`afc-122` to be complete and verified. |
 | C | `afc-134` demo GIF and launch post | After B demonstration; owner writes and publishes final text. |
 
@@ -29,6 +32,6 @@ in `afc-127`.
 
 ## Packet approval
 
-The owner must review the open decisions in `design.md` and approve this packet
-before it is treated as an implementation contract. Existing owner decisions in
-the `afc-127` notes are recorded as decisions, not reopened as questions.
+The owner has resolved the recorded product decisions and must approve this
+updated packet before it is treated as an implementation contract. Only the
+owner records packet approval in `review.md`.

@@ -2,25 +2,32 @@
 
 ## Outcome and measurement
 
-- **R-01 First claim.** On a clean supported machine, a newcomer can go from
-  installation to a successful `dibs issue claim` in at most three user
-  commands and two minutes, without a source checkout, `make`, or mandatory
-  service-manager setup. Record machine/OS, release artifact, exact commands,
-  elapsed time, and claim result. The commands must work as documented; do not
-  count shell setup hidden inside a script as proof of the user path. The
-  source of the first ready issue is an open owner decision in `design.md`;
-  this target is not yet a proven three-command quickstart.
+- **R-01 First claim.** On a clean supported machine, a newcomer can install,
+  run `dibs init`, create an issue, and successfully run `dibs issue claim` in
+  four user commands and at most two minutes, without a source checkout,
+  `make`, or mandatory service-manager setup. Record machine/OS, release
+  artifact, exact commands, elapsed time, and claim result. The commands must
+  work as documented; do not count shell setup hidden inside a script as proof
+  of the user path. No demo or seeded issue is required.
 - **R-02 Truthful release.** Published install instructions must resolve to a
-  real verified artifact. The release workflow, checksum-verifying installer,
-  `go install`, and Homebrew formula path must be exercised before they are
-  advertised as working. The owner alone pushes the public v0.1.0 tag.
+  real verified artifact. The primary install is
+  `curl -fsSL <release URL>/install.sh | sh`, where `install.sh` is a pinned
+  release asset that reuses the checksum-verifying
+  `contrib/install/install-release.sh`, installs to `~/.local/bin` without sudo,
+  and prints a PATH hint. The README also shows a download-inspect-run
+  alternative. Exercise the release workflow and installer, then the Homebrew
+  tap, `go install`, and AUR package before advertising each as working. Defer
+  other channels until demand. The owner alone pushes the public v0.1.0 tag.
 - **R-03 Rename compatibility.** Before the public tag, product and CLI become
-  `dibs`, daemon `dibsd`, and intended public repository `abevz/dibs`. Existing
-  `AF_*` environment variables and socket/DB paths remain accepted as
-  deprecated aliases so the live installation keeps working. Verify migration
-  from current state; do not silently create a second authority or database.
+  `dibs`, daemon `dibsd`, and intended public repository `abevz/dibs`. New
+  `DIBS_*` environment variables are introduced; existing `AF_*` variables
+  and socket/DB paths remain accepted as
+  deprecated aliases so the live installation keeps working. The old live DB
+  stays canonical until an explicit migration; do not silently create a second
+  authority or database.
 - **R-04 First-use setup.** Within a Git repository, `dibs init` infers the
-  project, repository, and worktree with an inspectable result. First use starts
+  project, repository, and worktree with an inspectable result. Ambiguous Git
+  context requires a question, never a guess. First use starts
   `dibsd` when its socket is absent. Concurrent first calls start at most one
   daemon for a database; startup failure is reported rather than bypassing
   daemon ownership or lease fencing. Explicit daemon start/stop and optional
@@ -30,21 +37,27 @@
   APIs and performs no state mutations or direct SQLite reads. It remains
   useful during disconnection and terminal resize without claiming work.
 - **R-06 Newcomer documentation.** The top of the public README explains
-  duplicate-work pain, shows a truthful GIF, then the verified three-command
-  path. It compares Beads, Claude Code tasks, and GitHub Issues fairly, with
-  architecture and SDD history in `docs/`. Claims must match the released
-  binaries and tested behavior.
+  duplicate-work pain, shows a truthful GIF, then the verified four-command
+  path and tagline: "Your AI agents call dibs on work. Exactly one wins."
+  Show the release-pinned primary install and a download-inspect-run
+  alternative. Compare Beads, Claude Code tasks, and GitHub Issues fairly,
+  with architecture and SDD history in `docs/`. Claims must match the
+  released binaries and tested behavior.
 - **R-07 Hooks.** Claude Code and Codex integration shows ready work at session
   start; the agent or user chooses by default. Auto-claiming the top item is
   available only through an explicit flag. Execution uses `issue run` ownership,
-  heartbeat, cancellation, and handoff semantics. Two sessions must not work
-  the same issue, and a lost session's lease must become reclaimable.
+  heartbeat, cancellation, and handoff semantics. For unfinished work, the
+  Stop hook checks ownership and uses the atomic lifecycle path to write a
+  `HANDOFF:` note. Two sessions must not work the same issue, and a lost
+  session's lease must become reclaimable.
 - **R-08 Swarm.** `dibs swarm -n N -- <cmd>` launches an arbitrary configured
   agent command in one separate worktree per claimed issue, supplies issue-run
   context through its environment, and records a branch per issue. A built-in
   Claude Code preset supports the one-line demo. Opening PRs is a later
-  opt-in `--pr`, never the default. One failed worker must not endanger other
-  workers or leave false completion. Document a short recipe per supported
+  opt-in `--pr`, never the default. Keep failed or incomplete worktrees; remove
+  only verified, merged, unreferenced worktrees via explicit cleanup. One
+  failed worker must not endanger other workers or leave false completion.
+  Document a short recipe per supported
   harness and verify at least three harnesses end to end. The owner intends
   to check the generic contract against claude, codex, agy, opencode,
   deepseek harness, and codewhale, plus others.
