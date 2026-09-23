@@ -1,10 +1,10 @@
 # 016 Adoption Review
 
-Status: packet draft updated from the owner's PR #66 decisions; waiting for
-owner approval. No adoption child implemented.
+Status: approved by owner; packet active. No adoption child implemented yet.
 
 ## Packet authoring (`afc-127`)
 
+- Owner approval: approved by Aleksey Bevz on 2026-09-23 (PR #66 @ da3c8b2).
 - Scope: README, requirements, design, task map, and this review stub.
 - Requirements/design alignment: updated for the owner's decisions; independent
   review evidence belongs on PR #66, and owner approval is pending.
