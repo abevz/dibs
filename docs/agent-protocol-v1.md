@@ -81,7 +81,7 @@ Every agent session follows this cycle:
 3. **Heartbeat during work**
    Extend your lease every ⅓ of TTL (every 300s for 900s TTL):
    ```
-   dibs issue heartbeat <short_id> --lease-token <token> --ttl 900
+   dibs issue heartbeat <short_id> --lease-token <token> --lease-generation <generation> --ttl 900
    ```
 
 4. **Note progress**
@@ -102,7 +102,7 @@ Every agent session follows this cycle:
 
    Handoff requires a non-empty note beginning exactly `HANDOFF:` and commits
    `note_added` before `issue_released` in one transaction. Use bare
-   `dibs issue release <short_id> --lease-token <token>` only for recovery or
+   `dibs issue release <short_id> --lease-token <token> --lease-generation <generation>` only for recovery or
    compatibility. Ordinary close always requires the active matching lease token. For an
    unclaimable epic or deliberate administrative resolution, use the explicit
    local operator path instead; it requires a reason and never accepts a

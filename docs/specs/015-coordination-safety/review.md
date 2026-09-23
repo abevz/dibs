@@ -4,6 +4,31 @@
 
 Specification and backlog slicing complete; implementation in progress.
 
+## afc-120 — MCP lease-generation contract correction
+
+The MCP `tools/list` schemas now require `lease_generation` for heartbeat,
+handoff, and close. Handoff already forwarded it; close now validates and
+forwards the claimed value rather than sending zero. Canonical and embedded
+`dibs protocol` examples include the mandatory generation on heartbeat and
+bare release. This is a public-contract repair under R-04/R-11, not a change to
+lease semantics.
+
+`TestLifecycleToolSchemasRequireLeaseGeneration` checks the published required
+fields and type. `TestLifecycleToolsFenceGenerationAgainstDaemon` exercises
+missing, stale, and valid generations for handoff and close through the MCP
+client, scratch daemon, and real SQLite with embedded migrations. Both failed
+before the fix (`handoff_issue`/`close_issue` schema absent; close rejected
+`lease_generation` as unknown) and pass after it. `go test ./internal/mcp
+-count=1`, `make build`, `make test` (race), `make vet`, and
+`GOTOOLCHAIN=go1.26.4 make lint` passed.
+
+`make build-install` updated the installed binaries without restarting the
+owner's daemon. A separate temporary DB/socket and installed `dibsd`, `afctl`,
+and `afc-mcp` created and claimed an issue, listed the three schemas, rejected
+a stale close generation, accepted the current one, and read final status
+`done`; the alias deprecation notice appeared only on stderr. PR and CI
+evidence will be added before merge.
+
 ## AFC-SDD-0152 / afc-104 implementation review
 
 The heartbeat/release lease-CAS slice is merged via PR `#53` (source
@@ -422,4 +447,3 @@ since a rejected request never committed. Regression tests cover it.
 documented, but no automatic reaper deletes expired rows yet. Endpoint
 adoption beyond claim stays with `afc-112` (create) and `afc-113` (lifecycle
 mutations), and the black-box crash/restart matrix remains `afc-114`.
-
