@@ -24,7 +24,8 @@ and `GOTOOLCHAIN=go1.26.4 make lint` passed. `make build-install` updated
 installed binaries without restarting the owner's daemon. Installed
 `dibs-mcp` called `claim_issue` twice against a temporary `dibsd` DB/socket;
 `dibs issue events list` reported `issue_claimed` modes `interactive` and
-`scheduled` respectively. PR/CI evidence will be added before merge.
+`scheduled` respectively. PR `#70` CI `test` passed on implementation HEAD
+`f05ddc1`; owner-authorized merge awaits final independent review.
 
 ## afc-120 — MCP lease-generation contract correction
 
