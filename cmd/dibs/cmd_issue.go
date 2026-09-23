@@ -266,14 +266,17 @@ func runIssueCreate(ctx context.Context, c *client.Client, args []string) error 
 
 	issue, err := c.CreateIssue(ctx, req)
 	if err != nil {
-		var clientErr *client.ClientError
-		if errors.As(err, &clientErr) {
+		if createFailureDefinitelyRejected(err) {
 			if journaled {
 				restoreJournaledOperationID(journalPath, previousOperationID)
 			}
 			fail(err)
 		}
 		guidance := fmt.Sprintf("create outcome is unconfirmed; operation_id: %s; journaled at: %s; retry safely: dibs issue create [same arguments] --retry-last", req.OperationID, journalPath)
+		var clientErr *client.ClientError
+		if errors.As(err, &clientErr) {
+			fail(&client.ClientError{Code: clientErr.Code, Message: clientErr.Message + "; " + guidance})
+		}
 		if jsonOutput {
 			fail(fmt.Errorf("%s: %w", guidance, err))
 		}
@@ -290,6 +293,21 @@ func runIssueCreate(ctx context.Context, c *client.Client, args []string) error 
 	fmt.Printf("Operation ID: %s\n", req.OperationID)
 	printIssue(issue)
 	return nil
+}
+
+// Only a documented create rejection proves that the transaction did not
+// commit. A server internal_error can follow an uncertain Commit result.
+func createFailureDefinitelyRejected(err error) bool {
+	var clientErr *client.ClientError
+	if !errors.As(err, &clientErr) {
+		return false
+	}
+	switch clientErr.Code {
+	case "validation_failed", "not_found", "idempotency_conflict", "short_id_taken":
+		return true
+	default:
+		return false
+	}
 }
 
 const issueGetUsage = "Usage: dibs issue get <issue-id-or-short-id> [--full]"

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -214,8 +213,7 @@ func runIssueCreateForm(ctx context.Context, c *client.Client, args []string) er
 
 	issue, err := c.CreateIssue(ctx, req)
 	if err != nil {
-		var clientErr *client.ClientError
-		if errors.As(err, &clientErr) {
+		if createFailureDefinitelyRejected(err) {
 			restoreJournaledOperationID(journalPath, previousOperationID)
 		} else {
 			fmt.Fprintf(os.Stderr, "create outcome is unconfirmed; operation_id: %s; journaled at: %s; retry with the same create arguments and --operation-id %s\n", req.OperationID, journalPath, req.OperationID)

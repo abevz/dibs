@@ -47,6 +47,13 @@ was changed.
 `GOTOOLCHAIN=go1.26.4 make lint` passed. The first full test run identified
 that the embedded CLI protocol copy lagged the canonical document; the files
 were synchronized and the full checks passed on the final implementation.
+Independent review found that an API `internal_error` could follow an uncertain
+transaction commit, yet the CLI treated every typed API error as a definite
+rejection and erased the retry journal. The CLI now restores a displaced ID
+only for documented create rejections; an internal or unknown server error
+preserves the current ID and prints retry guidance. The subprocess regression
+test `TestCreateCLIPreservesJournalAfterServerInternalError` sends a raw API 500
+through the actual CLI path and confirms the operation ID remains on disk.
 R-09 remains open for lifecycle mutations in `afc-113`; crash/restore proof
 remains `afc-114`. This PR awaits owner review and has not been merged.
 
