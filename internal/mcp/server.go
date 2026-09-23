@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/abevz/dibs/internal/client"
 	"github.com/abevz/dibs/internal/core"
@@ -82,7 +82,7 @@ type toolCallParams struct {
 	Arguments json.RawMessage `json:"arguments,omitempty"`
 }
 
-// Run serves MCP requests over stdio using JSON-RPC 2.0 framing.
+// Run serves newline-delimited JSON-RPC 2.0 messages over MCP stdio.
 func (s *Server) Run(ctx context.Context, r io.Reader, w io.Writer) error {
 	reader := bufio.NewReader(r)
 	for {
@@ -92,15 +92,22 @@ func (s *Server) Run(ctx context.Context, r io.Reader, w io.Writer) error {
 		default:
 		}
 
-		body, err := readMessage(reader)
-		if err == io.EOF {
-			return nil
+		body, err := reader.ReadBytes('\n')
+		if err != nil && err != io.EOF {
+			return err
 		}
-		if err != nil {
+		body = bytes.TrimSpace(body)
+		if len(body) == 0 {
+			if err == io.EOF {
+				return nil
+			}
+			continue
+		}
+		if !utf8.Valid(body) {
 			if writeErr := writeMessage(w, rpcResponse{
 				JSONRPC: "2.0",
 				ID:      json.RawMessage("null"),
-				Error:   &rpcError{Code: -32700, Message: err.Error()},
+				Error:   &rpcError{Code: -32700, Message: "invalid UTF-8 JSON request"},
 			}); writeErr != nil {
 				return writeErr
 			}
@@ -130,6 +137,9 @@ func (s *Server) Run(ctx context.Context, r io.Reader, w io.Writer) error {
 }
 
 func (s *Server) handleRequest(ctx context.Context, req rpcRequest) *rpcResponse {
+	if len(req.ID) == 0 {
+		return nil // JSON-RPC notifications never receive a response.
+	}
 	if req.JSONRPC != "" && req.JSONRPC != "2.0" {
 		return s.errorResponse(req.ID, -32600, "jsonrpc must be 2.0")
 	}
@@ -689,51 +699,15 @@ func unmarshalArgs(raw json.RawMessage, target any) error {
 	return nil
 }
 
-func readMessage(r *bufio.Reader) ([]byte, error) {
-	contentLength := -1
-	for {
-		line, err := r.ReadString('\n')
-		if err != nil {
-			if err == io.EOF && line == "" {
-				return nil, io.EOF
-			}
-			return nil, err
-		}
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			break
-		}
-		name, value, found := strings.Cut(line, ":")
-		if !found {
-			return nil, fmt.Errorf("malformed header line")
-		}
-		if strings.EqualFold(strings.TrimSpace(name), "Content-Length") {
-			n, err := strconv.Atoi(strings.TrimSpace(value))
-			if err != nil || n < 0 {
-				return nil, fmt.Errorf("invalid Content-Length")
-			}
-			contentLength = n
-		}
-	}
-	if contentLength < 0 {
-		return nil, fmt.Errorf("missing Content-Length header")
-	}
-
-	body := make([]byte, contentLength)
-	if _, err := io.ReadFull(r, body); err != nil {
-		return nil, err
-	}
-	return body, nil
-}
-
 func writeMessage(w io.Writer, resp rpcResponse) error {
 	body, err := json.Marshal(resp)
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "Content-Length: %d\r\n\r\n", len(body)); err != nil {
-		return err
+	body = append(body, '\n')
+	n, err := w.Write(body)
+	if err == nil && n != len(body) {
+		return io.ErrShortWrite
 	}
-	_, err = w.Write(body)
 	return err
 }

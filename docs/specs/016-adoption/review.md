@@ -59,3 +59,50 @@ Status: approved by owner; packet active. afc-137 implementation awaits owner re
   `GOTOOLCHAIN=go1.26.4 make lint` passed. Independent read-only review found
   no material issue, and PR #67 CI passed on follow-up implementation HEAD
   `7584c01`. Owner review remains pending.
+
+## Discovered bugs
+
+### afc-138 — MCP stdio framing (owner review pending)
+
+- The old server waited for LSP `Content-Length` headers, so Claude Code and
+  Codex could not complete MCP initialization. Removed that framing because
+  there are no known header-framed clients; MCP stdio now uses one compact
+  UTF-8 JSON-RPC message per line, ignores blank lines, and gives no response
+  to notifications. Protocol output stays on stdout; alias notices and errors
+  stay on stderr.
+- Regression evidence: raw newline JSON sent through `Server.Run` against a
+  scratch daemon with real migrations covers initialize, notification silence,
+  tools/list, and a ready-issues tools/call. A separate request exceeds 64 KB.
+  Before the fix the protocol test got `missing Content-Length header` and the
+  large-line test could not parse the framed response; after the fix
+  `go test ./internal/mcp -count=1` passed. `make build`, `make test`,
+  `make vet`, gofmt, and `GOTOOLCHAIN=go1.26.4 make lint` passed.
+- Installed-binary check: `make build-install` updated
+  `~/.local/bin/dibs-mcp`; `dibsd` stayed running as PID 415831 at revision
+  `4dd9983`. No daemon restart was performed.
+- Claude Code command: `claude mcp add dibs -s user -- dibs-mcp` returned
+  `Added stdio MCP server dibs with command: dibs-mcp to user config`.
+  `claude mcp list` returned `dibs: dibs-mcp  - ✔ Connected`.
+  A read-only tool call using
+  `claude -p --no-session-persistence --mcp-config /tmp/afc-138-claude-mcp-config.json --strict-mcp-config --allowedTools mcp__dibs__list_ready_issues --permission-mode dontAsk --max-budget-usd 0.5 --verbose --output-format stream-json 'Call the dibs MCP list_ready_issues tool for project afc. Use no shell or file tools. Report count and first two short IDs.'`
+  returned `dibs_server=[{name:dibs,status:connected,source:dynamic}]`,
+  `tool_use=mcp__dibs__list_ready_issues`, and `9 ready issues; afc-121,
+  afc-120`. The temporary MCP config contained only
+  `{"mcpServers":{"dibs":{"command":"dibs-mcp"}}}`.
+- Codex: `[mcp_servers.dibs]` was absent from `~/.codex/config.toml`, so this
+  exact block was appended (no other config line changed):
+
+  ```diff
+  +
+  +[mcp_servers.dibs]
+  +command = "dibs-mcp"
+  ```
+
+  `codex mcp list` returned `dibs dibs-mcp ... enabled Unsupported` (the last
+  column is authentication support); `codex mcp get dibs` reported
+  `enabled: true`, `transport: stdio`, `command: dibs-mcp`. A read-only
+  `codex exec --ephemeral -s read-only -C /home/abevz/github/af-coordinator/afc-138-mcp-stdio -o /tmp/afc-138-codex-mcp-result.txt 'Use only the dibs MCP tool list_ready_issues with project afc. Do not run shell commands or modify files. Report the number of ready issues and first two short IDs.'`
+  exposed `mcp: dibs/list_ready_issues started`, then denied the call with
+  `MCP tool call requires approval, but approval policy is never`; it returned
+  no issue data. Claude Code's allowed read-only call verified the tool result.
+  PR #68 CI `test` passed on implementation HEAD `ca7207a`. Owner review remains pending.
