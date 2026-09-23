@@ -158,6 +158,9 @@ func validateCommandArgs(args []string) error {
 	for i := 0; i < len(rest); i++ {
 		a := rest[i]
 		if !strings.HasPrefix(a, "-") {
+			if strings.TrimSpace(a) == "" {
+				return argumentError(key + " requires a nonempty positional argument")
+			}
 			positionals++
 			continue
 		}
@@ -173,7 +176,7 @@ func validateCommandArgs(args []string) error {
 			return argumentError(a + " requires a value")
 		}
 		v := rest[i+1]
-		if v == "" && strings.Contains(" "+requiredCommandFlags[key]+" ", " "+a+" ") {
+		if strings.TrimSpace(v) == "" {
 			return argumentError(a + " requires a value")
 		}
 		if err := validateFlagValue(key, a, v); err != nil {

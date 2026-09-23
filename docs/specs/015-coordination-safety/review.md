@@ -30,6 +30,8 @@ Independent review found two argument paths that still reached a daemon probe:
 a misplaced issue ID and the mutually exclusive claim retry flags. Both now
 fail in the preflight parser; raw CLI tests assert the typed envelope, empty
 stdout, and absence of a claim operation journal in an isolated home.
+The follow-up review also found empty issue IDs and empty alternative targets;
+preflight now rejects those values before a journal or daemon request.
 
 ## afc-121 — MCP invocation-mode audit propagation
 

@@ -51,7 +51,7 @@ func main() {
 		case "--json":
 			jsonOutput = true
 		case "--actor":
-			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "--") {
+			if i+1 >= len(args) || strings.TrimSpace(args[i+1]) == "" || strings.HasPrefix(args[i+1], "--") {
 				fail(argumentError("--actor requires a value"))
 			}
 			defaultActor = args[i+1]

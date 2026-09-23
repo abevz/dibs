@@ -31,12 +31,14 @@ func TestCommandArgumentsFailClosed(t *testing.T) {
 		{"issue create required flag", []string{"issue", "create", "--project", "p"}},
 		{"issue claim malformed ttl", []string{"issue", "claim", "afc-1", "--ttl", "3oops"}},
 		{"issue claim misplaced ID", []string{"issue", "claim", "--ttl", "900", "afc-1"}},
+		{"issue claim empty ID", []string{"issue", "claim", ""}},
 		{"issue claim conflicting retry flags", []string{"issue", "claim", "afc-1", "--retry-last", "--operation-id", "x"}},
 		{"issue heartbeat malformed generation", []string{"issue", "heartbeat", "afc-1", "--lease-generation", "1oops"}},
 		{"issue release missing value", []string{"issue", "release", "afc-1", "--lease-token"}},
 		{"issue close invalid resolution", []string{"issue", "close", "afc-1", "--resolution", "finished"}},
 		{"issue close latest unsupported", []string{"issue", "close", "afc-1", "--expected-version", "latest"}},
 		{"issue update incomplete lease", []string{"issue", "update", "afc-1", "--lease-token", "t"}},
+		{"issue link empty path", []string{"issue", "link", "afc-1", "--path", ""}},
 		{"issue list invalid type", []string{"issue", "list", "--type", "nonsense"}},
 		{"issue list invalid column", []string{"issue", "list", "--columns", "magic"}},
 		{"issue ready unknown", []string{"issue", "ready", "--typo"}},
@@ -46,6 +48,7 @@ func TestCommandArgumentsFailClosed(t *testing.T) {
 		{"dependency invalid kind", []string{"dependency", "add", "afc-1", "--kind", "magic"}},
 		{"dependency remove invalid kind", []string{"dependency", "remove", "afc-1", "--kind", "parent"}},
 		{"dependency conflicting flags", []string{"dependency", "add", "afc-1", "--blocked-by", "afc-2", "--kind", "blocks"}},
+		{"dependency empty target", []string{"dependency", "add", "afc-1", "--blocked-by", ""}},
 		{"ls malformed limit", []string{"ls", "--limit", "oops"}},
 		{"show positional", []string{"show", "afc-1", "extra"}},
 		{"version positional", []string{"version", "extra"}},
@@ -107,6 +110,9 @@ func TestMalformedJSONCommandNeverContactsDaemon(t *testing.T) {
 		{"--json", "project", "add", "--key", "p"},
 		{"--json", "issue", "claim", "--ttl", "900", "afc-1"},
 		{"--json", "issue", "claim", "afc-1", "--retry-last", "--operation-id", "x"},
+		{"--json", "issue", "claim", ""},
+		{"--json", "issue", "link", "afc-1", "--path", ""},
+		{"--actor", "", "--json", "issue", "claim", "afc-1"},
 	} {
 		cmd := exec.Command(bin, args...)
 		home := t.TempDir()
