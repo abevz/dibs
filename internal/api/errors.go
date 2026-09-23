@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/abevz/af-coordinator/internal/core"
+	"github.com/abevz/dibs/internal/core"
 )
 
 // writeError writes a JSON error response matching the API v1 error envelope.

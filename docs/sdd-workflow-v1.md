@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the local SDD standard for `af-coordinator` so implementation stays
+Define the local SDD standard for `dibs` so implementation stays
 spec-first and operational coordination does not replace design discipline.
 
 ## Working definition
@@ -67,7 +67,7 @@ Skip a full spec packet only for:
 
 Use SDD for planning and contract definition.
 
-Use `af-coordinator` issues for:
+Use `dibs` issues for:
 
 - claiming work
 - tracking in-progress execution
@@ -79,7 +79,7 @@ This is the intended split:
 
 ```text
 SDD = plan and design truth
-af-coordinator = execution and coordination truth
+dibs = execution and coordination truth
 ```
 
 ## Artifact model

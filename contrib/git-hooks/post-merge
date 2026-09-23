@@ -1,12 +1,9 @@
 #!/bin/sh
-# post-merge — auto-redeploy af-coordinatord after a merge into main.
+# post-merge — keep the daemon switch explicit after the rename.
 #
 # Installed via `make install-hooks` (sets core.hooksPath to this directory).
-# No-op on any branch other than main: a merge in a task worktree must never
-# redeploy the daemon shared by every worktree.
-#
-# Best-effort and non-fatal: a broken rebuild must never block a git
-# pull/merge. On failure it prints a manual fallback and exits 0.
+# A merge or pull must not stop the existing service or start a second daemon
+# against the live database. The operator follows docs/operations.md.
 set -u
 
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
@@ -16,19 +13,6 @@ if [ "$branch" != "main" ]; then
 	exit 0
 fi
 
-redeploy() {
-	case "$(uname -s)" in
-		Linux) make -C "$repo_root" restart-service ;;
-		Darwin) make -C "$repo_root" install-launchd ;;
-		*)
-			echo "post-merge: unsupported OS, skipping auto-redeploy" >&2
-			return 1
-			;;
-	esac
-}
-
-if ! redeploy; then
-	echo "post-merge: rebuild/restart failed, run 'make restart-service' (or 'make install-launchd' on macOS) manually" >&2
-fi
+echo "post-merge: daemon switch is manual; see docs/operations.md" >&2
 
 exit 0

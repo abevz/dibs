@@ -11,12 +11,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/abevz/af-coordinator/internal/client"
-	"github.com/abevz/af-coordinator/internal/core"
+	"github.com/abevz/dibs/internal/client"
+	"github.com/abevz/dibs/internal/core"
 )
 
 const (
-	serverName             = "afc-mcp"
+	serverName             = "dibs-mcp"
 	defaultProtocolVersion = "2025-03-26"
 )
 
@@ -487,7 +487,7 @@ func (s *Server) tools() []map[string]any {
 		})),
 		toolDefinition("claim_issue", "Claim an issue and acquire a lease token.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
-			{name: "holder", fieldType: "string", description: "Optional holder name; falls back to actor or AF_COORDINATOR_ACTOR."},
+			{name: "holder", fieldType: "string", description: "Optional holder name; falls back to actor or DIBS_ACTOR."},
 			{name: "actor", fieldType: "string", description: "Optional actor fallback for the holder field."},
 			{name: "ttl_seconds", fieldType: "integer", description: "Optional lease TTL in seconds; daemon default applies when omitted."},
 			{name: "session_id", fieldType: "string", description: "Optional non-secret caller session correlation ID."},
@@ -506,18 +506,18 @@ func (s *Server) tools() []map[string]any {
 		toolDefinition("add_note", "Append a note to an issue.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "body", fieldType: "string", description: "Note text.", required: true},
-			{name: "author", fieldType: "string", description: "Optional note author; falls back to actor or AF_COORDINATOR_ACTOR."},
+			{name: "author", fieldType: "string", description: "Optional note author; falls back to actor or DIBS_ACTOR."},
 			{name: "actor", fieldType: "string", description: "Optional actor fallback when author is omitted."},
 		})),
 		toolDefinition("add_tag", "Apply a namespaced tag ('namespace/value') to an issue.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "tag", fieldType: "string", description: "Namespaced tag, e.g. 'area/frontend'.", required: true},
-			{name: "actor", fieldType: "string", description: "Optional actor; falls back to AF_COORDINATOR_ACTOR."},
+			{name: "actor", fieldType: "string", description: "Optional actor; falls back to DIBS_ACTOR."},
 		})),
 		toolDefinition("remove_tag", "Remove a namespaced tag from an issue.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "tag", fieldType: "string", description: "Namespaced tag to remove.", required: true},
-			{name: "actor", fieldType: "string", description: "Optional actor; falls back to AF_COORDINATOR_ACTOR."},
+			{name: "actor", fieldType: "string", description: "Optional actor; falls back to DIBS_ACTOR."},
 		})),
 		toolDefinition("list_notes", "List notes for an issue.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
@@ -534,26 +534,26 @@ func (s *Server) tools() []map[string]any {
 			{name: "pr_url", fieldType: "string", description: "Optional pull request URL to record in close metadata."},
 			{name: "commit_sha", fieldType: "string", description: "Optional commit SHA to record in close metadata."},
 			{name: "note", fieldType: "string", description: "Optional closing note appended atomically before close."},
-			{name: "actor", fieldType: "string", description: "Optional actor; falls back to AF_COORDINATOR_ACTOR."},
+			{name: "actor", fieldType: "string", description: "Optional actor; falls back to DIBS_ACTOR."},
 		})),
 		toolDefinition("operator_close_issue", "Explicit local operator closure for unclaimable or administratively managed work; it never accepts a lease token.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "resolution", fieldType: "string", description: "Resolution: done or cancelled.", required: true},
 			{name: "expected_version", fieldType: "integer", description: "Current issue version.", required: true},
 			{name: "reason", fieldType: "string", description: "Why an operator is closing the work.", required: true},
-			{name: "actor", fieldType: "string", description: "Optional operator identity; falls back to AF_COORDINATOR_ACTOR."},
+			{name: "actor", fieldType: "string", description: "Optional operator identity; falls back to DIBS_ACTOR."},
 		})),
 		toolDefinition("operator_reopen_issue", "Explicit local operator reopen for terminal work; it never accepts a lease token.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "expected_version", fieldType: "integer", description: "Current issue version.", required: true},
 			{name: "reason", fieldType: "string", description: "Why the terminal work is reopening.", required: true},
-			{name: "actor", fieldType: "string", description: "Optional operator identity; falls back to AF_COORDINATOR_ACTOR."},
+			{name: "actor", fieldType: "string", description: "Optional operator identity; falls back to DIBS_ACTOR."},
 		})),
 		toolDefinition("operator_release_issue", "Explicit local operator recovery for a stuck in_progress issue whose lease token was lost before its TTL expired; force-clears the lease and returns the issue to open without closing it. Never accepts a lease token.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "expected_version", fieldType: "integer", description: "Current issue version.", required: true},
 			{name: "reason", fieldType: "string", description: "Why the lease is being force-cleared.", required: true},
-			{name: "actor", fieldType: "string", description: "Optional operator identity; falls back to AF_COORDINATOR_ACTOR."},
+			{name: "actor", fieldType: "string", description: "Optional operator identity; falls back to DIBS_ACTOR."},
 		})),
 	}
 }
@@ -568,7 +568,7 @@ func (s *Server) resolveActor(primary, fallback string) (string, error) {
 	if s.actor != "" {
 		return s.actor, nil
 	}
-	return "", fmt.Errorf("actor is required: pass actor/holder/author or set AF_COORDINATOR_ACTOR")
+	return "", fmt.Errorf("actor is required: pass actor/holder/author or set DIBS_ACTOR")
 }
 
 func (s *Server) resultResponse(id json.RawMessage, result any) *rpcResponse {

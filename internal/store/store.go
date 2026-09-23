@@ -6,8 +6,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/core"
-	coordinatorexport "github.com/abevz/af-coordinator/internal/export"
+	"github.com/abevz/dibs/internal/core"
+	coordinatorexport "github.com/abevz/dibs/internal/export"
 )
 
 // CoordinatorStore is the API-facing persistence contract.

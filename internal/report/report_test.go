@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/core"
-	coordinatorexport "github.com/abevz/af-coordinator/internal/export"
+	"github.com/abevz/dibs/internal/core"
+	coordinatorexport "github.com/abevz/dibs/internal/export"
 )
 
 func TestBuild(t *testing.T) {

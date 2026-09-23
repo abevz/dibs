@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/config"
-	"github.com/abevz/af-coordinator/internal/core"
-	"github.com/abevz/af-coordinator/internal/testsocket"
+	"github.com/abevz/dibs/internal/config"
+	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/testsocket"
 )
 
 type mockExec struct {
@@ -32,7 +32,7 @@ func (m mockExec) LookupEnv(key string) (string, bool) {
 }
 
 func TestEvaluateBinaryRevision(t *testing.T) {
-	goModOK := func() ([]byte, error) { return []byte("module github.com/abevz/af-coordinator\n"), nil }
+	goModOK := func() ([]byte, error) { return []byte("module github.com/abevz/dibs\n"), nil }
 	goModMissing := func() ([]byte, error) { return nil, errors.New("no such file") }
 	goModOther := func() ([]byte, error) { return []byte("module example.com/other\n"), nil }
 
@@ -153,13 +153,13 @@ func TestEvaluateDuplicates(t *testing.T) {
 	dir1 := t.TempDir()
 	dir2 := t.TempDir()
 
-	afctl1 := filepath.Join(dir1, "afctl")
-	os.WriteFile(afctl1, []byte("dummy1"), 0755)
+	dibs1 := filepath.Join(dir1, "dibs")
+	os.WriteFile(dibs1, []byte("dummy1"), 0755)
 
-	afctl2 := filepath.Join(dir2, "afctl")
-	os.WriteFile(afctl2, []byte("dummy2"), 0755)
+	dibs2 := filepath.Join(dir2, "dibs")
+	os.WriteFile(dibs2, []byte("dummy2"), 0755)
 
-	daemon := filepath.Join(dir1, "af-coordinatord")
+	daemon := filepath.Join(dir1, "dibsd")
 	os.WriteFile(daemon, []byte("dummy"), 0644) // not executable
 
 	e := mockExec{

@@ -2,9 +2,9 @@ package api
 
 import (
 	"context"
-	"github.com/abevz/af-coordinator/internal/core"
-	"github.com/abevz/af-coordinator/internal/store/sqlite"
-	"github.com/abevz/af-coordinator/migrations"
+	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/store/sqlite"
+	"github.com/abevz/dibs/migrations"
 
 	"database/sql"
 	"encoding/base64"
@@ -1306,10 +1306,7 @@ func TestHealth(t *testing.T) {
 		t.Fatalf("expected 200 OK, got %d", resp.StatusCode)
 	}
 
-	var health struct {
-		Status string `json:"status"`
-	}
-	health = decodeJSON[struct {
+	health := decodeJSON[struct {
 		Status string `json:"status"`
 	}](t, resp)
 
@@ -1833,7 +1830,7 @@ func TestCloseIssue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	body := `{"resolution":"done","branch":"codex/afc-27","pr_url":"https://github.com/abevz/af-coordinator/pull/27","commit_sha":"ba6d011","expected_version":2,"lease_token":"test-close-token","lease_generation":1,"actor":"test"}`
+	body := `{"resolution":"done","branch":"codex/afc-27","pr_url":"https://github.com/abevz/dibs/pull/27","commit_sha":"ba6d011","expected_version":2,"lease_token":"test-close-token","lease_generation":1,"actor":"test"}`
 	req, err := http.NewRequest("POST", server.URL+"/v1/issues/"+issueID+"/close", strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -1867,7 +1864,7 @@ func TestCloseIssue(t *testing.T) {
 	if result.Status != "closed" || result.Resolution != "done" {
 		t.Fatalf("unexpected close response: %+v", result)
 	}
-	if result.Branch != "codex/afc-27" || result.PRURL != "https://github.com/abevz/af-coordinator/pull/27" || result.CommitSHA != "ba6d011" {
+	if result.Branch != "codex/afc-27" || result.PRURL != "https://github.com/abevz/dibs/pull/27" || result.CommitSHA != "ba6d011" {
 		t.Fatalf("unexpected structured close refs: %+v", result)
 	}
 	if result.ClosedAt == "" {
@@ -2053,7 +2050,7 @@ func TestOperatorCloseReopenTokenValidation(t *testing.T) {
 			body:       closeBody,
 			envToken:   "",
 			authHeader: "Bearer test-token",
-			wantMsg:    "AF_OPERATOR_TOKEN not configured on server",
+			wantMsg:    "DIBS_OPERATOR_TOKEN not configured on server",
 		},
 		{
 			name:       "reopen missing/empty token env",
@@ -2061,7 +2058,7 @@ func TestOperatorCloseReopenTokenValidation(t *testing.T) {
 			body:       reopenBody,
 			envToken:   "",
 			authHeader: "Bearer test-token",
-			wantMsg:    "AF_OPERATOR_TOKEN not configured on server",
+			wantMsg:    "DIBS_OPERATOR_TOKEN not configured on server",
 		},
 		{
 			name:       "close mismatched token",
@@ -2123,6 +2120,27 @@ func TestOperatorCloseReopenTokenValidation(t *testing.T) {
 			}
 			if apiErr.Error.Message != tt.wantMsg {
 				t.Fatalf("error message = %q, want %q", apiErr.Error.Message, tt.wantMsg)
+			}
+		})
+	}
+}
+
+func TestOperatorTokenCanonicalEnvironmentWins(t *testing.T) {
+	t.Setenv("AF_OPERATOR_TOKEN", "legacy-token")
+	t.Setenv("DIBS_OPERATOR_TOKEN", "dibs-token")
+	for _, tt := range []struct {
+		name  string
+		token string
+		want  bool
+	}{
+		{"legacy rejected", "legacy-token", false},
+		{"canonical accepted", "dibs-token", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", nil)
+			req.Header.Set("Authorization", "Bearer "+tt.token)
+			if got := checkOperatorToken(httptest.NewRecorder(), req); got != tt.want {
+				t.Fatalf("checkOperatorToken() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/core"
-	"github.com/abevz/af-coordinator/internal/report"
-	"github.com/abevz/af-coordinator/internal/testsocket"
+	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/report"
+	"github.com/abevz/dibs/internal/testsocket"
 )
 
 func TestClientCoverage(t *testing.T) {

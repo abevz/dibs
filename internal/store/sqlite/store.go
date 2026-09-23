@@ -6,8 +6,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/core"
-	coordinatorexport "github.com/abevz/af-coordinator/internal/export"
+	"github.com/abevz/dibs/internal/core"
+	coordinatorexport "github.com/abevz/dibs/internal/export"
 )
 
 // Store adapts the SQLite function set to the API-facing store boundary.

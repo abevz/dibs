@@ -59,7 +59,7 @@ func ValidIssueType(t string) bool {
 // in the audit trail (afc-95).
 const (
 	// InvocationModeInteractive marks a run initiated by a human or a
-	// one-shot launcher (for example `afctl issue run` from a shell).
+	// one-shot launcher (for example `dibs issue run` from a shell).
 	InvocationModeInteractive = "interactive"
 	// InvocationModeScheduled marks an unattended scheduled run (daemon or
 	// cron) that picked the issue up on its own.

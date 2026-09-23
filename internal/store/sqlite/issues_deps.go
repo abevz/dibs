@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/abevz/af-coordinator/internal/core"
+	"github.com/abevz/dibs/internal/core"
 )
 
 func populateDependencies(ctx context.Context, db *sql.DB, issues []core.Issue) ([]core.Issue, error) {

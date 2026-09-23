@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/abevz/af-coordinator/internal/core"
-	"github.com/abevz/af-coordinator/internal/store"
+	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/store"
 )
 
 func handleCreateProject(st store.CoordinatorStore, logger *slog.Logger) http.HandlerFunc {

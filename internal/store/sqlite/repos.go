@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/core"
+	"github.com/abevz/dibs/internal/core"
 	"github.com/google/uuid"
 )
 

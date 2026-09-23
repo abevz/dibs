@@ -1,6 +1,6 @@
 # API curl Examples
 
-The `af-coordinator` daemon exposes a local HTTP API over a Unix domain socket. This allows any standard HTTP client (like `curl`) to query and mutate state without using the `afctl` CLI.
+The `dibs` daemon exposes a local HTTP API over a Unix domain socket. This allows any standard HTTP client (like `curl`) to query and mutate state without using the `dibs` CLI.
 
 > **Note**: For `curl`, use the `--unix-socket` flag. The base URL hostname is ignored by curl when using a Unix socket, so `http://localhost` is conventionally used.
 
@@ -9,8 +9,8 @@ The `af-coordinator` daemon exposes a local HTTP API over a Unix domain socket. 
 Set your socket path as an environment variable to make copying these examples easier:
 
 ```bash
-export AFC_SOCK=~/.local/state/af-coordinator/af-coordinator.sock
-export AFC_ACTOR="my-curl-script"
+export DIBS_SOCK=~/.local/state/dibs/dibsd.sock
+export DIBS_ACTOR="my-curl-script"
 ```
 
 ---
@@ -19,14 +19,14 @@ export AFC_ACTOR="my-curl-script"
 
 ### Check daemon health
 ```bash
-curl -s --unix-socket $AFC_SOCK http://localhost/v1/health | jq
+curl -s --unix-socket $DIBS_SOCK http://localhost/v1/health | jq
 ```
 
 ### Read execution statistics
 The report is read-only. `since` accepts RFC 3339 or a positive Go duration;
 `until` accepts RFC 3339 and defaults to the daemon clock.
 ```bash
-curl -s --unix-socket $AFC_SOCK \
+curl -s --unix-socket $DIBS_SOCK \
   "http://localhost/v1/stats?project=afc&since=24h" | jq '.report'
 ```
 
@@ -41,18 +41,18 @@ history; report data never includes lease tokens or note bodies.
 ### List all issues
 Supports query parameters: `?project=afc&status=open&type=bug&tag=area/frontend`
 ```bash
-curl -s --unix-socket $AFC_SOCK "http://localhost/v1/issues?project=afc&status=open" | jq
+curl -s --unix-socket $DIBS_SOCK "http://localhost/v1/issues?project=afc&status=open" | jq
 
 # Only bugs:
-curl -s --unix-socket $AFC_SOCK "http://localhost/v1/issues?project=afc&type=bug" | jq
+curl -s --unix-socket $DIBS_SOCK "http://localhost/v1/issues?project=afc&type=bug" | jq
 
 # Only issues carrying both tags (repeated tag= is ANDed):
-curl -s --unix-socket $AFC_SOCK "http://localhost/v1/issues?tag=area/frontend&tag=theme/dark" | jq
+curl -s --unix-socket $DIBS_SOCK "http://localhost/v1/issues?tag=area/frontend&tag=theme/dark" | jq
 ```
 
 ### Get a single issue by Short ID
 ```bash
-curl -s --unix-socket $AFC_SOCK http://localhost/v1/issues/afc-15 | jq
+curl -s --unix-socket $DIBS_SOCK http://localhost/v1/issues/afc-15 | jq
 ```
 
 Dependencies in the issue payload expose UUID and short ID explicitly:
@@ -79,13 +79,13 @@ Dependencies in the issue payload expose UUID and short ID explicitly:
 Returns actionable issues that are not leased and not blocked by unfinished
 `blocks` dependencies.
 ```bash
-curl -s --unix-socket $AFC_SOCK "http://localhost/v1/issues/ready?project=afc" | jq
+curl -s --unix-socket $DIBS_SOCK "http://localhost/v1/issues/ready?project=afc" | jq
 
 # Scope repository lookup by project when logical names are reused across projects:
-curl -s --unix-socket $AFC_SOCK "http://localhost/v1/issues/ready?project=afc&repo=main" | jq
+curl -s --unix-socket $DIBS_SOCK "http://localhost/v1/issues/ready?project=afc&repo=main" | jq
 
 # Gate the ready view to a factory-routing tag (repeated tag= is ANDed):
-curl -s --unix-socket $AFC_SOCK "http://localhost/v1/issues/ready?project=afc&tag=exec/auto" | jq
+curl -s --unix-socket $DIBS_SOCK "http://localhost/v1/issues/ready?project=afc&tag=exec/auto" | jq
 ```
 
 If you do not provide `project`, use the repository UUID rather than an
@@ -99,7 +99,7 @@ ambiguous logical name.
 
 ### Create a new issue
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "project": "afc",
@@ -109,7 +109,7 @@ curl -s -X POST --unix-socket $AFC_SOCK \
     "description": "We are seeing intermittent SQLite locks.",
     "acceptance_criteria": "- Root cause identified\n- Repro no longer locks under concurrent writers",
     "priority": 2,
-    "actor": "'"$AFC_ACTOR"'"
+    "actor": "'"$DIBS_ACTOR"'"
   }' \
   http://localhost/v1/issues | jq
 ```
@@ -117,12 +117,12 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 ### Update an issue (PATCH)
 Use this to update descriptions, acceptance criteria, titles, or priorities. If the issue is `in_progress`, you must also provide the `lease_token`.
 ```bash
-curl -s -X PATCH --unix-socket $AFC_SOCK \
+curl -s -X PATCH --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "description": "Updated context based on new logs.",
     "expected_version": 1,
-    "actor": "'"$AFC_ACTOR"'"
+    "actor": "'"$DIBS_ACTOR"'"
   }' \
   http://localhost/v1/issues/afc-15 | jq
 ```
@@ -137,10 +137,10 @@ a safe `attempt_id` for correlating lifecycle events, an issue-local monotonic
 `lease_generation`, and `version`.
 `session_id` is optional non-secret caller correlation metadata.
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
-    "holder": "'"$AFC_ACTOR"'",
+    "holder": "'"$DIBS_ACTOR"'",
     "ttl_seconds": 3600,
     "session_id": "codex-session-20260713"
   }' \
@@ -155,7 +155,7 @@ eventual close/handoff.*
 
 ### Heartbeat (Renew Lease)
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "lease_token": "'"$TOKEN"'",
@@ -167,7 +167,7 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 ### Hand off an issue (Back to Open)
 Records the required next-step note and releases the lease in one transaction.
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "lease_token": "'"$TOKEN"'",
@@ -180,7 +180,7 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 Releases the lease without a note. Reserve it for recovery and compatibility;
 normal agent stops should use the atomic HANDOFF endpoint above.
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "lease_token": "'"$TOKEN"'"
@@ -192,16 +192,16 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 Resolves agent-owned work (e.g., `done`, `cancelled`). Requires an active
 matching lease and a final note.
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "resolution": "done",
     "branch": "codex/afc-27",
-    "pr_url": "https://github.com/abevz/af-coordinator/pull/27",
+    "pr_url": "https://github.com/abevz/dibs/pull/27",
     "commit_sha": "ba6d011",
     "expected_version": 2,
     "lease_token": "'"$TOKEN"'",
-    "actor": "'"$AFC_ACTOR"'",
+    "actor": "'"$DIBS_ACTOR"'",
     "note": "Fixed the locking issue by adjusting WAL parameters."
   }' \
   http://localhost/v1/issues/afc-15/close | jq
@@ -211,12 +211,12 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 This explicit local-operator path requires a reason and version, and has no
 lease-token field.
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "resolution": "done",
     "expected_version": 3,
-    "actor": "'"$AFC_ACTOR"'",
+    "actor": "'"$DIBS_ACTOR"'",
     "reason": "all child issues are complete"
   }' \
   http://localhost/v1/issues/afc-10/operator-close | jq
@@ -224,11 +224,11 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 
 ### Operator-reopen terminal work
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "expected_version": 4,
-    "actor": "'"$AFC_ACTOR"'",
+    "actor": "'"$DIBS_ACTOR"'",
     "reason": "new evidence requires follow-up"
   }' \
   http://localhost/v1/issues/afc-10/operator-reopen | jq
@@ -240,11 +240,11 @@ script crashed right after claiming). Only accepts an `in_progress` issue,
 never a lease token, and returns the issue directly to `open` without a
 terminal transition.
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "expected_version": 2,
-    "actor": "'"$AFC_ACTOR"'",
+    "actor": "'"$DIBS_ACTOR"'",
     "reason": "flaky-script crashed before persisting the lease token"
   }' \
   http://localhost/v1/issues/afc-10/operator-release | jq
@@ -256,29 +256,29 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 
 ### Add a note to an issue
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "body": "Found a workaround for the bug.",
-    "author": "'"$AFC_ACTOR"'"
+    "author": "'"$DIBS_ACTOR"'"
   }' \
   http://localhost/v1/issues/afc-15/notes | jq
 ```
 
 ### Read notes
 ```bash
-curl -s --unix-socket $AFC_SOCK http://localhost/v1/issues/afc-15/notes | jq
+curl -s --unix-socket $DIBS_SOCK http://localhost/v1/issues/afc-15/notes | jq
 ```
 
 ### Add a dependency (Blocker)
 Mark `afc-15` as blocked by `afc-12`.
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "depends_on": "afc-12",
     "kind": "blocks",
-    "actor": "'"$AFC_ACTOR"'"
+    "actor": "'"$DIBS_ACTOR"'"
   }' \
   http://localhost/v1/issues/afc-15/dependencies | jq
 ```
@@ -286,12 +286,12 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 ### Add a dependency (Parent)
 Mark `afc-15` as a child of `afc-10`.
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "depends_on": "afc-10",
     "kind": "parent",
-    "actor": "'"$AFC_ACTOR"'"
+    "actor": "'"$DIBS_ACTOR"'"
   }' \
   http://localhost/v1/issues/afc-15/dependencies | jq
 ```
@@ -299,12 +299,12 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 ### Add a link (Artifact)
 Link an external document, URL, or local path to the issue.
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "artifact": "https://github.com/my/repo/pull/1",
     "relation": "implements",
-    "actor": "'"$AFC_ACTOR"'"
+    "actor": "'"$DIBS_ACTOR"'"
   }' \
   http://localhost/v1/issues/afc-15/links | jq
 ```
@@ -312,17 +312,17 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 ### Read Audit Events
 Get the full chronological audit trail of an issue.
 ```bash
-curl -s --unix-socket $AFC_SOCK http://localhost/v1/issues/afc-15/events | jq
+curl -s --unix-socket $DIBS_SOCK http://localhost/v1/issues/afc-15/events | jq
 ```
 
 ### Add a tag
 Apply a namespaced tag (`namespace/value`, closed charset).
 ```bash
-curl -s -X POST --unix-socket $AFC_SOCK \
+curl -s -X POST --unix-socket $DIBS_SOCK \
   -H "Content-Type: application/json" \
   -d '{
     "tag": "area/frontend",
-    "actor": "'"$AFC_ACTOR"'"
+    "actor": "'"$DIBS_ACTOR"'"
   }' \
   http://localhost/v1/issues/afc-15/tags | jq
 ```
@@ -330,13 +330,13 @@ curl -s -X POST --unix-socket $AFC_SOCK \
 ### Remove a tag
 `tag` is a query parameter, not a path segment, since the value contains `/`.
 ```bash
-curl -s -X DELETE --unix-socket $AFC_SOCK \
-  "http://localhost/v1/issues/afc-15/tags?tag=area/frontend&actor=$AFC_ACTOR"
+curl -s -X DELETE --unix-socket $DIBS_SOCK \
+  "http://localhost/v1/issues/afc-15/tags?tag=area/frontend&actor=$DIBS_ACTOR"
 ```
 
 ### List tags
 Tags are part of the issue payload — read them via `GET /v1/issues/{id}` (see
-section 2) or the CLI: `afctl issue tag list afc-15`.
+section 2) or the CLI: `dibs issue tag list afc-15`.
 
 ---
 
@@ -345,7 +345,7 @@ section 2) or the CLI: `afctl issue tag list afc-15`.
 ### Stream a normalized JSONL export
 Each line is a record envelope with a stable `type` and `payload`.
 ```bash
-curl -s --unix-socket $AFC_SOCK http://localhost/v1/export/jsonl
+curl -s --unix-socket $DIBS_SOCK http://localhost/v1/export/jsonl
 ```
 
 Example lines:

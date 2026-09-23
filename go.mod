@@ -1,4 +1,4 @@
-module github.com/abevz/af-coordinator
+module github.com/abevz/dibs
 
 go 1.26.4
 

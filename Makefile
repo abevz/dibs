@@ -1,9 +1,9 @@
 GO ?= go
 BINDIR ?= $(HOME)/.local/bin
-BACKUPDIR ?= $(HOME)/backups/af-coordinator
+BACKUPDIR ?= $(HOME)/backups/dibs
 SYSTEMCTL_USER ?= sh contrib/install/systemctl-user.sh
 GIT_REVISION := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
-LD_VERSION_FLAG = -ldflags "-X github.com/abevz/af-coordinator/internal/build.Revision=$(GIT_REVISION)"
+LD_VERSION_FLAG = -ldflags "-X github.com/abevz/dibs/internal/build.Revision=$(GIT_REVISION)"
 
 .PHONY: preflight fmt vet lint build test test-concurrency build-install install-service uninstall-service restart-service install-launchd uninstall-launchd install-backup uninstall-backup install-backup-systemd uninstall-backup-systemd install-backup-launchd uninstall-backup-launchd install-hooks
 
@@ -12,7 +12,7 @@ preflight:
 
 install-hooks:
 	git config core.hooksPath contrib/git-hooks
-	@echo "Git hooksPath set to contrib/git-hooks. post-merge will auto-redeploy af-coordinatord after a merge into main."
+	@echo "Git hooksPath set to contrib/git-hooks. Daemon switch/redeploy is manual."
 
 fmt:
 	gofmt -w cmd internal
@@ -28,9 +28,12 @@ build:
 
 build-install:
 	@mkdir -p $(BINDIR)
-	$(GO) build -buildvcs=false $(LD_VERSION_FLAG) -o $(BINDIR)/af-coordinatord ./cmd/af-coordinatord/
-	$(GO) build -buildvcs=false $(LD_VERSION_FLAG) -o $(BINDIR)/afctl ./cmd/afctl/
-	$(GO) build -buildvcs=false $(LD_VERSION_FLAG) -o $(BINDIR)/afc-mcp ./cmd/afc-mcp/
+	$(GO) build -buildvcs=false $(LD_VERSION_FLAG) -o $(BINDIR)/dibsd ./cmd/dibsd/
+	$(GO) build -buildvcs=false $(LD_VERSION_FLAG) -o $(BINDIR)/dibs ./cmd/dibs/
+	$(GO) build -buildvcs=false $(LD_VERSION_FLAG) -o $(BINDIR)/dibs-mcp ./cmd/dibs-mcp/
+	ln -sfn dibsd $(BINDIR)/af-coordinatord
+	ln -sfn dibs $(BINDIR)/afctl
+	ln -sfn dibs-mcp $(BINDIR)/afc-mcp
 
 test:
 	$(GO) test -race ./...
@@ -39,34 +42,31 @@ test-concurrency:
 	$(GO) test ./internal/store/sqlite -run '^(TestCoordinationRaceMatrix|TestMultiConnectionDependencyCycleSerialization|TestConcurrentIdenticalClaimOperations|TestConcurrentConflictingClaimOperations)$$' -count=1
 
 install-service:
-	@mkdir -p $(HOME)/.config/systemd/user
-	cp contrib/systemd/af-coordinatord.service $(HOME)/.config/systemd/user/
+	@mkdir -p $(HOME)/.config/systemd/user $(HOME)/.local/state/dibs $(HOME)/.local/share/dibs
+	@chmod 700 $(HOME)/.local/state/dibs $(HOME)/.local/share/dibs
+	cp contrib/systemd/dibsd.service $(HOME)/.config/systemd/user/
 	$(SYSTEMCTL_USER) daemon-reload
-	@echo "Service installed. Enable: $(SYSTEMCTL_USER) enable --now af-coordinatord"
+	@echo "New service installed but not started. See docs/operations.md for the explicit switch."
 
 uninstall-service:
-	-$(SYSTEMCTL_USER) stop af-coordinatord
-	-$(SYSTEMCTL_USER) disable af-coordinatord
-	rm -f $(HOME)/.config/systemd/user/af-coordinatord.service
+	-$(SYSTEMCTL_USER) stop dibsd
+	-$(SYSTEMCTL_USER) disable dibsd
+	rm -f $(HOME)/.config/systemd/user/dibsd.service
 	$(SYSTEMCTL_USER) daemon-reload
 
 restart-service: build-install
-	$(SYSTEMCTL_USER) restart af-coordinatord
+	$(SYSTEMCTL_USER) restart dibsd
 
 install-launchd: build-install
 	@test "$$(uname -s)" = "Darwin" || (echo "install-launchd is macOS-only" >&2; exit 1)
 	@mkdir -p "$(HOME)/Library/LaunchAgents"
-	sed "s|@HOME@|$(HOME)|g" contrib/launchd/com.abevz.af-coordinatord.plist.in > "$(HOME)/Library/LaunchAgents/com.abevz.af-coordinatord.plist"
-	-launchctl bootout gui/$$(id -u) "$(HOME)/Library/LaunchAgents/com.abevz.af-coordinatord.plist" 2>/dev/null
-	launchctl bootstrap gui/$$(id -u) "$(HOME)/Library/LaunchAgents/com.abevz.af-coordinatord.plist"
-	launchctl enable gui/$$(id -u)/com.abevz.af-coordinatord
-	launchctl kickstart -k gui/$$(id -u)/com.abevz.af-coordinatord
-	@echo "LaunchAgent installed and started: com.abevz.af-coordinatord"
+	sed "s|@HOME@|$(HOME)|g" contrib/launchd/com.abevz.dibsd.plist.in > "$(HOME)/Library/LaunchAgents/com.abevz.dibsd.plist"
+	@echo "New LaunchAgent installed but not started. See docs/operations.md for the explicit switch."
 
 uninstall-launchd:
 	@test "$$(uname -s)" = "Darwin" || (echo "uninstall-launchd is macOS-only" >&2; exit 1)
-	-launchctl bootout gui/$$(id -u) "$(HOME)/Library/LaunchAgents/com.abevz.af-coordinatord.plist" 2>/dev/null
-	rm -f "$(HOME)/Library/LaunchAgents/com.abevz.af-coordinatord.plist"
+	-launchctl bootout gui/$$(id -u) "$(HOME)/Library/LaunchAgents/com.abevz.dibsd.plist" 2>/dev/null
+	rm -f "$(HOME)/Library/LaunchAgents/com.abevz.dibsd.plist"
 
 install-backup:
 	@case "$$(uname -s)" in \

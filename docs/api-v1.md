@@ -1,13 +1,13 @@
 # API v1
 
 HTTP+JSON over the unix socket. The daemon is the single write authority;
-this contract is the product surface. `afctl` and agent wrappers are thin
+this contract is the product surface. `dibs` and agent wrappers are thin
 clients over these endpoints.
 
 Test shape:
 
 ```text
-curl --unix-socket ~/.local/state/af-coordinator/af-coordinator.sock \
+curl --unix-socket ~/.local/state/dibs/dibsd.sock \
   http://localhost/v1/health
 ```
 
@@ -15,7 +15,7 @@ curl --unix-socket ~/.local/state/af-coordinator/af-coordinator.sock \
 
 The API stack is intentionally thin and split into seven layers:
 
-- daemon entrypoint: `cmd/af-coordinatord/main.go`
+- daemon entrypoint: `cmd/dibsd/main.go`
 - route registration and JSON helpers: `internal/api/daemon.go`,
   `internal/api/errors.go`
 - endpoint handlers: `internal/api/projects.go`, `repos.go`, `worktrees.go`,
@@ -28,8 +28,8 @@ The API stack is intentionally thin and split into seven layers:
 The effective call path is:
 
 ```text
-afctl or curl
-  -> internal/client (for afctl)
+dibs or curl
+  -> internal/client (for dibs)
   -> Unix socket HTTP API
   -> internal/api handlers
   -> internal/store.CoordinatorStore
@@ -301,7 +301,7 @@ This is the compact route-to-implementation inventory for the current daemon.
   inside its transaction and is the authoritative decision.
 
   Claim also accepts an optional `operation_id`: an opaque, high-entropy,
-  client-generated idempotency key (afctl uses a UUIDv4). Retrying a claim with
+  client-generated idempotency key (dibs uses a UUIDv4). Retrying a claim with
   the same `operation_id` and identical arguments returns the original
   committed response — same `lease_token`, `lease_generation`, `attempt_id`,
   `expires_at`, and `version` — without claiming again and without advancing

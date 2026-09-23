@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/config"
-	"github.com/abevz/af-coordinator/internal/store/sqlite"
-	"github.com/abevz/af-coordinator/internal/testsocket"
-	"github.com/abevz/af-coordinator/migrations"
+	"github.com/abevz/dibs/internal/config"
+	"github.com/abevz/dibs/internal/store/sqlite"
+	"github.com/abevz/dibs/internal/testsocket"
+	"github.com/abevz/dibs/migrations"
 )
 
 type daemonHelperProcess struct {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abevz/af-coordinator/internal/core"
+	"github.com/abevz/dibs/internal/core"
 )
 
 type fakeClient struct {

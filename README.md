@@ -1,9 +1,9 @@
-# af-coordinator
+# dibs
 
 **A local execution ledger for AI agents working across repositories and git
 worktrees.**
 
-`af-coordinator` is a local-first daemon that gives agents one place to decide
+`dibs` is a local-first daemon that gives agents one place to decide
 what is ready, claim it atomically, renew ownership, hand work off, and leave an
 auditable result.
 
@@ -18,14 +18,14 @@ writing directly to a database, editing the same checkout, or duplicating work.
 > but the CLI and HTTP API may still change before v1.0. Network clients and
 > multi-machine synchronization are not supported yet.
 
-`af-coordinator` is not an agent runtime or a replacement for specs. It is the
+`dibs` is not an agent runtime or a replacement for specs. It is the
 execution control plane between planning and execution:
 
 ```text
 specs / operator intent
           |
           v
-af-coordinator: ready -> claim -> heartbeat -> handoff / close
+dibs: ready -> claim -> heartbeat -> handoff / close
           |
           v
 agents / runners -> worktree -> branch / PR / result
@@ -36,7 +36,7 @@ agents / runners -> worktree -> branch / PR / result
 - tracks projects, repositories, worktrees, artifacts, issues, dependencies,
   leases, notes, and events
 - exposes a small HTTP+JSON API over a Unix socket
-- ships `afctl`, a CLI for agents and humans
+- ships `dibs`, a CLI for agents and humans
 - computes a `ready` view from issue status, leases, and blockers
 - classifies and routes issues with namespaced tags (`namespace/value`),
   filterable on the `ready`/`list` views — without a separate project
@@ -49,23 +49,23 @@ Once a project and repository are registered, the operating loop is small:
 
 ```bash
 # Human or agent creates work.
-afctl issue create --project demo --scope-kind project \
+dibs issue create --project demo --scope-kind project \
   --title "Document the retry policy"
 
 # Workers ask for work that is open, unblocked, and not leased.
-afctl issue ready --project demo
+dibs issue ready --project demo
 
 # Exactly one worker receives the lease. Claiming increments the issue's
 # version as a side effect — use the Version this prints, not one read
 # earlier from `issue get`, as --expected-version below.
-afctl issue claim demo-1 --ttl 900
+dibs issue claim demo-1 --ttl 900
 
 # While working, it renews the lease and records material context.
-afctl issue heartbeat demo-1 --lease-token "$LEASE_TOKEN" --ttl 900
-afctl issue note add demo-1 --body "Verified the failure path" --actor worker-1
+dibs issue heartbeat demo-1 --lease-token "$LEASE_TOKEN" --ttl 900
+dibs issue note add demo-1 --body "Verified the failure path" --actor worker-1
 
 # It closes with evidence, or hands off and releases atomically.
-afctl issue close demo-1 --resolution done --expected-version 2 \
+dibs issue close demo-1 --resolution done --expected-version 2 \
   --lease-token "$LEASE_TOKEN" --note "Documented and verified"
 ```
 
@@ -73,16 +73,16 @@ If two workers try to claim the same issue, one wins and the other receives a
 stable `lease_held` error. If a worker disappears, its lease expires and the
 work can become ready again — or, to recover it immediately instead of
 waiting out the TTL (e.g. a script crashed before it ever persisted its
-lease token), `afctl issue operator-release` clears the lease without one.
+lease token), `dibs issue operator-release` clears the lease without one.
 
-For a script that's just "do one thing, then close," `afctl issue run`
+For a script that's just "do one thing, then close," `dibs issue run`
 avoids the lost-token problem structurally instead of just recovering from
 it — it claims, execs the command with the lease exported as environment
 variables, heartbeats in the background, and closes or hands off
 automatically based on the exit code, all inside one process:
 
 ```bash
-afctl issue run demo-1 --ttl 900 -- ./do-the-work.sh
+dibs issue run demo-1 --ttl 900 -- ./do-the-work.sh
 ```
 
 ## Where it fits
@@ -90,7 +90,7 @@ afctl issue run demo-1 --ttl 900 -- ./do-the-work.sh
 | Concern | Source of truth |
 |---|---|
 | Requirements, design, acceptance criteria | SDD files or another planning system |
-| Ready/blocked state, leases, attempts, handoffs | `af-coordinator` |
+| Ready/blocked state, leases, attempts, handoffs | `dibs` |
 | Code and review | Git worktrees, branches, commits, and pull requests |
 | External visibility | Optional tracker integrations; not implemented yet |
 
@@ -100,7 +100,7 @@ live execution state used by agents.
 
 ## Why this exists
 
-`af-coordinator` is meant to replace the fragile parts of `Beads + shared Dolt`
+`dibs` is meant to replace the fragile parts of `Beads + shared Dolt`
 when the real workload is concurrent agent coordination rather than human issue
 tracking.
 
@@ -127,8 +127,7 @@ make preflight
 The preflight checks required build tools, the Go version, the install
 directory, and the current OS/service-manager situation.
 
-Then install the git hooks once, so the daemon auto-redeploys after every
-merge into `main` instead of silently going stale:
+The git hook now leaves the daemon switch to the operator after a merge:
 
 ```bash
 make install-hooks
@@ -141,7 +140,8 @@ make build
 make build-install
 ```
 
-This builds `af-coordinatord`, `afctl`, and `afc-mcp` into `~/.local/bin/`.
+This builds `dibsd`, `dibs`, and `dibs-mcp` into `~/.local/bin/`, plus
+compatibility command aliases.
 Make sure `~/.local/bin` is on `PATH`.
 
 To install the latest published GitHub release instead of building from source:
@@ -167,35 +167,36 @@ CI (`.github/workflows/ci.yml`) runs `vet`, a `gofmt -l` check, `golangci-lint`,
 
 ```bash
 # Start in the foreground (for testing):
-af-coordinatord
+dibsd
 ```
 
 On Linux with `systemd --user`:
 
 ```bash
 make install-service
-sh contrib/install/systemctl-user.sh enable --now af-coordinatord
+sh contrib/install/systemctl-user.sh enable --now dibsd
 ```
 
 On macOS with `launchd`:
 
 ```bash
 make install-launchd
-launchctl print gui/$(id -u)/com.abevz.af-coordinatord
 ```
+
+The LaunchAgent is staged but not started; follow the explicit switch in
+[operations](docs/operations.md#explicit-service-switch).
 
 After the daemon is running:
 
 ```bash
-afctl health
-afctl doctor
+dibs health
+dibs doctor
 ```
 
-`afctl doctor` is a post-install/runtime diagnostic. It checks daemon
+`dibs doctor` is a post-install/runtime diagnostic. It checks daemon
 reachability, client/daemon version skew, whether the daemon binary matches
 the local git HEAD (run it from inside this checkout to catch a merge that
-was never followed by `make restart-service` — automatic if you've run
-`make install-hooks`, a safety net if you haven't), backup setup, duplicate
+was never followed by an explicit service restart), backup setup, duplicate
 binaries, and client/daemon config mismatch.
 
 ### Platform support
@@ -212,17 +213,41 @@ The daemon reads these environment variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `AF_COORDINATOR_SOCKET` | `~/.local/state/af-coordinator/af-coordinator.sock` | Unix socket path |
-| `AF_COORDINATOR_DB` | `~/.local/share/af-coordinator/af-coordinator.db` | SQLite database path |
-| `AF_COORDINATOR_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
-| `AF_OPERATOR_TOKEN` | (unset) | Required by the daemon for `afctl issue operator-close/operator-reopen/operator-release`. Unset means those commands fail with `forbidden: AF_OPERATOR_TOKEN not configured on server`. The client (`afctl`) reads the same variable from its own environment, so the value must match on both sides. Under `systemd --user`, wire it in via an `EnvironmentFile=` drop-in pointing at a `600`-permission file outside the unit — see `contrib/systemd/af-coordinatord.service`. |
+| `DIBS_SOCKET` | `~/.local/state/dibs/dibsd.sock` | Unix socket path |
+| `DIBS_DB` | `~/.local/share/dibs/dibs.db` | SQLite database path |
+| `DIBS_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `DIBS_OPERATOR_TOKEN` | (unset) | Required by the daemon for `dibs issue operator-close/operator-reopen/operator-release`. Unset means those commands fail with `forbidden: DIBS_OPERATOR_TOKEN not configured on server`. The client (`dibs`) reads the same variable from its own environment, so the value must match on both sides. Under `systemd --user`, wire it in via an `EnvironmentFile=` drop-in pointing at a `600`-permission file outside the unit — see `contrib/systemd/dibsd.service`. |
+
+The old database remains authoritative when present; a clean install uses the
+new paths above. Canonical `DIBS_*` variables win if both names are set.
+
+## Migrating from af-coordinator
+
+The former commands `afctl`, `af-coordinatord`, and `afc-mcp` remain aliases
+to `dibs`, `dibsd`, and `dibs-mcp`. An alias prints a deprecation notice only
+to stderr; machine-readable stdout is unchanged. Existing `AF_*` environment
+variables still work. If the old database at
+`~/.local/share/af-coordinator/af-coordinator.db` exists, both command names
+continue to use it and the old socket at
+`~/.local/state/af-coordinator/af-coordinator.sock`. There is no automatic
+data migration or second database creation. Project key `afc`, issue IDs, and
+external keys retain their existing values. A future explicit migration tool
+can move the live SQLite/WAL state after the service is stopped; this slice
+does not provide `dibs migrate-paths`.
+
+The installed old service unit is left untouched. To switch on Linux, install
+the new binaries and unit, stop/disable the old service, then enable/start
+`dibsd` and run `dibs doctor`. On macOS, install the new LaunchAgent file,
+boot out the old agent, bootstrap the new one, and verify `dibs health`.
+Do not run both daemons against the same database. Exact commands are in
+[operations](docs/operations.md#explicit-service-switch).
 
 Common worktree maintenance commands:
 
 ```text
-afctl worktree list --repo <repo-id>
-afctl worktree unregister --worktree <worktree-id>
-afctl worktree prune --repo <repo-id>
+dibs worktree list --repo <repo-id>
+dibs worktree unregister --worktree <worktree-id>
+dibs worktree prune --repo <repo-id>
 ```
 
 `unregister` only removes a non-main worktree record when nothing still points
@@ -258,9 +283,9 @@ The rule is:
 
 Expected private runtime locations:
 
-- database: `~/.local/share/af-coordinator/af-coordinator.db`
-- socket: `~/.local/state/af-coordinator/af-coordinator.sock`
-- logs/state: `~/.local/state/af-coordinator/`
+- database: `~/.local/share/dibs/dibs.db`
+- socket: `~/.local/state/dibs/dibsd.sock`
+- logs/state: `~/.local/state/dibs/`
 
 Do not commit:
 
@@ -272,7 +297,7 @@ Do not commit:
 
 ## What we borrow from Beads
 
-`af-coordinator` should borrow workflow and UX ideas from Beads, but not its
+`dibs` should borrow workflow and UX ideas from Beads, but not its
 shared-Dolt operational model.
 
 Keep from Beads:
@@ -293,7 +318,7 @@ Do not copy from Beads:
 So the intended split is:
 
 - Beads ideas for task flow and operator UX
-- `af-coordinator` storage and concurrency model for correctness
+- `dibs` storage and concurrency model for correctness
 
 ## Architecture
 
@@ -302,7 +327,7 @@ agents / scripts / tools
         |
         | HTTP+JSON over Unix socket
         v
-af-coordinatord
+dibsd
         |
         v
 SQLite (WAL)
@@ -321,10 +346,10 @@ For any meaningful feature, the canonical flow is:
 requirements.md -> design.md -> tasks.md -> implementation -> review.md
 ```
 
-For `af-coordinator`, that means:
+For `dibs`, that means:
 
 - SDD artifacts define scope, contracts, and acceptance criteria
-- `af-coordinator` runtime state tracks execution, claims, blockers, notes, and handoff
+- `dibs` runtime state tracks execution, claims, blockers, notes, and handoff
 - the coordinator does not replace the spec canon; it complements it
 
 Initial SDD workspace:
@@ -395,9 +420,9 @@ An issue may belong to:
 ## Repository layout
 
 ```text
-cmd/af-coordinatord/   daemon entrypoint
-cmd/afctl/             CLI client
-cmd/afc-mcp/           MCP stdio wrapper over the daemon API
+cmd/dibsd/   daemon entrypoint
+cmd/dibs/             CLI client
+cmd/dibs-mcp/           MCP stdio wrapper over the daemon API
 docs/                  design docs
 internal/api/          transport layer
 internal/client/       Go client for the daemon API
@@ -446,10 +471,10 @@ migrations/            schema migrations
    git push origin vX.Y.Z
    ```
 4. The `Release` GitHub Actions workflow builds Linux and macOS archives for
-   `afctl`, `af-coordinatord`, and `afc-mcp`, then uploads
+   `dibs`, `dibsd`, and `dibs-mcp`, then uploads
    `checksums.txt` to the GitHub release.
 5. Verify the release install path:
    ```bash
    VERSION=vX.Y.Z sh contrib/install/install-release.sh
-   afctl health
+   dibs health
    ```

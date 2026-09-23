@@ -3,8 +3,8 @@
 ## Building
 
 ```bash
-go build -o ~/.local/bin/af-coordinatord ./cmd/af-coordinatord
-go build -o ~/.local/bin/afctl ./cmd/afctl
+go build -o ~/.local/bin/dibsd ./cmd/dibsd
+go build -o ~/.local/bin/dibs ./cmd/dibs
 ```
 
 Or use the Makefile:
@@ -19,26 +19,26 @@ make build
 
 ```bash
 make install-service
-sh contrib/install/systemctl-user.sh enable --now af-coordinatord
+sh contrib/install/systemctl-user.sh enable --now dibsd
 ```
 
 ### Check status
 
 ```bash
-sh contrib/install/systemctl-user.sh status af-coordinatord
+sh contrib/install/systemctl-user.sh status dibsd
 ```
 
 ### View logs
 
 ```bash
-journalctl --user -u af-coordinatord -f
+journalctl --user -u dibsd -f
 ```
 
 ### Start/stop/restart
 
 ```bash
-sh contrib/install/systemctl-user.sh start af-coordinatord
-sh contrib/install/systemctl-user.sh stop af-coordinatord
+sh contrib/install/systemctl-user.sh start dibsd
+sh contrib/install/systemctl-user.sh stop dibsd
 make restart-service
 ```
 
@@ -46,27 +46,22 @@ make restart-service
 `DBUS_SESSION_BUS_ADDRESS` from `/run/user/$(id -u)/bus` when they are missing,
 which keeps service targets working from non-interactive agent environments.
 
-Run `make install-hooks` once to avoid needing to remember `make
-restart-service` at all: it installs a `post-merge` git hook
-(`contrib/git-hooks/post-merge`) that auto-rebuilds and restarts the daemon
-whenever a merge lands on `main`. Either way, `afctl doctor`'s "Binary
-revision" check catches a daemon still running an older commit than the
-local checkout and tells you to restart it.
+The `post-merge` hook does not redeploy the daemon during the name change.
+Use the explicit switch below. `dibs doctor` detects a daemon running an
+older revision.
 
 ## macOS LaunchAgent
 
-Build the binaries and install the daemon as a user LaunchAgent:
+Build the binaries and stage the daemon as a user LaunchAgent:
 
 ```bash
 make install-launchd
-launchctl print gui/$(id -u)/com.abevz.af-coordinatord
 ```
 
-The Makefile renders `contrib/launchd/com.abevz.af-coordinatord.plist.in` into
-`~/Library/LaunchAgents/com.abevz.af-coordinatord.plist`, then bootstraps and
-starts the service.
+The Makefile renders `contrib/launchd/com.abevz.dibsd.plist.in` into
+`~/Library/LaunchAgents/com.abevz.dibsd.plist` without starting it.
 
-To uninstall:
+To uninstall the new unit:
 
 ```bash
 make uninstall-launchd
@@ -75,18 +70,48 @@ make uninstall-launchd
 Daemon logs are written to:
 
 ```text
-~/Library/Logs/af-coordinatord.log
-~/Library/Logs/af-coordinatord.err.log
+~/Library/Logs/dibsd.log
+~/Library/Logs/dibsd.err.log
 ```
+
+## Explicit service switch
+
+The former daemon service remains installed and running until the operator
+stops it. The two services must never run together against the same database.
+On Linux, after this change is merged and reviewed:
+
+```bash
+make build-install
+make install-service
+sh contrib/install/systemctl-user.sh disable --now af-coordinatord
+sh contrib/install/systemctl-user.sh enable --now dibsd
+dibs doctor
+```
+
+On macOS, `make install-launchd` installs but does not bootstrap the new
+agent. Stop the old agent before bootstrapping the new one:
+
+```bash
+make install-launchd
+launchctl bootout gui/$(id -u) "$HOME/Library/LaunchAgents/com.abevz.af-coordinatord.plist"
+launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/com.abevz.dibsd.plist"
+dibs doctor
+```
+
+The old unit files are not removed. The existing live database and socket
+remain at their old paths until a separate, explicit migration. Do not copy
+only the SQLite main file while WAL has uncheckpointed writes. There is no
+`dibs migrate-paths` command in this slice.
 
 ## Manual daemon start
 
 ```bash
-af-coordinatord
+dibsd
 ```
 
-Default socket: `~/.local/state/af-coordinator/af-coordinator.sock`
-Default database: `~/.local/share/af-coordinator/af-coordinator.db`
+Clean-install socket: `~/.local/state/dibs/dibsd.sock`
+Clean-install database: `~/.local/share/dibs/dibs.db`
+Existing legacy database and socket paths remain selected automatically.
 
 ## Execution statistics
 
@@ -94,8 +119,8 @@ The daemon derives a local read-only report from its coordinator records; it
 does not need Prometheus, a rollup database, or network access:
 
 ```bash
-afctl stats --project afc --since 7d
-afctl --json stats --project afc --repo af-coordinator --since 24h
+dibs stats --project afc --since 7d
+dibs --json stats --project afc --since 24h
 ```
 
 Use RFC 3339 or a positive Go duration for `--since`; `--until` accepts RFC
@@ -108,10 +133,10 @@ Since the daemon listens on a Unix socket, use `curl --unix-socket`:
 
 ```bash
 # Health check
-curl --unix-socket ~/.local/state/af-coordinator/af-coordinator.sock http://localhost/v1/health
+curl --unix-socket ~/.local/state/dibs/dibsd.sock http://localhost/v1/health
 
 # Create a project
-curl --unix-socket ~/.local/state/af-coordinator/af-coordinator.sock \
+curl --unix-socket ~/.local/state/dibs/dibsd.sock \
   -X POST http://localhost/v1/projects \
   -H 'Content-Type: application/json' \
   -d '{"name":"Test","key":"test"}'
@@ -120,12 +145,14 @@ curl --unix-socket ~/.local/state/af-coordinator/af-coordinator.sock \
 ## Backup
 
 The daemon uses SQLite in WAL mode. Online backup uses `VACUUM INTO`:
+Use the database path reported by `dibs --json health`; the example below is for a
+clean install. An existing legacy database stays at its original path.
 
 ### Manual backup
 
 ```bash
-sqlite3 ~/.local/share/af-coordinator/af-coordinator.db \
-  "VACUUM INTO '/path/to/backup/af-coordinator-$(date +%Y%m%d).db'"
+sqlite3 ~/.local/share/dibs/dibs.db \
+  "VACUUM INTO '/path/to/backup/dibs-$(date +%Y%m%d).db'"
 ```
 
 This creates a consistent, compacted copy of the database while the daemon is running.
@@ -138,7 +165,7 @@ This creates a consistent, compacted copy of the database while the daemon is ru
 - macOS: launchd LaunchAgent.
 
 The job runs `VACUUM INTO` daily at 03:17, checks the integrity of the backup,
-and keeps the last 14 backups in `~/backups/af-coordinator`.
+and keeps the last 14 backups in `~/backups/dibs`.
 
 #### Linux systemd timer
 
@@ -188,50 +215,52 @@ make uninstall-backup
 
 1. Stop the daemon:
    ```bash
-   sh contrib/install/systemctl-user.sh stop af-coordinatord
+   sh contrib/install/systemctl-user.sh stop dibsd
    ```
 2. Replace the database:
    ```bash
-   cp /path/to/backup/af-coordinator-20260703.db ~/.local/share/af-coordinator/af-coordinator.db
+   cp /path/to/backup/dibs-20260703.db ~/.local/share/dibs/dibs.db
    ```
+   Replace the path above with the existing legacy database path when that is
+   what `dibs --json health` reports. Do not restore into a second path.
 3. Start the daemon:
    ```bash
-   sh contrib/install/systemctl-user.sh start af-coordinatord
+   sh contrib/install/systemctl-user.sh start dibsd
    ```
 
 ## CLI usage
 
 ```bash
 # List projects
-afctl project list
+dibs project list
 
 # Create an issue
-afctl issue create --project test --scope-kind project --title "My issue"
+dibs issue create --project test --scope-kind project --title "My issue"
 
 # List issues; project, type, and status accept CSV values
-afctl ls --project afc --type epic,chore --status open,in_progress
-afctl ls --project afc,aion --type epic,chore --status open,in_progress
+dibs ls --project afc --type epic,chore --status open,in_progress
+dibs ls --project afc,aion --type epic,chore --status open,in_progress
 
 # Dependency-aware table columns
-afctl ls --project aion --status open
+dibs ls --project aion --status open
 
 # Narrow terminal: pick only the columns you need, in any order
-afctl ls --project aion --columns short,status,title
+dibs ls --project aion --columns short,status,title
 
 # Show the complete filter contract without contacting the daemon
-afctl ls --help
+dibs ls --help
 
 # Claim and work on an issue
-afctl issue claim <issue-id> --holder my-agent --ttl 3600
-afctl issue heartbeat <issue-id> --lease-token <token> --ttl 3600
-afctl issue release <issue-id> --lease-token <token>
+dibs issue claim <issue-id> --holder my-agent --ttl 3600
+dibs issue heartbeat <issue-id> --lease-token <token> --ttl 3600
+dibs issue release <issue-id> --lease-token <token>
 
 # Ready view
-afctl issue ready --project test
+dibs issue ready --project test
 
 # Notes
-afctl issue note add <issue-id> --author me --body "Working on this"
-afctl issue note list <issue-id>
+dibs issue note add <issue-id> --author me --body "Working on this"
+dibs issue note list <issue-id>
 ```
 
 The human-readable issue list keeps task context together and puts dependency
@@ -251,18 +280,18 @@ ID SHORT STATUS TYPE TITLE ASSIGNEE CLAIMED BLOCKED BY DEPS TAGS
 - `TAGS` lists the issue's namespaced tags, comma-joined.
 - The full default row is wide; pass `--columns <key[,key...]>` (valid keys:
   `id`, `short`, `status`, `type`, `title`, `assignee`, `claimed`,
-  `blocked_by`, `deps`, `tags`) to `afctl ls`/`issue list`/`issue ready` to
+  `blocked_by`, `deps`, `tags`) to `dibs ls`/`issue list`/`issue ready` to
   select a narrower subset, in any order. Omitting the flag keeps this
   default column set.
 
 With `--json`, the issue object exposes the same derived state as optional
 `blocked` and `blocked_by` fields, while `dependencies` retains the complete
 relationship list. To query children of `aion-500` from JSON output:
-`afctl issue list --json | jq -r '.[] | select(.dependencies[]? | .kind == "parent" and (.depends_on_short_id == "aion-500" or .depends_on_id == "aion-500"))'`
+`dibs issue list --json | jq -r '.[] | select(.dependencies[]? | .kind == "parent" and (.depends_on_short_id == "aion-500" or .depends_on_id == "aion-500"))'`
 
 ## Agent guidance sync
 
-`afctl protocol` is the canonical detailed agent workflow. `afctl init`
+`dibs protocol` is the canonical detailed agent workflow. `dibs init`
 updates only the managed coordinator block in one target `AGENTS.md` (the
 current directory by default, or `--path`), preserving all surrounding
 repository instructions. It is not a global fan-out command.
@@ -270,11 +299,11 @@ repository instructions. It is not a global fan-out command.
 After a protocol-summary template update, check each registered checkout first:
 
 ```bash
-afctl init --dry-run
-afctl init
+dibs init --dry-run
+dibs init
 ```
 
-The generated block points agents back to `afctl protocol` and the canonical
+The generated block points agents back to `dibs protocol` and the canonical
 `docs/agent-protocol-v1.md`; it intentionally does not duplicate the full
 workflow in every repository.
 
@@ -282,13 +311,13 @@ workflow in every repository.
 
 | Resource | Path |
 |----------|------|
-| Database | `~/.local/share/af-coordinator/af-coordinator.db` |
-| Socket | `~/.local/state/af-coordinator/af-coordinator.sock` |
-| Logs | `journalctl --user -u af-coordinatord` |
+| Database | `~/.local/share/dibs/dibs.db` |
+| Socket | `~/.local/state/dibs/dibsd.sock` |
+| Logs | `journalctl --user -u dibsd` |
 
 ## Configuration
 
 Environment variables override defaults:
 
-- `AF_COORDINATOR_DB` — database path
-- `AF_COORDINATOR_SOCKET` — socket path
+- `DIBS_DB` — database path
+- `DIBS_SOCKET` — socket path

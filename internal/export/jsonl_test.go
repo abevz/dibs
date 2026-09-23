@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abevz/af-coordinator/internal/core"
-	coordinatorexport "github.com/abevz/af-coordinator/internal/export"
-	"github.com/abevz/af-coordinator/internal/store/sqlite"
-	"github.com/abevz/af-coordinator/migrations"
+	"github.com/abevz/dibs/internal/core"
+	coordinatorexport "github.com/abevz/dibs/internal/export"
+	"github.com/abevz/dibs/internal/store/sqlite"
+	"github.com/abevz/dibs/migrations"
 
 	_ "modernc.org/sqlite"
 )
