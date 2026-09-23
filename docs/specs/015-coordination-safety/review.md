@@ -26,6 +26,10 @@ removed. The corrected command rejects the argument before request creation.
 `make build`, `make test` (race), `make vet`, and
 `GOTOOLCHAIN=go1.26.4 make lint` passed on the worktree. The focused CLI suite
 also passed with `go test ./cmd/dibs -count=1`.
+Independent review found two argument paths that still reached a daemon probe:
+a misplaced issue ID and the mutually exclusive claim retry flags. Both now
+fail in the preflight parser; raw CLI tests assert the typed envelope, empty
+stdout, and absence of a claim operation journal in an isolated home.
 
 ## afc-121 — MCP invocation-mode audit propagation
 

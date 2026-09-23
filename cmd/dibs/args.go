@@ -145,6 +145,9 @@ func validateCommandArgs(args []string) error {
 		}
 		rest = rest[:separator]
 	}
+	if route.pos == 1 && key != "issue get" && (len(rest) == 0 || strings.HasPrefix(rest[0], "-")) {
+		return argumentError(key + " requires an issue ID before flags")
+	}
 	allowed := make(map[string]bool)
 	seen := make(map[string]bool)
 	for _, flag := range strings.Fields(route.flags) {
@@ -204,6 +207,15 @@ func validateCommandArgs(args []string) error {
 		if forms != 1 {
 			return argumentError(key + " requires exactly one dependency target")
 		}
+		if seen["--kind"] && (seen["--blocked-by"] || seen["--blocks"]) {
+			return argumentError("--kind cannot be combined with --blocked-by or --blocks")
+		}
+	}
+	if key == "issue claim" && seen["--retry-last"] && seen["--operation-id"] {
+		return argumentError("--retry-last and --operation-id are mutually exclusive")
+	}
+	if (key == "issue edit" || key == "issue update") && seen["--lease-token"] && !seen["--lease-generation"] {
+		return argumentError("--lease-generation is required with --lease-token")
 	}
 	return nil
 }

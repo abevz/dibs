@@ -30,10 +30,13 @@ func TestCommandArgumentsFailClosed(t *testing.T) {
 		{"issue create malformed integer", []string{"issue", "create", "--priority", "2oops"}},
 		{"issue create required flag", []string{"issue", "create", "--project", "p"}},
 		{"issue claim malformed ttl", []string{"issue", "claim", "afc-1", "--ttl", "3oops"}},
+		{"issue claim misplaced ID", []string{"issue", "claim", "--ttl", "900", "afc-1"}},
+		{"issue claim conflicting retry flags", []string{"issue", "claim", "afc-1", "--retry-last", "--operation-id", "x"}},
 		{"issue heartbeat malformed generation", []string{"issue", "heartbeat", "afc-1", "--lease-generation", "1oops"}},
 		{"issue release missing value", []string{"issue", "release", "afc-1", "--lease-token"}},
 		{"issue close invalid resolution", []string{"issue", "close", "afc-1", "--resolution", "finished"}},
 		{"issue close latest unsupported", []string{"issue", "close", "afc-1", "--expected-version", "latest"}},
+		{"issue update incomplete lease", []string{"issue", "update", "afc-1", "--lease-token", "t"}},
 		{"issue list invalid type", []string{"issue", "list", "--type", "nonsense"}},
 		{"issue list invalid column", []string{"issue", "list", "--columns", "magic"}},
 		{"issue ready unknown", []string{"issue", "ready", "--typo"}},
@@ -42,6 +45,7 @@ func TestCommandArgumentsFailClosed(t *testing.T) {
 		{"issue events unknown", []string{"issue", "events", "list", "afc-1", "--typo"}},
 		{"dependency invalid kind", []string{"dependency", "add", "afc-1", "--kind", "magic"}},
 		{"dependency remove invalid kind", []string{"dependency", "remove", "afc-1", "--kind", "parent"}},
+		{"dependency conflicting flags", []string{"dependency", "add", "afc-1", "--blocked-by", "afc-2", "--kind", "blocks"}},
 		{"ls malformed limit", []string{"ls", "--limit", "oops"}},
 		{"show positional", []string{"show", "afc-1", "extra"}},
 		{"version positional", []string{"version", "extra"}},
@@ -101,6 +105,8 @@ func TestMalformedJSONCommandNeverContactsDaemon(t *testing.T) {
 		{"issue", "close", "afc-1", "--expected-version", "bad", "--json"},
 		{"--json", "artifact", "list", "--unknown"},
 		{"--json", "project", "add", "--key", "p"},
+		{"--json", "issue", "claim", "--ttl", "900", "afc-1"},
+		{"--json", "issue", "claim", "afc-1", "--retry-last", "--operation-id", "x"},
 	} {
 		cmd := exec.Command(bin, args...)
 		home := t.TempDir()
@@ -123,6 +129,15 @@ func TestMalformedJSONCommandNeverContactsDaemon(t *testing.T) {
 		}
 		if response.Error.Code != "validation_failed" {
 			t.Fatalf("%q code = %q", args, response.Error.Code)
+		}
+		for _, dir := range []string{"dibs", "af-coordinator"} {
+			journaled, err := filepath.Glob(filepath.Join(home, ".local", "state", dir, "operations", "*.op"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(journaled) != 0 {
+				t.Fatalf("%q wrote a claim journal: %v", args, journaled)
+			}
 		}
 	}
 }
