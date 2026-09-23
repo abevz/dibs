@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -350,24 +349,20 @@ func TestOperatorToolsUseExplicitTokenlessRequests(t *testing.T) {
 	}
 }
 
-func TestRunProcessesFramedMessages(t *testing.T) {
+func TestRunProcessesNewlineMessages(t *testing.T) {
 	fake := &fakeClient{healthResp: core.Health{Name: "af-coordinator", Status: "ok"}}
 	s := NewServer(fake, "tester", "0055")
 
 	request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"health","arguments":{}}}`
-	input := frame(request)
+	input := request + "\n"
 	var out bytes.Buffer
 	if err := s.Run(context.Background(), strings.NewReader(input), &out); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if !strings.Contains(out.String(), "Content-Length:") {
-		t.Fatalf("expected framed response, got %q", out.String())
+	if strings.Contains(out.String(), "Content-Length:") || !strings.HasSuffix(out.String(), "\n") {
+		t.Fatalf("expected newline JSON response, got %q", out.String())
 	}
 	if !strings.Contains(out.String(), `"status":"ok"`) {
 		t.Fatalf("expected health payload in response, got %q", out.String())
 	}
-}
-
-func frame(body string) string {
-	return fmt.Sprintf("Content-Length: %d\r\n\r\n%s", len(body), body)
 }

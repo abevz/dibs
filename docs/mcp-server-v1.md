@@ -3,6 +3,14 @@
 `dibs-mcp` is a stdio MCP wrapper over the daemon API. It is a client of the
 unix-socket HTTP API and never talks to SQLite directly.
 
+## Stdio transport
+
+Each request is one UTF-8 JSON-RPC object on one line. Responses are compact
+JSON-RPC objects followed by `\n`; notifications have no response. Blank input
+lines are ignored. Stdout contains protocol messages only; diagnostics and the
+deprecated `afc-mcp` alias notice go to stderr. `Content-Length` framing is
+not supported.
+
 ## Launch
 
 ```bash
@@ -13,6 +21,29 @@ dibs-mcp
 
 `DIBS_ACTOR` is optional for read-only tools, but mutating tools use
 it as the default actor/holder/author when the request does not pass one.
+
+## Client setup
+
+Install the current binary, then register it with Claude Code:
+
+```bash
+make build-install
+claude mcp add dibs -s user -- dibs-mcp
+claude mcp list
+```
+
+For Codex, add this block to `~/.codex/config.toml` only if it does not
+already have a `[mcp_servers.dibs]` entry, then restart Codex:
+
+```toml
+[mcp_servers.dibs]
+command = "dibs-mcp"
+```
+
+`codex mcp list` confirms the server registration. Ask either client to call
+`list_ready_issues` with `project: "afc"` to confirm end-to-end access. Both
+clients connect to the daemon through the existing socket; they do not need a
+daemon restart when `dibs-mcp` is rebuilt.
 
 ## Exposed tools
 
