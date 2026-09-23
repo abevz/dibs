@@ -1,0 +1,77 @@
+# 016 Adoption Requirements
+
+## Outcome and measurement
+
+- **R-01 First claim.** On a clean supported machine, a newcomer can go from
+  installation to a successful `dibs issue claim` in at most three user
+  commands and two minutes, without a source checkout, `make`, or mandatory
+  service-manager setup. Record machine/OS, release artifact, exact commands,
+  elapsed time, and claim result. The commands must work as documented; do not
+  count shell setup hidden inside a script as proof of the user path. The
+  source of the first ready issue is an open owner decision in `design.md`;
+  this target is not yet a proven three-command quickstart.
+- **R-02 Truthful release.** Published install instructions must resolve to a
+  real verified artifact. The release workflow, checksum-verifying installer,
+  `go install`, and Homebrew formula path must be exercised before they are
+  advertised as working. The owner alone pushes the public v0.1.0 tag.
+- **R-03 Rename compatibility.** Before the public tag, product and CLI become
+  `dibs`, daemon `dibsd`, and intended public repository `abevz/dibs`. Existing
+  `AF_*` environment variables and socket/DB paths remain accepted as
+  deprecated aliases so the live installation keeps working. Verify migration
+  from current state; do not silently create a second authority or database.
+- **R-04 First-use setup.** Within a Git repository, `dibs init` infers the
+  project, repository, and worktree with an inspectable result. First use starts
+  `dibsd` when its socket is absent. Concurrent first calls start at most one
+  daemon for a database; startup failure is reported rather than bypassing
+  daemon ownership or lease fencing. Explicit daemon start/stop and optional
+  service-manager units remain available.
+- **R-05 Live view.** `dibs watch` displays ready work, active lease holder and
+  remaining TTL, blocked work, and recent events. It reads only through daemon
+  APIs and performs no state mutations or direct SQLite reads. It remains
+  useful during disconnection and terminal resize without claiming work.
+- **R-06 Newcomer documentation.** The top of the public README explains
+  duplicate-work pain, shows a truthful GIF, then the verified three-command
+  path. It compares Beads, Claude Code tasks, and GitHub Issues fairly, with
+  architecture and SDD history in `docs/`. Claims must match the released
+  binaries and tested behavior.
+- **R-07 Hooks.** Claude Code and Codex integration shows ready work at session
+  start; the agent or user chooses by default. Auto-claiming the top item is
+  available only through an explicit flag. Execution uses `issue run` ownership,
+  heartbeat, cancellation, and handoff semantics. Two sessions must not work
+  the same issue, and a lost session's lease must become reclaimable.
+- **R-08 Swarm.** `dibs swarm -n N -- <cmd>` launches an arbitrary configured
+  agent command in one separate worktree per claimed issue, supplies issue-run
+  context through its environment, and records a branch per issue. A built-in
+  Claude Code preset supports the one-line demo. Opening PRs is a later
+  opt-in `--pr`, never the default. One failed worker must not endanger other
+  workers or leave false completion. Document a short recipe per supported
+  harness and verify at least three harnesses end to end. The owner intends
+  to check the generic contract against claude, codex, agy, opencode,
+  deepseek harness, and codewhale, plus others.
+- **R-09 Demonstration and launch.** A recorded `-n 3` run on a demo
+  repository completes distinct ready issues without duplicate claim and
+  shows failure isolation. The owner approves the final packet, writes and
+  publishes the launch post, and approves the public tag.
+
+## Safety and release gates
+
+- **R-10 One authority.** Zero-config startup, watch, hooks, and swarm must
+  preserve the single-writer daemon, atomic ready-qualified claims, token and
+  generation fencing, daemon-time expiry, and retry reconciliation defined in
+  packet 015. No launcher may keep doing work after confirmed lease loss.
+- **R-11 Wave B prerequisites.** Do not release hooks or swarm until `afc-102`
+  and `afc-120`–`afc-122` are complete and their safety evidence is reviewed.
+  In particular, MCP ownership schemas/propagation, invocation-mode audit,
+  and fail-closed CLI parsing must match the daemon contract. A green isolated
+  plugin test does not replace these gates.
+- **R-12 Verification.** New behavior below `internal/` ships with focused
+  tests using production contracts; SQLite store tests use the embedded
+  migrations. The first-use race, release installation, multi-session claim,
+  failure isolation, and three-harness demonstrations each have recorded
+  evidence. No implementation task is marked done from file presence alone.
+
+## Non-goals
+
+No web UI, remote transport, daemon plugin system, multiple writable daemon
+instances, replacement storage engine, or automatic PR creation by default.
+This packet does not implement its child issues.
