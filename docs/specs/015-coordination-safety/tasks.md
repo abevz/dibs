@@ -43,6 +43,13 @@ mode on audit-producing lifecycle tools. Its schema, validation, and audit-event
 regressions are verified against the contract referenced in `traceability.md`;
 implementation evidence is in `review.md`.
 
+`afc-122` hardens CLI argument parsing before the first daemon request. It
+rejects unknown flags, missing values, malformed integers, invalid enumerated
+values, and extra positionals across command families. Machine callers receive
+the typed `validation_failed` envelope on stderr with empty stdout. The
+existing `issue run -- <command>` child arguments remain opaque to dibs.
+Verification evidence is in `review.md`.
+
 ## AFC-SDD-0151 / afc-103 — Add monotonic lease generation
 
 **Problem.** The current token changes per fresh claim, but the public contract

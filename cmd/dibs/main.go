@@ -32,32 +32,51 @@ func main() {
 
 	// Parse global flags (--json, --actor) from os.Args before command dispatch.
 	args := os.Args[1:]
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		if arg == "--json" {
+			jsonOutput = true
+		}
+	}
 	var filtered []string
 	for i := 0; i < len(args); i++ {
+		// Everything after issue run's separator belongs to the child process.
+		if args[i] == "--" {
+			filtered = append(filtered, args[i:]...)
+			break
+		}
 		switch args[i] {
 		case "--json":
 			jsonOutput = true
 		case "--actor":
-			if i+1 < len(args) {
-				defaultActor = args[i+1]
-				i++
+			if i+1 >= len(args) || strings.TrimSpace(args[i+1]) == "" || strings.HasPrefix(args[i+1], "--") {
+				fail(argumentError("--actor requires a value"))
 			}
+			defaultActor = args[i+1]
+			i++
 		default:
 			filtered = append(filtered, args[i])
 		}
 	}
 
 	if len(filtered) < 1 {
-		printUsage()
-		os.Exit(1)
+		fail(argumentError("command is required"))
 	}
 	if filtered[0] == "-h" || filtered[0] == "--help" || filtered[0] == "help" {
 		printUsage()
 		return
 	}
 	if filtered[0] == "--version" {
+		if len(filtered) != 1 {
+			fail(argumentError("--version takes no arguments"))
+		}
 		printVersion()
 		return
+	}
+	if err := validateCommandArgs(filtered); err != nil {
+		fail(err)
 	}
 
 	c := client.New(cfg.SocketPath)
@@ -200,6 +219,15 @@ Commands:
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 func fail(err error) {
+	var argErr *cliArgumentError
+	if errors.As(err, &argErr) {
+		if jsonOutput {
+			json.NewEncoder(os.Stderr).Encode(core.APIErrorResponse{Error: core.NewAPIError(core.ErrValidationFailed, argErr.Error())})
+		} else {
+			fmt.Fprintf(os.Stderr, "error: %v\n", argErr)
+		}
+		os.Exit(1)
+	}
 	var clientErr *client.ClientError
 	if errors.As(err, &clientErr) {
 		if jsonOutput {
