@@ -27,9 +27,12 @@ type CoordinatorClient interface {
 	ListReadyIssues(ctx context.Context, project, repo string, tags []string) ([]core.Issue, error)
 	ClaimIssue(ctx context.Context, issueID, holder string, ttlSeconds int) (core.ClaimResponse, error)
 	ClaimIssueWithSession(ctx context.Context, issueID, holder string, ttlSeconds int, sessionID string) (core.ClaimResponse, error)
+	ClaimIssueWithSessionAndMode(ctx context.Context, issueID, holder string, ttlSeconds int, sessionID, invocationMode string) (core.ClaimResponse, error)
 	HeartbeatLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int) (string, error)
 	HandoffLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, note string) (core.HandoffResponse, error)
+	HandoffLeaseWithMode(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, note, invocationMode string) (core.HandoffResponse, error)
 	CreateNote(ctx context.Context, issueID, author, body string) (core.Note, error)
+	CreateNoteWithMode(ctx context.Context, issueID, author, body, invocationMode string) (core.Note, error)
 	ListNotes(ctx context.Context, issueID string) ([]core.Note, error)
 	ListEvents(ctx context.Context, issueID string) ([]core.Event, error)
 	CloseIssue(ctx context.Context, issueID string, req core.CloseIssueRequest) (core.CloseIssueResult, error)
@@ -233,11 +236,12 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		return map[string]any{"issues": issues}, nil
 	case "claim_issue":
 		var args struct {
-			IssueID    string `json:"issue_id"`
-			Holder     string `json:"holder"`
-			Actor      string `json:"actor"`
-			TTLSeconds int    `json:"ttl_seconds"`
-			SessionID  string `json:"session_id"`
+			IssueID        string `json:"issue_id"`
+			Holder         string `json:"holder"`
+			Actor          string `json:"actor"`
+			TTLSeconds     int    `json:"ttl_seconds"`
+			SessionID      string `json:"session_id"`
+			InvocationMode string `json:"invocation_mode"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
@@ -249,7 +253,11 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		if err != nil {
 			return nil, err
 		}
-		return s.client.ClaimIssueWithSession(ctx, args.IssueID, holder, args.TTLSeconds, args.SessionID)
+		mode, err := core.NormalizeInvocationMode(args.InvocationMode)
+		if err != nil {
+			return nil, err
+		}
+		return s.client.ClaimIssueWithSessionAndMode(ctx, args.IssueID, holder, args.TTLSeconds, args.SessionID, mode)
 	case "heartbeat_issue":
 		var args struct {
 			IssueID         string `json:"issue_id"`
@@ -277,6 +285,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			LeaseToken      string `json:"lease_token"`
 			LeaseGeneration int64  `json:"lease_generation"`
 			Note            string `json:"note"`
+			InvocationMode  string `json:"invocation_mode"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
@@ -290,13 +299,18 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		if err := core.ValidateHandoffRequest(core.HandoffRequest{Note: args.Note}); err != nil {
 			return nil, err
 		}
-		return s.client.HandoffLease(ctx, args.IssueID, args.LeaseToken, args.LeaseGeneration, args.Note)
+		mode, err := core.NormalizeInvocationMode(args.InvocationMode)
+		if err != nil {
+			return nil, err
+		}
+		return s.client.HandoffLeaseWithMode(ctx, args.IssueID, args.LeaseToken, args.LeaseGeneration, args.Note, mode)
 	case "add_note":
 		var args struct {
-			IssueID string `json:"issue_id"`
-			Body    string `json:"body"`
-			Author  string `json:"author"`
-			Actor   string `json:"actor"`
+			IssueID        string `json:"issue_id"`
+			Body           string `json:"body"`
+			Author         string `json:"author"`
+			Actor          string `json:"actor"`
+			InvocationMode string `json:"invocation_mode"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
@@ -308,7 +322,11 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		if err != nil {
 			return nil, err
 		}
-		return s.client.CreateNote(ctx, args.IssueID, author, args.Body)
+		mode, err := core.NormalizeInvocationMode(args.InvocationMode)
+		if err != nil {
+			return nil, err
+		}
+		return s.client.CreateNoteWithMode(ctx, args.IssueID, author, args.Body, mode)
 	case "add_tag":
 		var args struct {
 			IssueID string `json:"issue_id"`
@@ -391,6 +409,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			LeaseGeneration int64  `json:"lease_generation"`
 			Actor           string `json:"actor"`
 			Note            string `json:"note"`
+			InvocationMode  string `json:"invocation_mode"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
@@ -405,6 +424,10 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		if err != nil {
 			return nil, err
 		}
+		mode, err := core.NormalizeInvocationMode(args.InvocationMode)
+		if err != nil {
+			return nil, err
+		}
 		return s.client.CloseIssue(ctx, args.IssueID, core.CloseIssueRequest{
 			Resolution:      args.Resolution,
 			Branch:          args.Branch,
@@ -415,6 +438,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			LeaseGeneration: args.LeaseGeneration,
 			Actor:           actor,
 			Note:            args.Note,
+			InvocationMode:  mode,
 		})
 	case "operator_close_issue":
 		var args struct {
@@ -423,6 +447,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			ExpectedVersion int    `json:"expected_version"`
 			Reason          string `json:"reason"`
 			Actor           string `json:"actor"`
+			InvocationMode  string `json:"invocation_mode"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
@@ -434,11 +459,16 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		if err != nil {
 			return nil, err
 		}
+		mode, err := core.NormalizeInvocationMode(args.InvocationMode)
+		if err != nil {
+			return nil, err
+		}
 		return s.client.OperatorCloseIssue(ctx, args.IssueID, core.OperatorCloseIssueRequest{
 			Resolution:      args.Resolution,
 			ExpectedVersion: args.ExpectedVersion,
 			Actor:           actor,
 			Reason:          args.Reason,
+			InvocationMode:  mode,
 		})
 	case "operator_reopen_issue":
 		var args struct {
@@ -506,6 +536,7 @@ func (s *Server) tools() []map[string]any {
 			{name: "actor", fieldType: "string", description: "Optional actor fallback for the holder field."},
 			{name: "ttl_seconds", fieldType: "integer", description: "Optional lease TTL in seconds; daemon default applies when omitted."},
 			{name: "session_id", fieldType: "string", description: "Optional non-secret caller session correlation ID."},
+			invocationModeField(),
 		})),
 		toolDefinition("heartbeat_issue", "Extend an active lease.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
@@ -518,12 +549,14 @@ func (s *Server) tools() []map[string]any {
 			{name: "lease_token", fieldType: "string", description: "Active lease token.", required: true},
 			{name: "lease_generation", fieldType: "integer", description: "Fencing generation from the claim that created the lease.", required: true},
 			{name: "note", fieldType: "string", description: "Non-empty note beginning with HANDOFF:.", required: true},
+			invocationModeField(),
 		})),
 		toolDefinition("add_note", "Append a note to an issue.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "body", fieldType: "string", description: "Note text.", required: true},
 			{name: "author", fieldType: "string", description: "Optional note author; falls back to actor or DIBS_ACTOR."},
 			{name: "actor", fieldType: "string", description: "Optional actor fallback when author is omitted."},
+			invocationModeField(),
 		})),
 		toolDefinition("add_tag", "Apply a namespaced tag ('namespace/value') to an issue.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
@@ -552,6 +585,7 @@ func (s *Server) tools() []map[string]any {
 			{name: "commit_sha", fieldType: "string", description: "Optional commit SHA to record in close metadata."},
 			{name: "note", fieldType: "string", description: "Optional closing note appended atomically before close."},
 			{name: "actor", fieldType: "string", description: "Optional actor; falls back to DIBS_ACTOR."},
+			invocationModeField(),
 		})),
 		toolDefinition("operator_close_issue", "Explicit local operator closure for unclaimable or administratively managed work; it never accepts a lease token.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
@@ -559,6 +593,7 @@ func (s *Server) tools() []map[string]any {
 			{name: "expected_version", fieldType: "integer", description: "Current issue version.", required: true},
 			{name: "reason", fieldType: "string", description: "Why an operator is closing the work.", required: true},
 			{name: "actor", fieldType: "string", description: "Optional operator identity; falls back to DIBS_ACTOR."},
+			invocationModeField(),
 		})),
 		toolDefinition("operator_reopen_issue", "Explicit local operator reopen for terminal work; it never accepts a lease token.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
@@ -656,6 +691,11 @@ type schemaField struct {
 	required    bool
 	// itemType is set for fieldType "array" to describe its element type.
 	itemType string
+	enum     []string
+}
+
+func invocationModeField() schemaField {
+	return schemaField{name: "invocation_mode", fieldType: "string", description: "Optional caller-declared mode; omitted records unknown.", enum: core.InvocationModes}
 }
 
 func toolDefinition(name, description string, inputSchema map[string]any) map[string]any {
@@ -676,6 +716,9 @@ func objectSchema(fields []schemaField) map[string]any {
 		}
 		if field.fieldType == "array" && field.itemType != "" {
 			prop["items"] = map[string]any{"type": field.itemType}
+		}
+		if len(field.enum) > 0 {
+			prop["enum"] = field.enum
 		}
 		props[field.name] = prop
 		if field.required {

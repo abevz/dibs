@@ -18,6 +18,8 @@ Status values describe implementation, not specification completeness.
 | R-12 audit/observability | `afc-115` | Auditability; Observability | planned |
 | R-13 verification evidence | each behavior leaf, then `afc-110`, `afc-114` | Six races; eight failure cases | pre-idempotency multi-connection matrix implemented by `afc-110`; black-box crash/restart matrix and final idempotent replay remain `afc-114` after `afc-111` through `afc-113` |
 
+For `afc-121`, invocation-mode behavior is sourced from `docs/specs/002-agent-protocol/requirements.md` through its canonical `docs/agent-protocol-v1.md` and the existing CLI/API contract.
+
 ## Closure rule
 
 A row changes to `verified` only when its primary leaves are done, packet-local

@@ -64,6 +64,9 @@ func (f *fakeClient) ClaimIssueWithSession(_ context.Context, issueID, holder st
 	f.lastSessionID = sessionID
 	return f.claimResp, nil
 }
+func (f *fakeClient) ClaimIssueWithSessionAndMode(ctx context.Context, issueID, holder string, ttlSeconds int, sessionID, _ string) (core.ClaimResponse, error) {
+	return f.ClaimIssueWithSession(ctx, issueID, holder, ttlSeconds, sessionID)
+}
 func (f *fakeClient) HeartbeatLease(_ context.Context, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int) (string, error) {
 	f.lastIssueID = issueID
 	f.lastLeaseToken = leaseToken
@@ -76,11 +79,17 @@ func (f *fakeClient) HandoffLease(_ context.Context, issueID, leaseToken string,
 	f.lastHandoffNote = note
 	return f.handoffResp, nil
 }
+func (f *fakeClient) HandoffLeaseWithMode(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, note, _ string) (core.HandoffResponse, error) {
+	return f.HandoffLease(ctx, issueID, leaseToken, leaseGeneration, note)
+}
 func (f *fakeClient) CreateNote(_ context.Context, issueID, author, body string) (core.Note, error) {
 	f.lastIssueID = issueID
 	f.lastNoteAuthor = author
 	f.lastNoteBody = body
 	return f.noteResp, nil
+}
+func (f *fakeClient) CreateNoteWithMode(ctx context.Context, issueID, author, body, _ string) (core.Note, error) {
+	return f.CreateNote(ctx, issueID, author, body)
 }
 func (f *fakeClient) ListNotes(context.Context, string) ([]core.Note, error) { return f.notesResp, nil }
 func (f *fakeClient) ListEvents(context.Context, string) ([]core.Event, error) {
