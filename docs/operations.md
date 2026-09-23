@@ -17,10 +17,16 @@ make build
 
 ### Install
 
+For a fresh installation with no former daemon service, install and start
+`dibsd`:
+
 ```bash
 make install-service
 sh contrib/install/systemctl-user.sh enable --now dibsd
 ```
+
+For an existing installation, use the [explicit service switch](#explicit-service-switch)
+below so the former daemon stops before `dibsd` starts.
 
 ### Check status
 
