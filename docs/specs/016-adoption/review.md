@@ -105,4 +105,4 @@ Status: approved by owner; packet active. afc-137 implementation awaits owner re
   exposed `mcp: dibs/list_ready_issues started`, then denied the call with
   `MCP tool call requires approval, but approval policy is never`; it returned
   no issue data. Claude Code's allowed read-only call verified the tool result.
-  PR CI and owner review are pending.
+  PR #68 CI `test` passed on implementation HEAD `ca7207a`. Owner review remains pending.
