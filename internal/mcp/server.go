@@ -388,6 +388,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			CommitSHA       string `json:"commit_sha"`
 			ExpectedVersion int    `json:"expected_version"`
 			LeaseToken      string `json:"lease_token"`
+			LeaseGeneration int64  `json:"lease_generation"`
 			Actor           string `json:"actor"`
 			Note            string `json:"note"`
 		}
@@ -396,6 +397,9 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		}
 		if args.IssueID == "" || args.Resolution == "" || args.ExpectedVersion <= 0 || args.LeaseToken == "" {
 			return nil, fmt.Errorf("issue_id, resolution, expected_version, and lease_token are required")
+		}
+		if args.LeaseGeneration <= 0 {
+			return nil, fmt.Errorf("lease_generation is required")
 		}
 		actor, err := s.resolveActor(args.Actor, "")
 		if err != nil {
@@ -408,6 +412,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			CommitSHA:       args.CommitSHA,
 			ExpectedVersion: args.ExpectedVersion,
 			LeaseToken:      args.LeaseToken,
+			LeaseGeneration: args.LeaseGeneration,
 			Actor:           actor,
 			Note:            args.Note,
 		})
@@ -511,6 +516,7 @@ func (s *Server) tools() []map[string]any {
 		toolDefinition("handoff_issue", "Atomically add a required HANDOFF note and release an active lease.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "lease_token", fieldType: "string", description: "Active lease token.", required: true},
+			{name: "lease_generation", fieldType: "integer", description: "Fencing generation from the claim that created the lease.", required: true},
 			{name: "note", fieldType: "string", description: "Non-empty note beginning with HANDOFF:.", required: true},
 		})),
 		toolDefinition("add_note", "Append a note to an issue.", objectSchema([]schemaField{
@@ -540,6 +546,7 @@ func (s *Server) tools() []map[string]any {
 			{name: "resolution", fieldType: "string", description: "Resolution: done or cancelled.", required: true},
 			{name: "expected_version", fieldType: "integer", description: "Current issue version.", required: true},
 			{name: "lease_token", fieldType: "string", description: "Active lease token.", required: true},
+			{name: "lease_generation", fieldType: "integer", description: "Fencing generation from the claim that created the lease.", required: true},
 			{name: "branch", fieldType: "string", description: "Optional branch name to record in close metadata."},
 			{name: "pr_url", fieldType: "string", description: "Optional pull request URL to record in close metadata."},
 			{name: "commit_sha", fieldType: "string", description: "Optional commit SHA to record in close metadata."},

@@ -280,6 +280,7 @@ func TestToolCallCloseIssuePassesStructuredMetadata(t *testing.T) {
 				"resolution":"done",
 				"expected_version":2,
 				"lease_token":"lease",
+				"lease_generation":3,
 				"branch":"codex/afc-28",
 				"pr_url":"https://example/pr/28",
 				"commit_sha":"ddb6d05"
@@ -290,7 +291,7 @@ func TestToolCallCloseIssuePassesStructuredMetadata(t *testing.T) {
 	if resp == nil || resp.Error != nil {
 		t.Fatalf("expected close tool result, got %+v", resp)
 	}
-	if fake.lastCloseReq.Branch != "codex/afc-28" || fake.lastCloseReq.PRURL != "https://example/pr/28" || fake.lastCloseReq.CommitSHA != "ddb6d05" {
+	if fake.lastCloseReq.Branch != "codex/afc-28" || fake.lastCloseReq.PRURL != "https://example/pr/28" || fake.lastCloseReq.CommitSHA != "ddb6d05" || fake.lastCloseReq.LeaseGeneration != 3 {
 		t.Fatalf("unexpected close request: %+v", fake.lastCloseReq)
 	}
 }

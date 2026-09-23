@@ -27,6 +27,17 @@ that must close only after this packet is merged.
 or dependency. Manual leaves change cross-cutting contracts and require an
 operator-driven architecture review before implementation.
 
+### Discovered public-contract blocker: afc-120
+
+`afc-120` repairs the MCP lease-generation contract before the later agent
+protocol leaf `afc-116`. The `heartbeat_issue`, `handoff_issue`, and
+`close_issue` schemas must require the claim generation; handoff and close must
+forward it to the daemon. Both canonical and embedded CLI protocol examples
+must show the required generation on heartbeat and release. Regression proof
+uses real embedded migrations through a scratch daemon and rejects stale
+generations. This mechanical correction is implemented and verified; evidence
+is recorded in `review.md`.
+
 ## AFC-SDD-0151 / afc-103 — Add monotonic lease generation
 
 **Problem.** The current token changes per fresh claim, but the public contract
