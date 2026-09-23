@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abevz/af-coordinator/internal/core"
-	"github.com/abevz/af-coordinator/internal/report"
+	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/report"
 )
 
 func TestClientError_Error(t *testing.T) {
@@ -386,7 +386,7 @@ func TestCloseIssueReturnsStructuredResult(t *testing.T) {
 			t.Fatalf("path = %q", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"closed","resolution":"done","branch":"codex/afc-27","pr_url":"https://github.com/abevz/af-coordinator/pull/27","commit_sha":"ba6d011","external_key":"temporal:workflow-456","closed_at":"2026-07-08T15:50:00Z"}`))
+		_, _ = w.Write([]byte(`{"status":"closed","resolution":"done","branch":"codex/afc-27","pr_url":"https://github.com/abevz/dibs/pull/27","commit_sha":"ba6d011","external_key":"temporal:workflow-456","closed_at":"2026-07-08T15:50:00Z"}`))
 	}))
 	defer server.Close()
 

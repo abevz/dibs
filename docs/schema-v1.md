@@ -356,7 +356,7 @@ create table events (
 
 ### Derived statistics
 
-`GET /v1/stats` and `afctl stats` add no tables, migrations, or mutable
+`GET /v1/stats` and `dibs stats` add no tables, migrations, or mutable
 analytics state. The read-only report scans the normalized project,
 repository, issue, note, artifact-reference, and event records at request
 time. Event `sequence` remains the causal ordering source: the global

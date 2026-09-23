@@ -1,0 +1,39 @@
+[Unit]
+Description=dibs daemon — local AI multi-project coordination
+Documentation=https://github.com/abevz/dibs
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/dibsd
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# To enable `dibs issue operator-close/operator-reopen/operator-release`,
+# the daemon needs DIBS_OPERATOR_TOKEN (or legacy AF_OPERATOR_TOKEN) in its
+# own environment, matching the value dibs reads client-side. During the
+# service switch, reuse the existing legacy env file as in docs/operations.md.
+# For a fresh install, do not add the token here directly — put it in a
+# 600-permission file and reference it via a drop-in instead:
+#
+#   printf 'DIBS_OPERATOR_TOKEN=<token>\n' > ~/.config/dibs/operator.env
+#   chmod 600 ~/.config/dibs/operator.env
+#   mkdir -p ~/.config/systemd/user/dibsd.service.d
+#   cat > ~/.config/systemd/user/dibsd.service.d/operator-token.conf <<'EOF'
+#   [Service]
+#   EnvironmentFile=%h/.config/dibs/operator.env
+#   EOF
+#   systemctl --user daemon-reload
+#   systemctl --user restart dibsd
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/dibs %h/.local/state/dibs -%h/.local/share/af-coordinator -%h/.local/state/af-coordinator
+
+[Install]
+WantedBy=default.target

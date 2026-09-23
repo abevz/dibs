@@ -16,7 +16,7 @@
     <key>PATH</key>
     <string>@HOME@/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>BACKUPDIR</key>
-    <string>@HOME@/backups/af-coordinator</string>
+    <string>@HOME@/backups/dibs</string>
   </dict>
 
   <key>WorkingDirectory</key>

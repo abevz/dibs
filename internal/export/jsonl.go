@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/abevz/af-coordinator/internal/core"
+	"github.com/abevz/dibs/internal/core"
 )
 
 // Record is a single JSONL envelope emitted by the export stream.

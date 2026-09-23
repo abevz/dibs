@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/build"
-	"github.com/abevz/af-coordinator/internal/config"
-	"github.com/abevz/af-coordinator/internal/core"
-	"github.com/abevz/af-coordinator/internal/store"
+	"github.com/abevz/dibs/internal/build"
+	"github.com/abevz/dibs/internal/config"
+	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/store"
 )
 
 func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st store.CoordinatorStore) error {
@@ -49,13 +49,15 @@ func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st s
 
 	// Health endpoints.
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
+		operatorTokenConfigured := config.EnvOrDefault("DIBS_OPERATOR_TOKEN", "AF_OPERATOR_TOKEN", "") != ""
 		h := core.Health{
-			Name:       "af-coordinator",
-			Status:     "ok",
-			DBPath:     cfg.DBPath,
-			SocketPath: cfg.SocketPath,
-			Time:       time.Now().UTC(),
-			Revision:   build.Revision,
+			Name:                    "dibs",
+			Status:                  "ok",
+			DBPath:                  cfg.DBPath,
+			SocketPath:              cfg.SocketPath,
+			Time:                    time.Now().UTC(),
+			Revision:                build.Revision,
+			OperatorTokenConfigured: &operatorTokenConfigured,
 		}
 
 		if err := st.Ping(r.Context()); err != nil {

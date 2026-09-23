@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/abevz/af-coordinator/internal/store"
+	"github.com/abevz/dibs/internal/store"
 )
 
 func handleExportJSONL(st store.CoordinatorStore, logger *slog.Logger) http.HandlerFunc {

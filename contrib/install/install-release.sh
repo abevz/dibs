@@ -1,7 +1,15 @@
 #!/bin/sh
 set -eu
 
-repo="${AF_COORDINATOR_REPO:-abevz/af-coordinator}"
+if [ "${DIBS_REPO+x}" ]; then
+	repo="$DIBS_REPO"
+else
+	repo="${AF_COORDINATOR_REPO:-abevz/dibs}"
+fi
+if [ -z "$repo" ]; then
+	echo "DIBS_REPO must not be empty" >&2
+	exit 1
+fi
 version="${VERSION:-latest}"
 bindir="${BINDIR:-$HOME/.local/bin}"
 
@@ -32,7 +40,7 @@ else
 	exit 1
 fi
 
-asset="af-coordinator_${os}_${arch}.tar.gz"
+asset="dibs_${os}_${arch}.tar.gz"
 if [ "$version" = "latest" ]; then
 	base_url="https://github.com/$repo/releases/latest/download"
 else
@@ -57,8 +65,11 @@ grep "  $asset\$" "$tmpdir/checksums.txt" > "$tmpdir/$asset.sha256"
 
 tar -xzf "$tmpdir/$asset" -C "$tmpdir"
 mkdir -p "$bindir"
-install -m 755 "$tmpdir/afctl" "$bindir/afctl"
-install -m 755 "$tmpdir/af-coordinatord" "$bindir/af-coordinatord"
-install -m 755 "$tmpdir/afc-mcp" "$bindir/afc-mcp"
+install -m 755 "$tmpdir/dibs" "$bindir/dibs"
+install -m 755 "$tmpdir/dibsd" "$bindir/dibsd"
+install -m 755 "$tmpdir/dibs-mcp" "$bindir/dibs-mcp"
+ln -sfn dibs "$bindir/afctl"
+ln -sfn dibsd "$bindir/af-coordinatord"
+ln -sfn dibs-mcp "$bindir/afc-mcp"
 
-echo "Installed af-coordinator binaries into $bindir"
+echo "Installed dibs binaries into $bindir"

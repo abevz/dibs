@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/client"
-	"github.com/abevz/af-coordinator/internal/config"
-	"github.com/abevz/af-coordinator/internal/core"
+	"github.com/abevz/dibs/internal/client"
+	"github.com/abevz/dibs/internal/config"
+	"github.com/abevz/dibs/internal/core"
 	_ "modernc.org/sqlite"
 )
 
@@ -89,7 +89,7 @@ func EvaluateDaemon(ctx context.Context, c *client.Client) (Result, *core.Health
 			Name:    "Daemon reachable",
 			Status:  "WARN",
 			Message: "Daemon is unreachable",
-			Hint:    "Start or restart af-coordinatord: " + restartDaemonHint(),
+			Hint:    "Start or restart dibsd: " + restartDaemonHint(),
 		}, nil
 	}
 	return Result{
@@ -127,7 +127,7 @@ func evaluateBinaryRevision(h *core.Health, e OSExec, readGoMod func() ([]byte, 
 		}
 	}
 	modData, err := readGoMod()
-	if err != nil || !strings.Contains(string(modData), "module github.com/abevz/af-coordinator") {
+	if err != nil || !strings.Contains(string(modData), "module github.com/abevz/dibs") {
 		return Result{
 			Name:    name,
 			Status:  "ok",
@@ -171,6 +171,29 @@ func shortRev(rev string) string {
 		return rev[:12]
 	}
 	return rev
+}
+
+// EvaluateOperatorTokenMigration checks only for legacy configuration files,
+// never their contents. Older daemons omit the health flag, so their token
+// status is unknown and must not be reported as absent.
+func EvaluateOperatorTokenMigration(h *core.Health, home string) Result {
+	result := Result{Name: "Operator token migration", Status: "ok", Message: "No legacy operator token migration warning"}
+	if h == nil || h.OperatorTokenConfigured == nil || *h.OperatorTokenConfigured {
+		return result
+	}
+	for _, path := range []string{
+		filepath.Join(home, ".config/systemd/user/af-coordinatord.service.d/operator-token.conf"),
+		filepath.Join(home, ".config/af-coordinator/operator.env"),
+	} {
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return Result{
+				Name: "Operator token migration", Status: "WARN",
+				Message: "Daemon has no operator token configured, but legacy operator token configuration exists",
+				Hint:    "Point dibsd.service.d/operator-token.conf at the existing ~/.config/af-coordinator/operator.env and reload the user manager; see docs/operations.md",
+			}
+		}
+	}
+	return result
 }
 
 func EvaluateBackup(ctx context.Context, e OSExec, backupDir string, now time.Time) Result {
@@ -304,11 +327,11 @@ func evaluateBackupFiles(ctx context.Context, backupDir string, now time.Time) R
 func restartDaemonHint() string {
 	switch runtime.GOOS {
 	case "darwin":
-		return "launchctl kickstart -k gui/$(id -u)/com.abevz.af-coordinatord"
+		return "launchctl kickstart -k gui/$(id -u)/com.abevz.dibsd"
 	case "linux":
-		return "systemctl --user restart af-coordinatord"
+		return "systemctl --user restart dibsd"
 	default:
-		return "run af-coordinatord in the foreground or restart your local service manager"
+		return "run dibsd in the foreground or restart your local service manager"
 	}
 }
 
@@ -364,15 +387,15 @@ func EvaluateDuplicates(e OSExec) Result {
 		return nil
 	}
 
-	afctlDups := findDups("afctl")
-	daemonDups := findDups("af-coordinatord")
+	dibsDups := findDups("dibs")
+	daemonDups := findDups("dibsd")
 
 	var msgs []string
-	if len(afctlDups) > 1 {
-		msgs = append(msgs, fmt.Sprintf("Multiple afctl found: %s", strings.Join(afctlDups, ", ")))
+	if len(dibsDups) > 1 {
+		msgs = append(msgs, fmt.Sprintf("Multiple dibs found: %s", strings.Join(dibsDups, ", ")))
 	}
 	if len(daemonDups) > 1 {
-		msgs = append(msgs, fmt.Sprintf("Multiple af-coordinatord found: %s", strings.Join(daemonDups, ", ")))
+		msgs = append(msgs, fmt.Sprintf("Multiple dibsd found: %s", strings.Join(daemonDups, ", ")))
 	}
 
 	if len(msgs) > 0 {
@@ -401,7 +424,7 @@ func EvaluateConfigMismatch(h *core.Health, cfg config.Config) Result {
 			Name:    "Socket path mismatch",
 			Status:  "WARN",
 			Message: fmt.Sprintf("Client socket (%s) != Daemon socket (%s)", cfg.SocketPath, h.SocketPath),
-			Hint:    "Check AF_COORDINATOR_SOCKET env var consistency",
+			Hint:    "Check DIBS_SOCKET env var consistency",
 		}
 	}
 	if h.DBPath != cfg.DBPath {
@@ -409,7 +432,7 @@ func EvaluateConfigMismatch(h *core.Health, cfg config.Config) Result {
 			Name:    "DB path mismatch",
 			Status:  "WARN",
 			Message: fmt.Sprintf("Client expected DB (%s) != Daemon DB (%s)", cfg.DBPath, h.DBPath),
-			Hint:    "Check AF_COORDINATOR_DB env var consistency",
+			Hint:    "Check DIBS_DB env var consistency",
 		}
 	}
 
@@ -430,7 +453,14 @@ func RunAll(ctx context.Context, c *client.Client, cfg config.Config) []Result {
 	results = append(results, EvaluateBinaryRevision(h, e))
 	home, err := os.UserHomeDir()
 	if err == nil {
-		backupDir := filepath.Join(home, "backups", "af-coordinator")
+		results = append(results, EvaluateOperatorTokenMigration(h, home))
+		backupDir := filepath.Join(home, "backups", "dibs")
+		if _, err := os.Stat(backupDir); os.IsNotExist(err) {
+			legacyDir := filepath.Join(home, "backups", "af-coordinator")
+			if _, err := os.Stat(legacyDir); err == nil {
+				backupDir = legacyDir
+			}
+		}
 		results = append(results, EvaluateBackup(ctx, e, backupDir, time.Now()))
 	} else {
 		results = append(results, Result{Name: "Backup", Status: "WARN", Message: "Cannot get user home dir"})

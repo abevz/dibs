@@ -11,4 +11,6 @@ type Health struct {
 	// Revision is the git commit SHA the running daemon binary was built
 	// from ("unknown" if not embedded at build time). See build.Revision.
 	Revision string `json:"revision,omitempty"`
+	// Nil means an older daemon did not report this field. Never expose the token.
+	OperatorTokenConfigured *bool `json:"operator_token_configured,omitempty"`
 }

@@ -14,8 +14,8 @@ import (
 
 	"strings"
 
-	"github.com/abevz/af-coordinator/internal/core"
-	"github.com/abevz/af-coordinator/internal/report"
+	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/report"
 )
 
 // ClientError is a structured error returned when the daemon responds with an API error envelope.

@@ -11,15 +11,49 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/config"
-	"github.com/abevz/af-coordinator/internal/core"
-	"github.com/abevz/af-coordinator/internal/testsocket"
+	"github.com/abevz/dibs/internal/config"
+	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/testsocket"
 )
 
 type mockExec struct {
 	cmdOut []byte
 	cmdErr error
 	env    map[string]string
+}
+
+func TestEvaluateOperatorTokenMigration(t *testing.T) {
+	configured, missing := true, false
+	for _, tc := range []struct {
+		name, legacyPath, want string
+		configured             *bool
+	}{
+		{"legacy drop-in with missing token", ".config/systemd/user/af-coordinatord.service.d/operator-token.conf", "WARN", &missing},
+		{"legacy env file with missing token", ".config/af-coordinator/operator.env", "WARN", &missing},
+		{"no legacy config", "", "ok", &missing},
+		{"token configured", ".config/af-coordinator/operator.env", "ok", &configured},
+		{"older daemon status unknown", ".config/af-coordinator/operator.env", "ok", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			if tc.legacyPath != "" {
+				path := filepath.Join(home, tc.legacyPath)
+				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("AF_OPERATOR_TOKEN=do-not-print"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			result := EvaluateOperatorTokenMigration(&core.Health{OperatorTokenConfigured: tc.configured}, home)
+			if result.Status != tc.want {
+				t.Fatalf("status = %s, want %s: %s", result.Status, tc.want, result.Message)
+			}
+			if strings.Contains(result.Message+result.Hint, "do-not-print") {
+				t.Fatal("doctor exposed token content")
+			}
+		})
+	}
 }
 
 func (m mockExec) Command(name string, arg ...string) ([]byte, error) {
@@ -32,7 +66,7 @@ func (m mockExec) LookupEnv(key string) (string, bool) {
 }
 
 func TestEvaluateBinaryRevision(t *testing.T) {
-	goModOK := func() ([]byte, error) { return []byte("module github.com/abevz/af-coordinator\n"), nil }
+	goModOK := func() ([]byte, error) { return []byte("module github.com/abevz/dibs\n"), nil }
 	goModMissing := func() ([]byte, error) { return nil, errors.New("no such file") }
 	goModOther := func() ([]byte, error) { return []byte("module example.com/other\n"), nil }
 
@@ -153,13 +187,13 @@ func TestEvaluateDuplicates(t *testing.T) {
 	dir1 := t.TempDir()
 	dir2 := t.TempDir()
 
-	afctl1 := filepath.Join(dir1, "afctl")
-	os.WriteFile(afctl1, []byte("dummy1"), 0755)
+	dibs1 := filepath.Join(dir1, "dibs")
+	os.WriteFile(dibs1, []byte("dummy1"), 0755)
 
-	afctl2 := filepath.Join(dir2, "afctl")
-	os.WriteFile(afctl2, []byte("dummy2"), 0755)
+	dibs2 := filepath.Join(dir2, "dibs")
+	os.WriteFile(dibs2, []byte("dummy2"), 0755)
 
-	daemon := filepath.Join(dir1, "af-coordinatord")
+	daemon := filepath.Join(dir1, "dibsd")
 	os.WriteFile(daemon, []byte("dummy"), 0644) // not executable
 
 	e := mockExec{

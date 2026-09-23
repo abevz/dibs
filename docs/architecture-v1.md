@@ -65,7 +65,7 @@ Startup and runtime ownership:
   WAL, SHM, and lock files are restricted by a `0077` process umask, and the
   DB/lock are also normalized to `0600`; the socket remains `0660`, though its
   default `0700` parent restricts access to the operating user
-- parents of custom `AF_COORDINATOR_DB` / `AF_COORDINATOR_SOCKET` paths remain
+- parents of custom `DIBS_DB` / `DIBS_SOCKET` paths remain
   operator-managed because changing an arbitrary configured directory could
   affect unrelated or deliberately shared files
 - this is a cooperative single-UID correctness boundary, not protection from a
@@ -100,7 +100,7 @@ many clients -> one daemon -> store boundary -> one SQLite database
 
 Clients:
 
-- `afctl`
+- `dibs`
 - agent wrappers
 - future editor integrations
 
@@ -131,7 +131,7 @@ requirements.md -> design.md -> tasks.md -> implementation -> review.md
 That creates a clean boundary:
 
 - spec artifacts own intent, scope, acceptance criteria, and design
-- `af-coordinator` owns execution state, claims, blockers, notes, and events
+- `dibs` owns execution state, claims, blockers, notes, and events
 
 This is important because the coordinator is itself a task system. Without an
 explicit boundary, the project would drift into storing design intent inside
@@ -193,7 +193,7 @@ These are operational choices that became fragile under concurrent-agent load.
 
 ### Resulting design stance
 
-The intended model for `af-coordinator` is:
+The intended model for `dibs` is:
 
 ```text
 Beads-inspired task semantics
@@ -521,37 +521,37 @@ the good parts of Beads comments/history, but backed by daemon-owned writes.
 
 ## CLI model
 
-`afctl` should be a thin client over the same API.
+`dibs` should be a thin client over the same API.
 
 Core commands:
 
-- `afctl issue create`
-- `afctl issue get`
-- `afctl issue list` / `afctl ls` — query issues; project, type, and status
+- `dibs issue create`
+- `dibs issue get`
+- `dibs issue list` / `dibs ls` — query issues; project, type, and status
   filters support comma-separated or repeated values with OR within each
   filter and AND across filters
-- `afctl issue ready`
-- `afctl issue claim`
-- `afctl issue release`
-- `afctl issue handoff`
-- `afctl issue note`
-- `afctl issue events`
-- `afctl issue close`
-- `afctl issue operator-close`
-- `afctl issue operator-reopen`
-- `afctl stats` — local, read-only execution-flow report
-- `afctl project add`
-- `afctl repo add`
-- `afctl worktree register`
-- `afctl worktree unregister`
-- `afctl worktree prune`
-- `afctl artifact register`
-- `afctl issue link-artifact`
+- `dibs issue ready`
+- `dibs issue claim`
+- `dibs issue release`
+- `dibs issue handoff`
+- `dibs issue note`
+- `dibs issue events`
+- `dibs issue close`
+- `dibs issue operator-close`
+- `dibs issue operator-reopen`
+- `dibs stats` — local, read-only execution-flow report
+- `dibs project add`
+- `dibs repo add`
+- `dibs worktree register`
+- `dibs worktree unregister`
+- `dibs worktree prune`
+- `dibs artifact register`
+- `dibs issue link-artifact`
 
 The CLI supports query-style list filters while keeping rendered views and JSON
 arrays stable for automation.
 
-`afctl stats` calls `GET /v1/stats` and renders the same versioned report as
+`dibs stats` calls `GET /v1/stats` and renders the same versioned report as
 JSON or a concise human view. Aggregation lives in `internal/report` behind a
 read-only store contract, so it reuses coordinator evidence without opening
 SQLite from CLI code, adding a rollup database, or reaching an external
@@ -577,7 +577,7 @@ external consumer. Today it reads Beads by shelling out to `bd list --json`
 / `bd query` / `bd ready` per configured repo, which breaks entirely
 whenever the Dolt server is down.
 
-Migration expectations when repos move to af-coordinator:
+Migration expectations when repos move to dibs:
 
 - board provider switches from `bd` subprocesses to HTTP over the unix
   socket (`GET /v1/issues`, `GET /v1/issues/ready`) — one daemon call
@@ -599,7 +599,7 @@ Multiple different coding agents (Claude Code, Codex, CodeWhale, and
 whatever comes next) must be able to work with the daemon. Three layers,
 in priority order:
 
-1. `afctl` as the universal adapter. Every agent can shell out; almost
+1. `dibs` as the universal adapter. Every agent can shell out; almost
    none of them share a richer protocol. Requirements this puts on the
    CLI: every command supports `--json` output, and exit codes distinguish
    "retryable coordination outcome" (conflict, lease held) from hard
@@ -611,7 +611,7 @@ in priority order:
    reference it, never restate it; that is what kept the Beads setup
    maintainable across agents.
 3. Optional richer adapters later: an MCP server exposing the same API as
-   tools, editor integrations, or a Claude Code skill wrapping `afctl`.
+   tools, editor integrations, or a Claude Code skill wrapping `dibs`.
    These are conveniences for specific clients and are always plain API
    clients — they never bypass the daemon.
 
@@ -623,7 +623,7 @@ coordinator at all.
 Enforcement: agents with hook support (Claude Code and Codex both have
 pre-tool-use hooks) should enforce the protocol mechanically — a hook
 that checks for an active lease before file edits and warns or blocks.
-Hooks call `afctl` like any other client. Agents without hooks fall back
+Hooks call `dibs` like any other client. Agents without hooks fall back
 to instructions plus review. The protocol spec packet should ship these
 hook snippets alongside the contract text, so enforcing the rules costs
 one config line per agent.
@@ -642,16 +642,16 @@ them alongside the asserted actor. Not required for v1.
 
 Expected runtime assets:
 
-- DB: `~/.local/share/af-coordinator/af-coordinator.db`
-- socket: `~/.local/state/af-coordinator/af-coordinator.sock`
-- logs/state: `~/.local/state/af-coordinator/`
+- DB: `~/.local/share/dibs/dibs.db`
+- socket: `~/.local/state/dibs/dibsd.sock`
+- logs/state: `~/.local/state/dibs/`
 
 Environment overrides (mainly for tests and CI; unix socket paths are
 limited to ~108 bytes, so tests need short paths):
 
-- `AF_COORDINATOR_SOCKET`
-- `AF_COORDINATOR_DB`
-- `AF_COORDINATOR_LOG_LEVEL`
+- `DIBS_SOCKET`
+- `DIBS_DB`
+- `DIBS_LOG_LEVEL`
 
 Suggested service model:
 
@@ -667,7 +667,7 @@ Never copy a live WAL database with `cp`. Supported approaches:
 - `sqlite3 <db> ".backup <path>"` when the daemon is stopped
 
 A `systemd --user` timer should produce periodic backups into
-`~/.local/share/af-coordinator/backups/`, plus optional JSONL exports for
+`~/.local/share/dibs/backups/`, plus optional JSONL exports for
 greppable history.
 
 ## v1 implementation constraints

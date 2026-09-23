@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DB_PATH="${AF_COORDINATOR_DB:-$HOME/.local/share/af-coordinator/af-coordinator.db}"
-BACKUPDIR="${BACKUPDIR:-$HOME/backups/af-coordinator}"
+if [ "${DIBS_DB+x}" ]; then
+    DB_PATH="$DIBS_DB"
+elif [ "${AF_COORDINATOR_DB+x}" ]; then
+    DB_PATH="$AF_COORDINATOR_DB"
+elif [ -f "$HOME/.local/share/af-coordinator/af-coordinator.db" ]; then
+    DB_PATH="$HOME/.local/share/af-coordinator/af-coordinator.db"
+else
+    DB_PATH="$HOME/.local/share/dibs/dibs.db"
+fi
+if [ ! -f "$DB_PATH" ]; then
+    echo "database does not exist: $DB_PATH" >&2
+    exit 1
+fi
+BACKUPDIR="${BACKUPDIR:-$HOME/backups/dibs}"
 TIMESTAMP=$(date +"%Y%m%d-%H%M")
-BACKUP_FILE="$BACKUPDIR/af-coordinator-$TIMESTAMP.db"
+BACKUP_FILE="$BACKUPDIR/dibs-$TIMESTAMP.db"
 
 stat_mtime() {
     if stat -c %Y "$1" >/dev/null 2>&1; then
@@ -32,7 +44,7 @@ fi
 echo "Integrity check passed."
 
 echo "Pruning old backups (keeping last 14)..."
-find "$BACKUPDIR" -maxdepth 1 -type f -name 'af-coordinator-*.db' -print |
+find "$BACKUPDIR" -maxdepth 1 -type f -name 'dibs-*.db' -print |
     while IFS= read -r file; do
         printf '%s\t%s\n' "$(stat_mtime "$file")" "$file"
     done |

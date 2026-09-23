@@ -1,6 +1,6 @@
 # Roadmap
 
-Direction for af-coordinator beyond v1. The operational source of truth for
+Direction for dibs beyond v1. The operational source of truth for
 this work is the coordinator itself (project `afc`); this document records
 the intent and the reasoning so the issues stay short.
 
@@ -52,7 +52,7 @@ implicitly.
 
 The durable boundary remains:
 
-> `af-coordinator` owns execution state. External trackers are optional
+> `dibs` owns execution state. External trackers are optional
 > planning and reporting surfaces.
 
 After safety, specify a provider-neutral external-reference/mapping contract and
@@ -95,20 +95,20 @@ code separate from persistence details without adding multi-database support.
 
 Packet `docs/specs/007-release-and-backup-readiness/` added tagged GitHub
 release packaging, checksum manifests, release install docs, tag-driven version
-injection, and macOS launchd backup parity with `afctl doctor` coverage.
+injection, and macOS launchd backup parity with `dibs doctor` coverage.
 
 ## Completed target: Aion Forge integration (epic `afc-24`)
 
-af-coordinator now has the local tracker / control-surface primitives needed
+dibs now has the local tracker / control-surface primitives needed
 by the [Aion Forge](https://github.com/abevz/aion-forge) agent factory:
 
 ```text
-issue (af-coordinator) -> Temporal workflow -> isolated runner -> branch/PR -> checks -> merge -> issue closed
+issue (dibs) -> Temporal workflow -> isolated runner -> branch/PR -> checks -> merge -> issue closed
 ```
 
 Division of responsibility stays strict:
 
-- af-coordinator is the single write authority over issue state
+- dibs is the single write authority over issue state
   (status, leases, notes, audit trail)
 - Temporal owns execution truth (retries, workflow progress, runner state)
 - the coordinator stores references to execution (workflow IDs, PR URLs),
@@ -158,6 +158,6 @@ Design decisions, recorded here so they are not re-litigated:
 
 ## Working agreement
 
-New roadmap items start as issues in project `afc` (`afctl issue create
+New roadmap items start as issues in project `afc` (`dibs issue create
 --project afc --type ...`). This file is updated only when direction
 changes, not per issue.

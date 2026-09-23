@@ -11,7 +11,7 @@ conflict:
   loop for AI agents
 
 The daemon does not distinguish humans from agents: `actor` is a string,
-the protocol is the same `afctl` commands. What differs is rhythm —
+the protocol is the same `dibs` commands. What differs is rhythm —
 agents work in minutes and heartbeat; humans work in hours, get
 interrupted, and come back tomorrow. These recipes cover the human
 rhythm.
@@ -29,15 +29,15 @@ order: timestamps can be tied and do not establish causality.
 ## Working solo on a backlog
 
 ```bash
-export AF_COORDINATOR_ACTOR=aleksey
+export DIBS_ACTOR=aleksey
 
-afctl issue create --project utils --scope-kind project \
+dibs issue create --project utils --scope-kind project \
   --title "rotate backup keys" --priority 2
 
-afctl issue ready                      # the menu
-afctl issue claim utils-7 --ttl 28800  # a working day; nobody to compete with
+dibs issue ready                      # the menu
+dibs issue claim utils-7 --ttl 28800  # a working day; nobody to compete with
 # ... work ...
-afctl issue close utils-7 --resolution done \
+dibs issue close utils-7 --resolution done \
   --expected-version N --lease-token <token> \
   --branch codex/utils-7 --pr-url https://example/pr/7 --commit-sha abc1234
 ```
@@ -54,8 +54,8 @@ Three exits, in order of preference:
 1. **Note + release** — the clean one:
 
    ```bash
-   afctl issue note add utils-7 --body "HANDOFF: parser done, DB write remains"
-   afctl issue release utils-7 --lease-token <token>
+   dibs issue note add utils-7 --body "HANDOFF: parser done, DB write remains"
+   dibs issue release utils-7 --lease-token <token>
    ```
 
    Status returns to `open`, the issue is honestly back in the pool, and
@@ -65,7 +65,7 @@ Three exits, in order of preference:
 2. **Park it** — you will come back, and nobody else should take it:
 
    ```bash
-   afctl issue update utils-7 --status deferred --expected-version N \
+   dibs issue update utils-7 --status deferred --expected-version N \
      --lease-token <token>
    ```
 
@@ -83,10 +83,10 @@ Three exits, in order of preference:
 Do not look in `ready` — look at status:
 
 ```bash
-afctl ls --status in_progress          # everything started and unfinished
-afctl show utils-7                     # details, current lease if any
-afctl issue events list utils-7        # who claimed it, when
-afctl issue note list utils-7          # the last HANDOFF note
+dibs ls --status in_progress          # everything started and unfinished
+dibs show utils-7                     # details, current lease if any
+dibs issue events list utils-7        # who claimed it, when
+dibs issue note list utils-7          # the last HANDOFF note
 ```
 
 Then re-claim and continue. If an agent picked the issue up while you
@@ -111,9 +111,9 @@ Use the read-only report when you need a project or repository-level view,
 not a list of actions to claim:
 
 ```bash
-afctl stats --project afc --since 7d
-afctl stats --project afc --repo af-coordinator --since 2026-07-01T00:00:00Z
-afctl --json stats --project afc --since 24h | jq '.flow, .attempts, .coverage'
+dibs stats --project afc --since 7d
+dibs stats --project afc --since 2026-07-01T00:00:00Z
+dibs --json stats --project afc --since 24h | jq '.flow, .attempts, .coverage'
 ```
 
 The human view shows current inventory plus flow and coverage summaries. JSON
@@ -133,11 +133,11 @@ transitions, leases, and dependencies work identically for all types,
 with one exception: **epics**.
 
 ```bash
-afctl issue create --project utils --scope-kind project \
+dibs issue create --project utils --scope-kind project \
   --type bug --title "backup timer silently skips weekends" --priority 2
 
-afctl ls --type bug                    # everything filed as a bug
-afctl issue update utils-9 --type feature --expected-version N   # reclassify
+dibs ls --type bug                    # everything filed as a bug
+dibs issue update utils-9 --type feature --expected-version N   # reclassify
 ```
 
 Pick the type by what the work *is*, not by size: a `bug` fixes wrong
@@ -160,30 +160,30 @@ The flow:
 
 ```bash
 # 1. Create the umbrella
-afctl issue create --project utils --scope-kind project \
+dibs issue create --project utils --scope-kind project \
   --type epic --title "Migrate backups to restic"
 
 # 2. Create children and attach them via a parent dependency
-afctl issue create --project utils --scope-kind project \
+dibs issue create --project utils --scope-kind project \
   --type task --title "inventory current backup jobs"
-afctl issue dependency add utils-11 --depends-on utils-10 --kind parent
+dibs issue dependency add utils-11 --depends-on utils-10 --kind parent
 
 # 3. Order the children with ordinary blocks dependencies where needed
-afctl issue dependency add utils-12 --depends-on utils-11 --kind blocks
+dibs issue dependency add utils-12 --depends-on utils-11 --kind blocks
 
 # 4. Track progress through the children
-afctl ls --project utils --status open     # what remains
-afctl show --full utils-10                 # epic with its trail
+dibs ls --project utils --status open     # what remains
+dibs show --full utils-10                 # epic with its trail
 
 # Querying all child tasks of a specific parent (e.g. utils-10):
 # A) Human-readable table output filtered by parent ID:
-afctl issue list | grep "parent:utils-10"
+dibs issue list | grep "parent:utils-10"
 
 # B) Programmatic JSON output filtered by parent dependency:
-afctl issue list --json | jq -r '.[] | select(.dependencies[]? | .kind == "parent" and (.depends_on_short_id == "utils-10" or .depends_on_id == "utils-10")) | "\(.short_id)\t[\(.status)]\t\(.title)"'
+dibs issue list --json | jq -r '.[] | select(.dependencies[]? | .kind == "parent" and (.depends_on_short_id == "utils-10" or .depends_on_id == "utils-10")) | "\(.short_id)\t[\(.status)]\t\(.title)"'
 
 # 5. When the last child is done, explicitly close the unclaimable epic
-afctl issue operator-close utils-10 --resolution done --expected-version N \
+dibs issue operator-close utils-10 --resolution done --expected-version N \
   --reason "all children done; restic in production since afc-…"
 ```
 
@@ -203,19 +203,19 @@ has one place to look before you close.
 
 ```bash
 # On create
-afctl issue create --project utils --scope-kind project \
+dibs issue create --project utils --scope-kind project \
   --title "rotate backup keys" --priority 2 \
   --acceptance $'- new keys in vault\n- old keys revoked\n- restore test passes'
 
 # Add or revise later (optimistic version, like any metadata edit)
-afctl issue update utils-7 --expected-version N \
+dibs issue update utils-7 --expected-version N \
   --acceptance $'- new keys in vault\n- old keys revoked'
 
 # Prefer the guided form for multi-line entry
-afctl issue create-form            # includes an "Acceptance criteria" field
+dibs issue create-form            # includes an "Acceptance criteria" field
 ```
 
-Criteria render in `afctl show <id> --full` (and the daily-check board's
+Criteria render in `dibs show <id> --full` (and the daily-check board's
 Issue Details pane). Free text — a Markdown bullet list is the norm.
 When an issue implements a spec, mirror the leaf's Verification section
 here so the tracker and the spec agree.
@@ -228,8 +228,8 @@ Everything above holds with agents in the pool; the only change is that
 - The event log already separates humans from agents: agents use stable
   tool names (`claude-code`, `codex`, `codewhale-1`), humans use their
   own name. No extra marking needed for "who did what".
-- `assignee` exists (`afctl issue update --assignee aleksey`,
-  `afctl ls --assignee aleksey`) but is **advisory in v1**: the `ready`
+- `assignee` exists (`dibs issue update --assignee aleksey`,
+  `dibs ls --assignee aleksey`) but is **advisory in v1**: the `ready`
   view ignores it, so agents still see assigned issues as claimable. To
   actually reserve an issue, park it (`deferred`) or hold a lease.
 
@@ -239,7 +239,7 @@ When a feature involves a specification or design document, you can link the mar
 
 ```bash
 # Assuming utils-7 is a repository-scoped issue:
-afctl issue link utils-7 --path docs/specs/042-new-parser/design.md \
+dibs issue link utils-7 --path docs/specs/042-new-parser/design.md \
   --kind spec --relation implements
 ```
 
@@ -248,11 +248,11 @@ If the document doesn't exist in the daemon's artifact registry yet, this comman
 To see what documents are attached to an issue, use `--full`:
 
 ```bash
-afctl show --full utils-7
+dibs show --full utils-7
 ```
 
 If your issue is project-scoped, you must provide the repository context explicitly:
 
 ```bash
-afctl issue link utils-7 --path docs/design.md --repo backend-repo --kind design
+dibs issue link utils-7 --path docs/design.md --repo backend-repo --kind design
 ```

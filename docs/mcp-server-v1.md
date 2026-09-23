@@ -1,17 +1,17 @@
 # MCP Server v1
 
-`afc-mcp` is a stdio MCP wrapper over the daemon API. It is a client of the
+`dibs-mcp` is a stdio MCP wrapper over the daemon API. It is a client of the
 unix-socket HTTP API and never talks to SQLite directly.
 
 ## Launch
 
 ```bash
-AF_COORDINATOR_SOCKET=~/.local/state/af-coordinator/af-coordinator.sock \
-AF_COORDINATOR_ACTOR=codex-1234 \
-afc-mcp
+DIBS_SOCKET=~/.local/state/dibs/dibsd.sock \
+DIBS_ACTOR=codex-1234 \
+dibs-mcp
 ```
 
-`AF_COORDINATOR_ACTOR` is optional for read-only tools, but mutating tools use
+`DIBS_ACTOR` is optional for read-only tools, but mutating tools use
 it as the default actor/holder/author when the request does not pass one.
 
 ## Exposed tools

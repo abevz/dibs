@@ -45,17 +45,17 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           set -euo pipefail
-          archive="af-coordinator_${GOOS}_${GOARCH}"
+          archive="dibs_${GOOS}_${GOARCH}"
           mkdir -p "dist/${archive}"
           revision="$(git rev-parse HEAD)"
-          ldflags="-X github.com/abevz/af-coordinator/internal/build.Revision=${revision}"
-          go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/afctl" ./cmd/afctl/
-          go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/af-coordinatord" ./cmd/af-coordinatord/
-          go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/afc-mcp" ./cmd/afc-mcp/
-          tar -C "dist/${archive}" -czf "dist/${archive}.tar.gz" afctl af-coordinatord afc-mcp
+          ldflags="-X github.com/abevz/dibs/internal/build.Revision=${revision}"
+          go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibs" ./cmd/dibs/
+          go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibsd" ./cmd/dibsd/
+          go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibs-mcp" ./cmd/dibs-mcp/
+          tar -C "dist/${archive}" -czf "dist/${archive}.tar.gz" dibs dibsd dibs-mcp
       - uses: actions/upload-artifact@v4
         with:
-          name: af-coordinator-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: dibs-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*.tar.gz
 
   publish:

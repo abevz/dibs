@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/core"
+	"github.com/abevz/dibs/internal/core"
 )
 
 // populateTags batch-loads issue_tags rows for the given issues and appends

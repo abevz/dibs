@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/core"
-	"github.com/abevz/af-coordinator/migrations"
+	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/migrations"
 )
 
 const testOperationID = "op-11111111-2222-3333-4444-555555555555"

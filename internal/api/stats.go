@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/core"
-	"github.com/abevz/af-coordinator/internal/report"
-	"github.com/abevz/af-coordinator/internal/store"
+	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/report"
+	"github.com/abevz/dibs/internal/store"
 )
 
 func handleStats(st store.CoordinatorStore, logger *slog.Logger) http.HandlerFunc {

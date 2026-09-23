@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abevz/af-coordinator/internal/core"
+	"github.com/abevz/dibs/internal/core"
 )
 
 func TestCreateIssue(t *testing.T) {
@@ -2108,7 +2108,7 @@ func TestCloseIssue(t *testing.T) {
 	result, err := CloseIssue(context.Background(), db, issue.ID, core.CloseIssueRequest{
 		Resolution:      "done",
 		Branch:          "codex/afc-27",
-		PRURL:           "https://github.com/abevz/af-coordinator/pull/27",
+		PRURL:           "https://github.com/abevz/dibs/pull/27",
 		CommitSHA:       "ba6d011",
 		ExpectedVersion: issue.Version,
 		LeaseToken:      claim.LeaseToken,
@@ -2120,7 +2120,7 @@ func TestCloseIssue(t *testing.T) {
 	if result.Branch != "codex/afc-27" {
 		t.Fatalf("branch = %q, want %q", result.Branch, "codex/afc-27")
 	}
-	if result.PRURL != "https://github.com/abevz/af-coordinator/pull/27" {
+	if result.PRURL != "https://github.com/abevz/dibs/pull/27" {
 		t.Fatalf("pr_url = %q", result.PRURL)
 	}
 	if result.CommitSHA != "ba6d011" {
@@ -2168,7 +2168,7 @@ func TestCloseIssue(t *testing.T) {
 		t.Fatal(err)
 	}
 	if payload.Resolution != "done" || payload.Branch != "codex/afc-27" ||
-		payload.PRURL != "https://github.com/abevz/af-coordinator/pull/27" ||
+		payload.PRURL != "https://github.com/abevz/dibs/pull/27" ||
 		payload.CommitSHA != "ba6d011" || payload.FromStatus != "in_progress" ||
 		payload.ToStatus != "done" || payload.AttemptID != claim.AttemptID ||
 		payload.EndReason != "done" {

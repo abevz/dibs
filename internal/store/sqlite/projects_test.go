@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/abevz/af-coordinator/internal/core"
+	"github.com/abevz/dibs/internal/core"
 )
 
 func TestCreateProject(t *testing.T) {
