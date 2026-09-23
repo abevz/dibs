@@ -26,8 +26,9 @@ before the fix (`handoff_issue`/`close_issue` schema absent; close rejected
 owner's daemon. A separate temporary DB/socket and installed `dibsd`, `afctl`,
 and `afc-mcp` created and claimed an issue, listed the three schemas, rejected
 a stale close generation, accepted the current one, and read final status
-`done`; the alias deprecation notice appeared only on stderr. PR and CI
-evidence will be added before merge.
+`done`; the alias deprecation notice appeared only on stderr. PR `#69` CI
+`test` passed on implementation HEAD `024b211`; owner-authorized merge awaits
+the final independent review.
 
 ## AFC-SDD-0152 / afc-104 implementation review
 
