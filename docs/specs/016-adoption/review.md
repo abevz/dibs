@@ -1,6 +1,6 @@
 # 016 Adoption Review
 
-Status: approved by owner; packet active. No adoption child implemented yet.
+Status: approved by owner; packet active. afc-137 implementation awaits owner review.
 
 ## Packet authoring (`afc-127`)
 
@@ -39,7 +39,8 @@ Status: approved by owner; packet active. No adoption child implemented yet.
   `make build`, `make test`, and `make vet` passed. Lint passed with
   `GOTOOLCHAIN=go1.26.4 make lint` (`0 issues`); the system Go 1.27 toolchain
   cannot be parsed by the locally installed linter built with Go 1.26.3.
-- Remaining gates: independent review and PR CI. The owner must perform the
-  manual service switch in `docs/operations.md` after merge. There is no
-  automatic DB migration or `dibs migrate-paths` in this slice; a later
-  explicitly designed migration can move live SQLite/WAL state.
+- PR #67 CI passed on implementation HEAD `3c03618`; independent read-only
+  review found no material issue on that head. Owner review is pending. The
+  owner must perform the manual service switch in `docs/operations.md` after
+  merge. There is no automatic DB migration or `dibs migrate-paths` in this
+  slice; a later explicitly designed migration can move live SQLite/WAL state.
