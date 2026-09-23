@@ -4,6 +4,29 @@
 
 Specification and backlog slicing complete; implementation in progress.
 
+## afc-122 — CLI argument parsing
+
+The CLI now validates the complete command route before its daemon revision
+probe or command handler. Unknown flags, missing values, malformed integer
+fields, invalid enums, and extra positionals fail with exit 1. With `--json`,
+they emit one `validation_failed` API envelope on stderr and leave stdout
+empty. The `issue run --` separator keeps child argv, including child `--json`,
+outside the CLI parser. The contract comes from packet 002 and
+`docs/agent-protocol-v1.md` (see `traceability.md`).
+
+`TestCommandArgumentsFailClosed` covers every command family and the key
+lifecycle parsers; `TestDocumentedCommandArgumentsRemainAccepted` preserves
+valid invocation shapes; `TestMalformedJSONCommandNeverContactsDaemon` runs
+the built binary with a nonexistent socket and checks the raw stdout/stderr
+envelope. Before the fix, the installed binary accepted `--ttl 90bad`,
+attempted a claim request, and returned `internal_error`; it also wrote an
+operation journal. The temporary journal created by that regression probe was
+removed. The corrected command rejects the argument before request creation.
+
+`make build`, `make test` (race), `make vet`, and
+`GOTOOLCHAIN=go1.26.4 make lint` passed on the worktree. The focused CLI suite
+also passed with `go test ./cmd/dibs -count=1`.
+
 ## afc-121 — MCP invocation-mode audit propagation
 
 Contract source: `docs/specs/002-agent-protocol/requirements.md` via `docs/agent-protocol-v1.md` and the existing CLI/API behavior (see `traceability.md`).
