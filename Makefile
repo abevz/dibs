@@ -12,7 +12,7 @@ preflight:
 
 install-hooks:
 	git config core.hooksPath contrib/git-hooks
-	@echo "Git hooksPath set to contrib/git-hooks. Daemon switch/redeploy is manual."
+	@echo "Git hooksPath set to contrib/git-hooks. Active dibsd redeploys after main merges; the legacy service switch stays manual."
 
 fmt:
 	gofmt -w cmd internal

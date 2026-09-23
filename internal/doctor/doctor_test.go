@@ -22,6 +22,40 @@ type mockExec struct {
 	env    map[string]string
 }
 
+func TestEvaluateOperatorTokenMigration(t *testing.T) {
+	configured, missing := true, false
+	for _, tc := range []struct {
+		name, legacyPath, want string
+		configured             *bool
+	}{
+		{"legacy drop-in with missing token", ".config/systemd/user/af-coordinatord.service.d/operator-token.conf", "WARN", &missing},
+		{"legacy env file with missing token", ".config/af-coordinator/operator.env", "WARN", &missing},
+		{"no legacy config", "", "ok", &missing},
+		{"token configured", ".config/af-coordinator/operator.env", "ok", &configured},
+		{"older daemon status unknown", ".config/af-coordinator/operator.env", "ok", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			if tc.legacyPath != "" {
+				path := filepath.Join(home, tc.legacyPath)
+				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("AF_OPERATOR_TOKEN=do-not-print"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			result := EvaluateOperatorTokenMigration(&core.Health{OperatorTokenConfigured: tc.configured}, home)
+			if result.Status != tc.want {
+				t.Fatalf("status = %s, want %s: %s", result.Status, tc.want, result.Message)
+			}
+			if strings.Contains(result.Message+result.Hint, "do-not-print") {
+				t.Fatal("doctor exposed token content")
+			}
+		})
+	}
+}
+
 func (m mockExec) Command(name string, arg ...string) ([]byte, error) {
 	return m.cmdOut, m.cmdErr
 }

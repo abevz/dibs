@@ -44,3 +44,16 @@ Status: approved by owner; packet active. afc-137 implementation awaits owner re
   owner must perform the manual service switch in `docs/operations.md` after
   merge. There is no automatic DB migration or `dibs migrate-paths` in this
   slice; a later explicitly designed migration can move live SQLite/WAL state.
+- Owner review follow-up in PR #67: the Linux switch reuses the existing
+  `~/.config/af-coordinator/operator.env` through a new `dibsd.service.d`
+  drop-in before `dibsd` starts; no token is copied or printed. The health API
+  reports only whether the daemon has a token, and `dibs doctor` warns when a
+  new daemon has none while legacy token configuration exists. Older daemons
+  omit that health field and are not misreported. Launchd has no equivalent
+  per-agent `EnvironmentFile`; its manual token handoff is documented.
+- The main-only post-merge hook rebuilds and `try-restart`s only an active
+  `dibsd`. An active legacy service gets the manual-switch message; inactive
+  units are never started. The mock-systemctl shell regression failed against
+  the prior hook and passed after the fix, including build/restart failures.
+  Focused Go tests, `make build`, `make test`, `make vet`, gofmt, and
+  `GOTOOLCHAIN=go1.26.4 make lint` passed. Follow-up PR CI is pending.

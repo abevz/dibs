@@ -44,7 +44,7 @@ func TestDaemonUsesExistingLegacyDatabaseWithoutCreatingSecondDB(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin)
-	cmd.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
+	cmd.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "AF_OPERATOR_TOKEN=test-token"}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -57,6 +57,9 @@ func TestDaemonUsesExistingLegacyDatabaseWithoutCreatingSecondDB(t *testing.T) {
 		health, err := c.Health(probe)
 		stop()
 		if err == nil {
+			if health.OperatorTokenConfigured == nil || !*health.OperatorTokenConfigured {
+				t.Fatal("daemon did not report legacy operator token as configured")
+			}
 			if health.Name != "dibs" {
 				t.Fatalf("daemon health name = %q, want dibs", health.Name)
 			}
@@ -77,5 +80,43 @@ func TestDaemonUsesExistingLegacyDatabaseWithoutCreatingSecondDB(t *testing.T) {
 		t.Fatalf("unexpected new DB directory contents: %v", entries)
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		t.Fatal(err)
+	}
+}
+
+func TestDaemonReportsOperatorTokenAbsentWithoutExposingValue(t *testing.T) {
+	home, err := os.MkdirTemp("", "dibs-home-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	bin := filepath.Join(t.TempDir(), "dibsd")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build dibsd: %v\n%s", err, out)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin)
+	cmd.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { cancel(); _ = cmd.Wait() }()
+
+	c := client.New(filepath.Join(home, ".local/state/dibs/dibsd.sock"))
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		probe, stop := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		health, err := c.Health(probe)
+		stop()
+		if err == nil {
+			if health.OperatorTokenConfigured == nil || *health.OperatorTokenConfigured {
+				t.Fatalf("operator token status = %v, want explicit false", health.OperatorTokenConfigured)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("daemon did not start: %v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

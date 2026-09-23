@@ -127,7 +127,9 @@ make preflight
 The preflight checks required build tools, the Go version, the install
 directory, and the current OS/service-manager situation.
 
-The git hook now leaves the daemon switch to the operator after a merge:
+The post-merge hook redeploys an active `dibsd` after merges into `main`.
+While the former daemon is active, the [service switch](docs/operations.md#explicit-service-switch)
+remains manual. Install the hook with:
 
 ```bash
 make install-hooks

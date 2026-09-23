@@ -173,6 +173,29 @@ func shortRev(rev string) string {
 	return rev
 }
 
+// EvaluateOperatorTokenMigration checks only for legacy configuration files,
+// never their contents. Older daemons omit the health flag, so their token
+// status is unknown and must not be reported as absent.
+func EvaluateOperatorTokenMigration(h *core.Health, home string) Result {
+	result := Result{Name: "Operator token migration", Status: "ok", Message: "No legacy operator token migration warning"}
+	if h == nil || h.OperatorTokenConfigured == nil || *h.OperatorTokenConfigured {
+		return result
+	}
+	for _, path := range []string{
+		filepath.Join(home, ".config/systemd/user/af-coordinatord.service.d/operator-token.conf"),
+		filepath.Join(home, ".config/af-coordinator/operator.env"),
+	} {
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return Result{
+				Name: "Operator token migration", Status: "WARN",
+				Message: "Daemon has no operator token configured, but legacy operator token configuration exists",
+				Hint:    "Point dibsd.service.d/operator-token.conf at the existing ~/.config/af-coordinator/operator.env and reload the user manager; see docs/operations.md",
+			}
+		}
+	}
+	return result
+}
+
 func EvaluateBackup(ctx context.Context, e OSExec, backupDir string, now time.Time) Result {
 	return evaluateBackup(ctx, e, backupDir, now, runtime.GOOS, os.Getuid())
 }
@@ -430,6 +453,7 @@ func RunAll(ctx context.Context, c *client.Client, cfg config.Config) []Result {
 	results = append(results, EvaluateBinaryRevision(h, e))
 	home, err := os.UserHomeDir()
 	if err == nil {
+		results = append(results, EvaluateOperatorTokenMigration(h, home))
 		backupDir := filepath.Join(home, "backups", "dibs")
 		if _, err := os.Stat(backupDir); os.IsNotExist(err) {
 			legacyDir := filepath.Join(home, "backups", "af-coordinator")

@@ -52,9 +52,10 @@ make restart-service
 `DBUS_SESSION_BUS_ADDRESS` from `/run/user/$(id -u)/bus` when they are missing,
 which keeps service targets working from non-interactive agent environments.
 
-The `post-merge` hook does not redeploy the daemon during the name change.
-Use the explicit switch below. `dibs doctor` detects a daemon running an
-older revision.
+On `main`, the `post-merge` hook rebuilds and `try-restart`s `dibsd` only when
+that unit is already active. While only the former daemon is active, it leaves
+the explicit switch below to the operator. It never starts an inactive unit.
+`dibs doctor` detects a daemon running an older revision.
 
 ## macOS LaunchAgent
 
@@ -89,13 +90,25 @@ On Linux, after this change is merged and reviewed:
 ```bash
 make build-install
 make install-service
+if [ -f "$HOME/.config/af-coordinator/operator.env" ]; then
+  mkdir -p "$HOME/.config/systemd/user/dibsd.service.d"
+  cat > "$HOME/.config/systemd/user/dibsd.service.d/operator-token.conf" <<'EOF'
+[Service]
+EnvironmentFile=%h/.config/af-coordinator/operator.env
+EOF
+  sh contrib/install/systemctl-user.sh daemon-reload
+fi
 sh contrib/install/systemctl-user.sh disable --now af-coordinatord
 sh contrib/install/systemctl-user.sh enable --now dibsd
 dibs doctor
 ```
 
 On macOS, `make install-launchd` installs but does not bootstrap the new
-agent. Stop the old agent before bootstrapping the new one:
+agent. Launchd has no per-agent `EnvironmentFile` equivalent. If the old agent
+has a custom operator-token environment setting, configure the new agent
+through the same secure operator-managed mechanism before bootstrap; do not
+put the token in these commands. Then stop the old agent and bootstrap the new
+one:
 
 ```bash
 make install-launchd

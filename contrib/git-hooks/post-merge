@@ -1,9 +1,9 @@
 #!/bin/sh
-# post-merge — keep the daemon switch explicit after the rename.
+# post-merge — redeploy only an already active dibsd on main.
 #
 # Installed via `make install-hooks` (sets core.hooksPath to this directory).
-# A merge or pull must not stop the existing service or start a second daemon
-# against the live database. The operator follows docs/operations.md.
+# Keep the legacy service switch manual. try-restart prevents a race where the
+# daemon becomes inactive after the is-active probe.
 set -u
 
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
@@ -13,6 +13,19 @@ if [ "$branch" != "main" ]; then
 	exit 0
 fi
 
-echo "post-merge: daemon switch is manual; see docs/operations.md" >&2
+systemctl_user="$repo_root/contrib/install/systemctl-user.sh"
+if sh "$systemctl_user" is-active --quiet dibsd >/dev/null 2>&1; then
+	if ! make -C "$repo_root" build-install; then
+		echo "post-merge: dibsd build failed; redeploy manually" >&2
+		exit 0
+	fi
+	if ! sh "$systemctl_user" try-restart dibsd; then
+		echo "post-merge: dibsd try-restart failed; redeploy manually" >&2
+	fi
+elif sh "$systemctl_user" is-active --quiet af-coordinatord >/dev/null 2>&1; then
+	echo "post-merge: legacy daemon active; switch manually via docs/operations.md" >&2
+else
+	echo "post-merge: no active daemon; no redeploy" >&2
+fi
 
 exit 0
