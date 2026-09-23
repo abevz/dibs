@@ -38,6 +38,11 @@ uses real embedded migrations through a scratch daemon and rejects stale
 generations. This mechanical correction is implemented and verified; evidence
 is recorded in `review.md`.
 
+`afc-121` repairs MCP propagation of the existing caller-declared invocation
+mode on audit-producing lifecycle tools. Its schema, validation, and audit-event
+regressions are verified against the contract referenced in `traceability.md`;
+implementation evidence is in `review.md`.
+
 ## AFC-SDD-0151 / afc-103 — Add monotonic lease generation
 
 **Problem.** The current token changes per fresh claim, but the public contract

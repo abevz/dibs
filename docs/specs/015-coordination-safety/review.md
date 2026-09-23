@@ -4,6 +4,29 @@
 
 Specification and backlog slicing complete; implementation in progress.
 
+## afc-121 — MCP invocation-mode audit propagation
+
+Contract source: `docs/specs/002-agent-protocol/requirements.md` via `docs/agent-protocol-v1.md` and the existing CLI/API behavior (see `traceability.md`).
+
+MCP `claim_issue`, `add_note`, `handoff_issue`, `close_issue`, and
+`operator_close_issue` now expose the optional enum in `tools/list`, validate it
+before mutation, and pass the normalized value to the existing client/API
+paths. `TestInvocationModeToolSchemas` checks every affected schema.
+`TestInvocationModeMCPAuditEvents` uses a scratch daemon and real SQLite with
+embedded migrations to assert declared and omitted values in claim, note,
+handoff, close, and operator-close audit events. For each tool, an invalid
+value produces an MCP tool error and no new event. The focused test failed
+before the fix because the schemas omitted the field and claim rejected it as
+an unknown argument; it passes after the fix.
+
+`go test ./internal/mcp -count=1`, `make build`, `make test` (race), `make vet`,
+and `GOTOOLCHAIN=go1.26.4 make lint` passed. `make build-install` updated
+installed binaries without restarting the owner's daemon. Installed
+`dibs-mcp` called `claim_issue` twice against a temporary `dibsd` DB/socket;
+`dibs issue events list` reported `issue_claimed` modes `interactive` and
+`scheduled` respectively. PR `#70` CI `test` passed on implementation HEAD
+`f05ddc1`; owner-authorized merge awaits final independent review.
+
 ## afc-120 — MCP lease-generation contract correction
 
 The MCP `tools/list` schemas now require `lease_generation` for heartbeat,
