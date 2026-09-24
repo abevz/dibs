@@ -129,9 +129,6 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	fmt.Printf("Claimed %s (version %d, expires %s)\n", issueID, claim.Version, claim.ExpiresAt)
 
 	heartbeatInterval := time.Duration(ttl) * time.Second / 3
-	if heartbeatInterval < 5*time.Second {
-		heartbeatInterval = 5 * time.Second
-	}
 
 	// knownExpiry is the last deadline the daemon gave us, from the claim or
 	// a successful heartbeat. Transient heartbeat failures may be retried only
@@ -139,7 +136,7 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	// ownership is treated as lost and the child is stopped.
 	knownExpiry, err := time.Parse(time.RFC3339, claim.ExpiresAt)
 	if err != nil {
-		knownExpiry = time.Now().Add(time.Duration(ttl) * time.Second)
+		return fmt.Errorf("issue run: invalid claim lease expiry: %w", err)
 	}
 
 	// childCtx lets the heartbeat goroutine cancel the child the moment
@@ -325,10 +322,12 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 				reportLoss("known lease window closed before a fresh heartbeat proved ownership")
 				return false
 			}
-			newExpiry, err := c.HeartbeatLeaseWithOperation(ctx, issueID, core.HeartbeatRequest{
+			requestCtx, cancel := context.WithDeadline(ctx, knownExpiry)
+			newExpiry, err := c.HeartbeatLeaseWithOperation(requestCtx, issueID, core.HeartbeatRequest{
 				LeaseToken: leaseToken, LeaseGeneration: leaseGeneration,
 				TTLSeconds: ttlSeconds, OperationID: operationID,
 			})
+			cancel()
 			if err == nil {
 				if ambiguous {
 					// This exact-ID response may be an old committed outcome. It
@@ -370,17 +369,28 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 			select {
 			case <-ctx.Done():
 				return false
-			case <-time.After(retryDelay):
+			case <-time.After(min(retryDelay, time.Until(knownExpiry))):
 			}
 			retryDelay = min(retryDelay*2, maxRetryDelay)
 		}
 	}
 
 	for {
+		remaining := time.Until(knownExpiry)
+		if remaining <= 0 {
+			reportLoss("known lease window closed without fresh proof")
+			return
+		}
+		deadline := time.NewTimer(remaining)
 		select {
 		case <-ctx.Done():
+			deadline.Stop()
+			return
+		case <-deadline.C:
+			reportLoss("known lease window closed without fresh proof")
 			return
 		case <-ticker.C:
+			deadline.Stop()
 			if !attempt() {
 				return
 			}

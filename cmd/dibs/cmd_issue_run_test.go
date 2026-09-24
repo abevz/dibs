@@ -84,6 +84,7 @@ func TestIssueRunHelpFlagShortCircuits(t *testing.T) {
 type mockCoordinator struct {
 	mu                         sync.Mutex
 	claimVersion               int
+	claimExpiry                string
 	closeReqs                  []map[string]any
 	handoffReqs                []map[string]any
 	heartbeatCount             int
@@ -118,10 +119,14 @@ func writeLeaseExpired(w http.ResponseWriter) {
 func (m *mockCoordinator) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/issues/{id}/claim", func(w http.ResponseWriter, r *http.Request) {
+		expiry := m.claimExpiry
+		if expiry == "" {
+			expiry = "2099-01-01T00:00:00Z"
+		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"lease_token":      "test-lease-token",
 			"lease_generation": mockLeaseGeneration,
-			"expires_at":       "2099-01-01T00:00:00Z",
+			"expires_at":       expiry,
 			"attempt_id":       "test-attempt-id",
 			"version":          m.claimVersion,
 		})
@@ -492,6 +497,48 @@ func TestIssueRunTreatsReplayedHeartbeatExpiryAsHistorical(t *testing.T) {
 	}
 	if len(mock.closeReqs) != 0 || len(mock.handoffReqs) != 0 {
 		t.Fatalf("replayed expiry allowed close/handoff: close=%d handoff=%d", len(mock.closeReqs), len(mock.handoffReqs))
+	}
+}
+
+func TestIssueRunShortTTLStopsBeforeExpiredChildContinues(t *testing.T) {
+	binPath := buildAfctlForRunTest(t)
+	mock := &mockCoordinator{
+		claimVersion:     1,
+		claimExpiry:      time.Now().Add(2 * time.Second).UTC().Format(time.RFC3339Nano),
+		heartbeatExpired: true,
+	}
+	sockPath := startMockCoordinator(t, mock)
+	cmd := exec.Command(binPath, "issue", "run", "afc-7", "--ttl", "2", "--", "sh", "-c", "sleep 10")
+	cmd.Env = append(os.Environ(), "AF_COORDINATOR_SOCKET="+sockPath)
+	start := time.Now()
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 4 {
+		t.Fatalf("short-TTL loss exit = %v; output=%s", err, out)
+	}
+	if elapsed := time.Since(start); elapsed >= 3*time.Second {
+		t.Fatalf("short-TTL child continued after lease expiry for %s", elapsed)
+	}
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if mock.heartbeatCount == 0 || len(mock.closeReqs) != 0 || len(mock.handoffReqs) != 0 {
+		t.Fatalf("short-TTL heartbeat=%d close=%d handoff=%d", mock.heartbeatCount, len(mock.closeReqs), len(mock.handoffReqs))
+	}
+}
+
+func TestIssueRunRejectsUnknownClaimDeadlineBeforeStartingChild(t *testing.T) {
+	binPath := buildAfctlForRunTest(t)
+	mock := &mockCoordinator{claimExpiry: "invalid-date"}
+	sockPath := startMockCoordinator(t, mock)
+	marker := filepath.Join(t.TempDir(), "started")
+	cmd := exec.Command(binPath, "issue", "run", "afc-8", "--ttl", "2", "--", "sh", "-c", "touch \"$MARKER\"")
+	cmd.Env = append(os.Environ(), "AF_COORDINATOR_SOCKET="+sockPath, "MARKER="+marker)
+	out, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "invalid claim lease expiry") {
+		t.Fatalf("unknown deadline result = %v; output=%s", err, out)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("child started without a known lease deadline: %v", err)
 	}
 }
 

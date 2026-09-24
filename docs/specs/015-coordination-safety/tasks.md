@@ -575,7 +575,8 @@ schemas and installed CLI output agree.
 are updated in the canonical and embedded protocols, API, MCP, operations,
 and workflow docs. `issue run` now retries one heartbeat operation ID only to
 resolve an ambiguous outcome and requires a fresh-ID heartbeat before treating
-the lease as live; it stops the child if fresh proof fails. Manual lifecycle
+the lease as live; it stops the child if fresh proof fails or the known
+deadline closes, including with a short TTL. Manual lifecycle
 commands accept token environment/file sources without placing the token in
 argv. CLI, subprocess, and MCP schema contract tests cover these behaviors;
 verification and PR evidence are in `review.md`.
