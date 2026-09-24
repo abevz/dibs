@@ -571,6 +571,15 @@ schemas and installed CLI output agree.
 
 **Dependencies.** `afc-101`, `afc-114`.
 
+**Implementation status.** Agent decision tables and token-safe CLI examples
+are updated in the canonical and embedded protocols, API, MCP, operations,
+and workflow docs. `issue run` now retries one heartbeat operation ID only to
+resolve an ambiguous outcome and requires a fresh-ID heartbeat before treating
+the lease as live; it stops the child if fresh proof fails. Manual lifecycle
+commands accept token environment/file sources without placing the token in
+argv. CLI, subprocess, and MCP schema contract tests cover these behaviors;
+verification and PR evidence are in `review.md`.
+
 ## START HERE
 
 Start with `afc-103` / AFC-SDD-0151. It establishes the common ownership

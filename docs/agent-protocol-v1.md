@@ -1,5 +1,49 @@
 # Agent Protocol v1
 
+## Primary CLI path and token handling
+
+The CLI is the primary agent interface; MCP is for clients without a shell.
+For lifecycle work use `dibs issue run <short_id> --ttl 900 -- <command>`.
+It owns claim, heartbeat, and close/handoff, and passes the token to its child
+through `DIBS_LEASE_TOKEN` in the child's environment. **Agents never pass
+`--lease-token` on a command line they execute**, including shell expansions
+such as `--lease-token "$TOKEN"`: expanded argv is captured in session
+transcripts. If a manual lifecycle command is unavoidable, let the CLI read
+`DIBS_LEASE_TOKEN` from an already supplied environment or set
+`DIBS_LEASE_TOKEN_FILE` to a private token file (mode `0600`); keep the token
+out of argv, logs, notes, and Git. The legacy `AF_LEASE_TOKEN` environment
+alias is accepted when the canonical variable is unset.
+
+## Lease-loss and ambiguous-outcome decisions
+
+Persist one `operation_id` for each logical mutation before sending it. A
+same-ID retry with identical arguments resolves only whether that mutation
+committed; it never proves that the lease is still live. A new ID means a new
+logical mutation. In particular, an exact heartbeat replay returns its
+**original, historical `expires_at`**, even after release, expiry, or
+replacement. After resolving an ambiguous heartbeat, send a heartbeat with a
+**new** operation ID before continuing work. Responses have no `replayed`
+field; the caller knows whether it reused an ID. An optional explicit marker
+is deferred beyond afc-116 because safe action does not depend on it.
+
+| Observation | Agent action |
+| --- | --- |
+| Fresh claim or fresh heartbeat succeeds | Keep the returned token, generation, version, and deadline private; continue only within the known lease window. Heartbeat every one-third of TTL. |
+| `lease_held` or `issue_not_ready` on a new claim | Do other ready work or reread blockers. Do not recover a token by repeating a holder name. |
+| `version_conflict` or `idempotency_conflict` | Stop the proposed mutation; reread and reconcile. For `idempotency_conflict`, keep the original ID tied to its original request; use a new ID only for a genuinely new action. |
+| `lease_expired`, token/generation mismatch, or confirmed replacement | Stop the child and external work; do not close or hand off with the lost lease. Reread and reconcile before any new claim. |
+| Response timeout while the last known deadline is still in the future | Retry the exact request with the same operation ID and arguments only to resolve the ambiguous outcome. If this was a heartbeat, treat that result as historical and immediately send a fresh heartbeat with a new ID for liveness. If proof does not arrive before the known deadline, stop the child. |
+| Timeout at or after the last known deadline | Stop the child. A same-ID retry may still resolve historical commit state, but cannot authorize continued work; reconcile before reclaiming. |
+| Daemon restarts or becomes unreachable | Stop work when the known lease window closes without proof. On reconnection, resolve any ambiguous operation with its original ID, then send a new-ID heartbeat before continuing; a replayed deadline alone is historical. |
+
+Before externally visible publication, verify current ownership with a fresh
+heartbeat and propagate `lease_generation` to any external consumer that can
+reject an older generation. The coordinator cannot fence a Git push or file
+write outside its boundary; reconcile an uncertain external side effect before
+retrying it. An exact coordinator close replay does not imply the external
+effect ran exactly once. This follows packet 015 design §§3, 10–11 and
+`docs/api-v1.md`.
+
 Any `dibs issue` lifecycle subcommand (`claim`, `heartbeat`, `release`,
 `handoff`, `close`, `operator-close`, `operator-reopen`) prints its full
 `Usage:` line — not just the one missing flag — on any validation error, and
@@ -30,6 +74,9 @@ changed arguments return `idempotency_conflict`. See `docs/mcp-server-v1.md`.
 ## Session loop
 
 Every agent session follows this cycle:
+
+For a single subprocess, `issue run` performs steps 2–5 below. The manual
+commands are for recovery or workloads that cannot fit that process boundary.
 
 1. **Pick ready work**
    ```
@@ -102,7 +149,7 @@ Every agent session follows this cycle:
 3. **Heartbeat during work**
    Extend your lease every ⅓ of TTL (every 300s for 900s TTL):
    ```
-   dibs issue heartbeat <short_id> --lease-token <token> --lease-generation <generation> --ttl 900
+   dibs issue heartbeat <short_id> --lease-generation <generation> --ttl 900
    ```
 
 4. **Note progress**
@@ -115,15 +162,15 @@ Every agent session follows this cycle:
 
 5. **Close or hand off**
    ```
-   dibs issue close <short_id> --resolution done --expected-version N --lease-token <token> --lease-generation <generation> \
+   dibs issue close <short_id> --resolution done --expected-version N --lease-generation <generation> \
      --branch <branch> --pr-url <url> --commit-sha <sha> --note "what was done"
-   dibs issue handoff <short_id> --lease-token <token> --lease-generation <generation> \
+   dibs issue handoff <short_id> --lease-generation <generation> \
      --note "HANDOFF: next agent starts here"
    ```
 
    Handoff requires a non-empty note beginning exactly `HANDOFF:` and commits
    `note_added` before `issue_released` in one transaction. Use bare
-   `dibs issue release <short_id> --lease-token <token> --lease-generation <generation>` only for recovery or
+   `dibs issue release <short_id> --lease-generation <generation>` only for recovery or
    compatibility. Ordinary close always requires the active matching lease token. For an
    unclaimable epic or deliberate administrative resolution, use the explicit
    local operator path instead; it requires a reason and never accepts a
@@ -152,8 +199,9 @@ Every agent session follows this cycle:
    any script that is just "do one thing, then close": it claims, execs
    the given command with the lease exported as environment variables,
    heartbeats in the background, and closes or hands off automatically
-   based on the command's exit code — the token never leaves that single
-   process, so there is no multi-step handoff where it can get lost.
+   based on the command's exit code. The token reaches only the child
+   environment and coordinator requests, never a command argument or a
+   multi-step shell handoff where it can get lost.
    ```
    dibs issue run <short_id> --ttl 900 -- ./do-the-work.sh
    ```
@@ -167,8 +215,9 @@ Every agent session follows this cycle:
    command's.
 
    For anything that doesn't fit a single subprocess, fall back to manual
-   `claim`/`heartbeat`/`close`: persist `lease_token` immediately after
-   claim, before doing anything else; prefer a short `--ttl` for
+   `claim`/`heartbeat`/`close`: persist `lease_token` privately after
+   claim, set `DIBS_LEASE_TOKEN_FILE` to that private file, and never put its
+   contents in argv; prefer a short `--ttl` for
    scripted/unattended claims so a crash self-heals fast; and install an
    `EXIT` trap that calls `issue release` so a crash after the token is
    captured still frees the lease right away.
@@ -298,10 +347,10 @@ Commands with `--json` succeed or fail with typed exit codes so the caller can r
 | Code | Meaning | Reaction |
 |------|---------|----------|
 | 0 | Success | — |
-| 1 | Hard failure (daemon down, bad syntax) | Fix and retry |
-| 2 | `version_conflict` | Reread issue, retry |
+| 1 | Hard failure (daemon down, bad syntax) | Stop if liveness is unproved; fix, then reconcile |
+| 2 | `version_conflict` | Reread and reconcile before a new mutation |
 | 3 | `lease_held` | Pick other ready work |
-| 4 | `lease_expired` | Re-claim before continuing |
+| 4 | `lease_expired` | Stop the child; reconcile before any new claim |
 | 5 | `not_found` | Check issue ID |
 | 6 | `dependency_cycle` | Fix dependency graph |
 | 7 | `issue_not_ready` | Reread dependencies; pick ready work |

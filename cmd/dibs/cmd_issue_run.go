@@ -16,7 +16,7 @@ import (
 )
 
 const issueRunUsage = "Usage: dibs issue run <issue-id> [--actor <name>] [--ttl <seconds>] [--close-resolution done|cancelled] [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note <text>] [--invocation-mode interactive|scheduled|unknown] -- <command> [args...]\n" + lifecycleHint +
-	"\nOwns claim -> heartbeat -> close/handoff around a single subprocess, so the lease token never leaves this process's memory: it cannot be lost the way a multi-step script can lose it before persisting it. On exit 0, closes with --close-resolution (default done). On any other exit, or on Ctrl-C, hands the lease off with an auto-generated HANDOFF: note instead of closing. On confirmed lease ownership loss (heartbeat rejected with lease_expired, or the lease window closing without proof), the child is terminated and the CLI exits non-zero with lease_expired without sending a close request."
+	"\nOwns claim -> heartbeat -> close/handoff around a single subprocess; the child receives the lease token in its environment, never in argv. On exit 0, closes with --close-resolution (default done). On any other exit, or on Ctrl-C, hands the lease off with an auto-generated HANDOFF: note instead of closing. On confirmed lease ownership loss (heartbeat rejected with lease_expired, or the lease window closing without proof), the child is terminated and the CLI exits non-zero with lease_expired without sending a close request."
 
 // runIssueRun claims issueID, execs the given command with the lease
 // exported as environment variables, heartbeats in the background for the
@@ -315,15 +315,34 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 
 	retryDelay := initialRetryDelay
 	attempt := func() bool {
+		operationID := newOperationID()
+		ambiguous := false
 		for {
 			if ctx.Err() != nil {
 				return false
 			}
-			newExpiry, err := c.HeartbeatLease(ctx, issueID, leaseToken, leaseGeneration, ttlSeconds)
+			if !time.Now().Before(knownExpiry) {
+				reportLoss("known lease window closed before a fresh heartbeat proved ownership")
+				return false
+			}
+			newExpiry, err := c.HeartbeatLeaseWithOperation(ctx, issueID, core.HeartbeatRequest{
+				LeaseToken: leaseToken, LeaseGeneration: leaseGeneration,
+				TTLSeconds: ttlSeconds, OperationID: operationID,
+			})
 			if err == nil {
-				if parsed, perr := time.Parse(time.RFC3339, newExpiry); perr == nil {
-					knownExpiry = parsed
+				if ambiguous {
+					// This exact-ID response may be an old committed outcome. It
+					// resolves ambiguity but says nothing about current ownership.
+					operationID = newOperationID()
+					ambiguous = false
+					continue
 				}
+				parsed, perr := time.Parse(time.RFC3339, newExpiry)
+				if perr != nil || !time.Now().Before(parsed) {
+					reportLoss("fresh heartbeat returned no future lease deadline")
+					return false
+				}
+				knownExpiry = parsed
 				retryDelay = initialRetryDelay
 				return true
 			}
@@ -335,6 +354,10 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 				reportLoss(fmt.Sprintf("heartbeat rejected: %s", clientErr.Message))
 				return false
 			}
+			if errors.As(err, &clientErr) && clientErr.Code != "internal_error" {
+				reportLoss(fmt.Sprintf("heartbeat rejected with %s", clientErr.Code))
+				return false
+			}
 			// A transient failure (transport or daemon hiccup) is retried with
 			// backoff only while the known lease window is still open; once the
 			// deadline passes without proof, ownership is gone.
@@ -343,6 +366,7 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 				return false
 			}
 			fmt.Fprintf(os.Stderr, "issue run: heartbeat failed, retrying within lease window: %v\n", err)
+			ambiguous = true
 			select {
 			case <-ctx.Done():
 				return false

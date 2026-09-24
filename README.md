@@ -55,18 +55,9 @@ dibs issue create --project demo --scope-kind project \
 # Workers ask for work that is open, unblocked, and not leased.
 dibs issue ready --project demo
 
-# Exactly one worker receives the lease. Claiming increments the issue's
-# version as a side effect — use the Version this prints, not one read
-# earlier from `issue get`, as --expected-version below.
-dibs issue claim demo-1 --ttl 900
-
-# While working, it renews the lease and records material context.
-dibs issue heartbeat demo-1 --lease-token "$LEASE_TOKEN" --ttl 900
-dibs issue note add demo-1 --body "Verified the failure path" --actor worker-1
-
-# It closes with evidence, or hands off and releases atomically.
-dibs issue close demo-1 --resolution done --expected-version 2 \
-  --lease-token "$LEASE_TOKEN" --note "Documented and verified"
+# Exactly one worker receives the lease. The launcher heartbeats and closes
+# or hands off around the child command; the token never enters argv.
+dibs issue run demo-1 --ttl 900 -- ./do-the-work.sh
 ```
 
 If two workers try to claim the same issue, one wins and the other receives a

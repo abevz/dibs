@@ -655,7 +655,7 @@ func (s *Server) tools() []map[string]any {
 			invocationModeField(),
 			operationIDField(),
 		})),
-		toolDefinition("heartbeat_issue", "Extend an active lease.", objectSchema([]schemaField{
+		toolDefinition("heartbeat_issue", "Extend an active lease. Exact operation_id replay returns historical expiry; use a new ID to prove current ownership.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "lease_token", fieldType: "string", description: "Current lease token.", required: true},
 			{name: "lease_generation", fieldType: "integer", description: "Fencing generation from the claim that created the lease.", required: true},
@@ -884,7 +884,7 @@ func invocationModeField() schemaField {
 }
 
 func operationIDField() schemaField {
-	return schemaField{name: "operation_id", fieldType: "string", description: "Optional caller-persisted retry ID; omitted generates a new ID returned in the tool result."}
+	return schemaField{name: "operation_id", fieldType: "string", description: "Optional caller-persisted retry ID. Reuse with identical arguments only to resolve an ambiguous outcome, never for lease liveness; omitted generates a new ID returned in the tool result."}
 }
 
 func toolDefinition(name, description string, inputSchema map[string]any) map[string]any {

@@ -34,7 +34,7 @@ func hasHelpFlag(args []string) bool {
 // of a claim/close/handoff-family command at the authoritative lifecycle
 // contract, instead of leaving it to rediscover required flags one error at
 // a time.
-const lifecycleHint = "run: dibs protocol   (full issue lifecycle: ready -> claim -> heartbeat -> close/handoff)"
+const lifecycleHint = "run: dibs protocol   (full issue lifecycle: ready -> claim -> heartbeat -> close/handoff)\nAgents: use `dibs issue run`; never put a lease token in argv. Manual commands read DIBS_LEASE_TOKEN or DIBS_LEASE_TOKEN_FILE when --lease-token is omitted."
 
 // usageErr builds a validation error that always shows the full usage line,
 // not just the one missing or malformed flag, so a caller sees every
@@ -692,7 +692,7 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 	return nil
 }
 
-const issueHeartbeatUsage = "Usage: dibs issue heartbeat <issue-id> --lease-token <token> --lease-generation <generation> [--ttl <seconds>] [--operation-id <id>]\n" + lifecycleHint
+const issueHeartbeatUsage = "Usage: dibs issue heartbeat <issue-id> --lease-generation <generation> [--ttl <seconds>] [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint
 
 func runIssueHeartbeat(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -735,7 +735,11 @@ func runIssueHeartbeat(ctx context.Context, c *client.Client, args []string) err
 	}
 
 	if leaseToken == "" {
-		return usageErr(issueHeartbeatUsage, "--lease-token is required")
+		var err error
+		leaseToken, err = leaseTokenFromEnvironment()
+		if err != nil {
+			return usageErr(issueHeartbeatUsage, err.Error())
+		}
 	}
 	if leaseGeneration <= 0 {
 		return usageErr(issueHeartbeatUsage, "--lease-generation is required")
@@ -753,7 +757,7 @@ func runIssueHeartbeat(ctx context.Context, c *client.Client, args []string) err
 	return nil
 }
 
-const issueReleaseUsage = "Usage: dibs issue release <issue-id> --lease-token <token> --lease-generation <generation> [--operation-id <id>]\n" + lifecycleHint
+const issueReleaseUsage = "Usage: dibs issue release <issue-id> --lease-generation <generation> [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint
 
 func runIssueRelease(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -790,7 +794,11 @@ func runIssueRelease(ctx context.Context, c *client.Client, args []string) error
 	}
 
 	if leaseToken == "" {
-		return usageErr(issueReleaseUsage, "--lease-token is required")
+		var err error
+		leaseToken, err = leaseTokenFromEnvironment()
+		if err != nil {
+			return usageErr(issueReleaseUsage, err.Error())
+		}
 	}
 	if leaseGeneration <= 0 {
 		return usageErr(issueReleaseUsage, "--lease-generation is required")
@@ -807,7 +815,7 @@ func runIssueRelease(ctx context.Context, c *client.Client, args []string) error
 	return nil
 }
 
-const issueHandoffUsage = "Usage: dibs issue handoff <issue-id> --lease-token <token> --lease-generation <generation> --note \"HANDOFF: next steps\" [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>]\n" + lifecycleHint
+const issueHandoffUsage = "Usage: dibs issue handoff <issue-id> --lease-generation <generation> --note \"HANDOFF: next steps\" [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint
 
 func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -856,7 +864,11 @@ func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error
 		}
 	}
 	if leaseToken == "" {
-		return usageErr(issueHandoffUsage, "--lease-token is required")
+		var err error
+		leaseToken, err = leaseTokenFromEnvironment()
+		if err != nil {
+			return usageErr(issueHandoffUsage, err.Error())
+		}
 	}
 	if leaseGeneration <= 0 {
 		return usageErr(issueHandoffUsage, "--lease-generation is required")
@@ -885,7 +897,7 @@ func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error
 	return nil
 }
 
-const issueUpdateUsage = "Usage: dibs issue update <issue-id> [--title ...] [--type <task|bug|feature|epic|chore>] [--external-key ...] [--description ...] [--acceptance ...] [--priority N] [--assignee ...] [--status ...] [--expected-version N|latest] [--force] [--lease-token ...] [--lease-generation <generation>] [--release] [--operation-id <id>]\n  --operation-id requires a numeric --expected-version for exact replay"
+const issueUpdateUsage = "Usage: dibs issue update <issue-id> [--title ...] [--type <task|bug|feature|epic|chore>] [--external-key ...] [--description ...] [--acceptance ...] [--priority N] [--assignee ...] [--status ...] [--expected-version N|latest] [--force] [--lease-generation <generation>] [--release] [--operation-id <id>] [--lease-token <token>]\n  --operation-id requires a numeric --expected-version for exact replay\n  Agents never pass a lease token in argv; use issue run or DIBS_LEASE_TOKEN_FILE."
 
 func runIssueUpdate(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -995,6 +1007,13 @@ func runIssueUpdate(ctx context.Context, c *client.Client, args []string) error 
 	}
 	req.Actor = actor
 
+	if req.LeaseToken == "" && req.LeaseGeneration > 0 {
+		var tokenErr error
+		req.LeaseToken, tokenErr = leaseTokenFromEnvironment()
+		if tokenErr != nil {
+			return usageErr(issueUpdateUsage, tokenErr.Error())
+		}
+	}
 	if req.LeaseToken != "" && req.LeaseGeneration <= 0 {
 		return usageErr(issueUpdateUsage, "--lease-generation is required with --lease-token (from `issue claim`)")
 	}
@@ -1010,7 +1029,7 @@ func runIssueUpdate(ctx context.Context, c *client.Client, args []string) error 
 	return nil
 }
 
-const issueCloseUsage = "Usage: dibs issue close <issue-id> --resolution done|cancelled --expected-version N --lease-token ... --lease-generation <generation> [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note \"what was done\"] [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>]\n" + lifecycleHint
+const issueCloseUsage = "Usage: dibs issue close <issue-id> --resolution done|cancelled --expected-version N --lease-generation <generation> [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note \"what was done\"] [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint
 
 func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -1087,7 +1106,11 @@ func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 		return usageErr(issueCloseUsage, "--expected-version is required (use the Version from your most recent `issue claim` response)")
 	}
 	if req.LeaseToken == "" {
-		return usageErr(issueCloseUsage, "--lease-token is required (from `issue claim`)")
+		var tokenErr error
+		req.LeaseToken, tokenErr = leaseTokenFromEnvironment()
+		if tokenErr != nil {
+			return usageErr(issueCloseUsage, tokenErr.Error())
+		}
 	}
 	if req.LeaseGeneration <= 0 {
 		return usageErr(issueCloseUsage, "--lease-generation is required (from `issue claim`)")

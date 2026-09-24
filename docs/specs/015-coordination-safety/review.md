@@ -4,6 +4,46 @@
 
 Specification and backlog slicing complete; implementation in progress.
 
+## AFC-SDD-0164 / afc-116 — agent lease-loss and retry protocol
+
+The canonical `docs/agent-protocol-v1.md` and byte-identical embedded
+`dibs protocol` now give one action table for success, contention/conflict,
+ownership loss, timeout before/after the known lease deadline, and daemon
+restart. `docs/api-v1.md` adds the same API decisions and a private-file curl
+example; MCP tool descriptions explain the operation-ID contract. The CLI is
+the primary shell-capable agent path, with MCP retained for shell-less clients.
+External publication requires fresh ownership proof and downstream generation
+fencing where available. This follows R-11 and the earlier
+`docs/specs/002-agent-protocol/requirements.md` contract.
+
+Owner replay decision: same-ID heartbeat replay returns its original,
+historical expiry even after replacement. `issue run` therefore keeps one
+operation ID across an ambiguous retry, then requires a new-ID heartbeat
+before treating the lease as live. It terminates the child if fresh proof
+fails. No `replayed` response marker was added: the caller already knows
+whether it reused an ID, so the optional marker is left for a follow-up.
+Owner token decision: agents never pass lease tokens in argv. `issue run`
+passes the token to its child in the environment; manual lifecycle commands
+accept `DIBS_LEASE_TOKEN` or a private `DIBS_LEASE_TOKEN_FILE`, with the
+legacy `AF_LEASE_TOKEN` alias when the canonical variable is unset.
+
+`TestIssueRunRetriesTransientHeartbeatFailure` proves exact-ID retry followed
+by new-ID liveness proof; `TestIssueRunTreatsReplayedHeartbeatExpiryAsHistorical`
+proves the child stops when that new request loses the lease, even after a
+successful historical replay. `TestIssueHeartbeatReadsPrivateTokenFileWithoutArgv`
+executes a built CLI against the mock daemon and checks the token reached the
+request without appearing in argv or output. `TestLifecycleTokenSourcesAvoidArgv`,
+`TestEmbeddedProtocolPublishesRetryAndTokenRules`, and
+`TestHeartbeatSchemaExplainsHistoricalReplay` cover source precedence,
+embedded help, and MCP schema. `make build`, `make test` (race), `make vet`,
+and `GOTOOLCHAIN=go1.26.4 make lint` passed; logs are
+`/tmp/afc-116-{build,test,vet,lint}.log`. An installed-binary smoke under a
+temporary HOME, DB, and socket used `make build-install BINDIR=<temp>/bin`,
+started scratch `dibsd`, then created, claimed, heartbeated with
+`DIBS_LEASE_TOKEN_FILE`, and closed an issue through installed `dibs`. The
+token did not enter argv. PR CI and independent final-content review gate
+the merge; the owner's service and database were untouched.
+
 ## AFC-SDD-0163 / afc-115 — safety telemetry and audit closure
 
 Heartbeat renewals now increment a bounded per-lease count and last-heartbeat

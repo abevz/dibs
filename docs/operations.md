@@ -308,10 +308,13 @@ dibs ls --project aion --columns short,status,title
 # Show the complete filter contract without contacting the daemon
 dibs ls --help
 
-# Claim and work on an issue
-dibs issue claim <issue-id> --holder my-agent --ttl 3600
-dibs issue heartbeat <issue-id> --lease-token <token> --ttl 3600
-dibs issue release <issue-id> --lease-token <token>
+# Claim, work, heartbeat, and close/handoff in one launcher
+dibs issue run <issue-id> --ttl 900 -- ./do-the-work.sh
+
+# Manual recovery only: set DIBS_LEASE_TOKEN_FILE to a private 0600 token
+# file and pass the non-secret generation from the claim response.
+dibs issue heartbeat <issue-id> --lease-generation <generation> --ttl 900
+dibs issue release <issue-id> --lease-generation <generation>
 
 # Ready view
 dibs issue ready --project test
