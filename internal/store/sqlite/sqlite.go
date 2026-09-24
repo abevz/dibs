@@ -41,12 +41,63 @@ func Open(dbPath string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := VerifyIntegrity(context.Background(), db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if err := restrictSQLiteFileModes(dbPath); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 
 	return db, nil
+}
+
+// VerifyIntegrity fails startup when SQLite reports structural corruption.
+func VerifyIntegrity(ctx context.Context, db *sql.DB) error {
+	var result string
+	if err := db.QueryRowContext(ctx, `PRAGMA integrity_check`).Scan(&result); err != nil {
+		return fmt.Errorf("SQLite integrity check failed: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("SQLite integrity check failed: %s", result)
+	}
+	return nil
+}
+
+// VerifyKnownMigrations rejects a database written by a newer or different
+// migration set before this binary can serve or alter it.
+func VerifyKnownMigrations(ctx context.Context, db *sql.DB, migrationsFS fs.FS) error {
+	entries, err := fs.Glob(migrationsFS, "*.sql")
+	if err != nil {
+		return fmt.Errorf("list migration files: %w", err)
+	}
+	known := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		known[entry] = true
+	}
+	var tableCount int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type='table' AND name='_migrations'`).Scan(&tableCount); err != nil {
+		return fmt.Errorf("check migration ledger: %w", err)
+	}
+	if tableCount == 0 {
+		return nil
+	}
+	rows, err := db.QueryContext(ctx, `SELECT name FROM _migrations`)
+	if err != nil {
+		return fmt.Errorf("read migration ledger: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return fmt.Errorf("read migration ledger: %w", err)
+		}
+		if !known[name] {
+			return fmt.Errorf("unknown applied migration %q; use a compatible dibsd binary or restore a verified backup", name)
+		}
+	}
+	return rows.Err()
 }
 
 func restrictSQLiteFileModes(dbPath string) error {

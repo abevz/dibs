@@ -501,6 +501,11 @@ diagnostic.
 
 **Dependencies.** `afc-101`, `afc-110`, `afc-112`, `afc-113`.
 
+**Implementation status.** A subprocess crash matrix, active/expired lease
+restart checks, live-WAL `VACUUM INTO` restore, and fail-closed startup checks
+are implemented for owner review. The packet-local evidence is in
+`review.md`; this task remains open until owner approval and merge.
+
 ## AFC-SDD-0163 / afc-115 — Minimum safety telemetry and audit closure
 
 **Problem.** Health is primarily DB ping/revision, heartbeat renewals append no

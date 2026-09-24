@@ -53,6 +53,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	if err := sqlite.VerifyKnownMigrations(context.Background(), db, migrations.FS); err != nil {
+		logger.Error("failed to verify migration state", "error", err)
+		os.Exit(1)
+	}
 
 	if err := sqlite.Migrate(context.Background(), db, migrations.FS); err != nil {
 		logger.Error("failed to run migrations", "error", err)
