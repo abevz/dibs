@@ -699,19 +699,43 @@ func claimIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 // replaced or expired lease. now is the daemon-supplied UTC wall-clock
 // boundary; the returned value is the stored new deadline.
 func HeartbeatLease(ctx context.Context, db *sql.DB, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int, now time.Time) (string, error) {
+	return HeartbeatLeaseWithOperation(ctx, db, issueID, core.HeartbeatRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, TTLSeconds: ttlSeconds}, now)
+}
+
+func HeartbeatLeaseWithOperation(ctx context.Context, db *sql.DB, issueID string, req core.HeartbeatRequest, now time.Time) (string, error) {
+	if err := core.ValidateOperationID(req.OperationID); err != nil {
+		return "", core.NewAPIError(core.ErrValidationFailed, err.Error())
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		outcome, err := heartbeatLeaseAttempt(ctx, db, issueID, req, now)
+		if errors.Is(err, errOperationRace) {
+			continue
+		}
+		return outcome, err
+	}
+	return "", core.NewAPIError(core.ErrConflict, "heartbeat raced a concurrent operation; retry")
+}
+
+func heartbeatLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req core.HeartbeatRequest, now time.Time) (string, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	fingerprintReq := req
+	fingerprintReq.OperationID = ""
+	fingerprint := requestFingerprint(fingerprintReq)
+	if outcome, found, err := replayOperation[string](ctx, tx, req.OperationID, core.OperationKindHeartbeat, issueID, fingerprint); err != nil || found {
+		return outcome, err
+	}
 
 	nowStr := now.UTC().Format(time.RFC3339)
-	newExpiresAt := now.UTC().Add(time.Duration(ttlSeconds) * time.Second).Format(time.RFC3339)
+	newExpiresAt := now.UTC().Add(time.Duration(req.TTLSeconds) * time.Second).Format(time.RFC3339)
 
 	result, err := tx.ExecContext(ctx,
 		`UPDATE leases SET expires_at = ?, updated_at = ?
 		 WHERE issue_id = ? AND lease_token = ? AND lease_generation = ? AND expires_at > ?`,
-		newExpiresAt, nowStr, issueID, leaseToken, leaseGeneration, nowStr,
+		newExpiresAt, nowStr, issueID, req.LeaseToken, req.LeaseGeneration, nowStr,
 	)
 	if err != nil {
 		return "", fmt.Errorf("update lease: %w", err)
@@ -721,10 +745,15 @@ func HeartbeatLease(ctx context.Context, db *sql.DB, issueID, leaseToken string,
 		return "", fmt.Errorf("heartbeat rows affected: %w", err)
 	}
 	if rows != 1 {
-		return "", leaseOwnershipError(ctx, tx, issueID, leaseToken, leaseGeneration)
+		return "", leaseOwnershipError(ctx, tx, issueID, req.LeaseToken, req.LeaseGeneration)
 	}
 
 	runCoordinationProofHook(ctx, coordinationProofHeartbeatBeforeCommit)
+	if req.OperationID != "" {
+		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindHeartbeat, issueID, "", fingerprint, newExpiresAt, now); err != nil {
+			return "", err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("commit tx: %w", err)
 	}
@@ -738,11 +767,35 @@ func HeartbeatLease(ctx context.Context, db *sql.DB, issueID, leaseToken string,
 // transition, lease removal, and issue_released event commit atomically. now
 // is the daemon-supplied UTC wall-clock boundary.
 func ReleaseLease(ctx context.Context, db *sql.DB, issueID, leaseToken string, leaseGeneration int64, now time.Time) error {
+	return ReleaseLeaseWithOperation(ctx, db, issueID, core.ReleaseRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration}, now)
+}
+
+func ReleaseLeaseWithOperation(ctx context.Context, db *sql.DB, issueID string, req core.ReleaseRequest, now time.Time) error {
+	if err := core.ValidateOperationID(req.OperationID); err != nil {
+		return core.NewAPIError(core.ErrValidationFailed, err.Error())
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		err := releaseLeaseAttempt(ctx, db, issueID, req, now)
+		if errors.Is(err, errOperationRace) {
+			continue
+		}
+		return err
+	}
+	return core.NewAPIError(core.ErrConflict, "release raced a concurrent operation; retry")
+}
+
+func releaseLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req core.ReleaseRequest, now time.Time) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	fingerprintReq := req
+	fingerprintReq.OperationID = ""
+	fingerprint := requestFingerprint(fingerprintReq)
+	if _, found, err := replayOperation[struct{}](ctx, tx, req.OperationID, core.OperationKindRelease, issueID, fingerprint); err != nil || found {
+		return err
+	}
 
 	nowStr := now.UTC().Format(time.RFC3339)
 
@@ -754,10 +807,10 @@ func ReleaseLease(ctx context.Context, db *sql.DB, issueID, leaseToken string, l
 	err = tx.QueryRowContext(ctx,
 		`SELECT holder, attempt_id, lease_generation FROM leases
 		 WHERE issue_id = ? AND lease_token = ? AND lease_generation = ? AND expires_at > ?`,
-		issueID, leaseToken, leaseGeneration, nowStr,
+		issueID, req.LeaseToken, req.LeaseGeneration, nowStr,
 	).Scan(&holder, &attemptID, &storedGeneration)
 	if err == sql.ErrNoRows {
-		return leaseOwnershipError(ctx, tx, issueID, leaseToken, leaseGeneration)
+		return leaseOwnershipError(ctx, tx, issueID, req.LeaseToken, req.LeaseGeneration)
 	}
 	if err != nil {
 		return fmt.Errorf("select active lease: %w", err)
@@ -767,7 +820,7 @@ func ReleaseLease(ctx context.Context, db *sql.DB, issueID, leaseToken string, l
 	// count closes any gap between the read above and this write.
 	result, err := tx.ExecContext(ctx,
 		`DELETE FROM leases WHERE issue_id = ? AND lease_token = ? AND lease_generation = ? AND expires_at > ?`,
-		issueID, leaseToken, leaseGeneration, nowStr,
+		issueID, req.LeaseToken, req.LeaseGeneration, nowStr,
 	)
 	if err != nil {
 		return fmt.Errorf("delete lease: %w", err)
@@ -808,6 +861,11 @@ func ReleaseLease(ctx context.Context, db *sql.DB, issueID, leaseToken string, l
 	}, nowStr); err != nil {
 		return err
 	}
+	if req.OperationID != "" {
+		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindRelease, issueID, holder, fingerprint, struct{}{}, now); err != nil {
+			return err
+		}
+	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
@@ -844,6 +902,20 @@ func leaseOwnershipError(ctx context.Context, tx *sql.Tx, issueID, leaseToken st
 // in one transaction. The note is authored by the current lease holder, so a
 // caller cannot separate the handoff evidence from its authorized owner.
 func HandoffLease(ctx context.Context, db *sql.DB, issueID string, req core.HandoffRequest) (core.HandoffResponse, error) {
+	if err := core.ValidateOperationID(req.OperationID); err != nil {
+		return core.HandoffResponse{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		outcome, err := handoffLeaseAttempt(ctx, db, issueID, req)
+		if errors.Is(err, errOperationRace) {
+			continue
+		}
+		return outcome, err
+	}
+	return core.HandoffResponse{}, core.NewAPIError(core.ErrConflict, "handoff raced a concurrent operation; retry")
+}
+
+func handoffLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req core.HandoffRequest) (core.HandoffResponse, error) {
 	if err := core.ValidateHandoffRequest(req); err != nil {
 		return core.HandoffResponse{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
 	}
@@ -861,8 +933,16 @@ func HandoffLease(ctx context.Context, db *sql.DB, issueID string, req core.Hand
 		return core.HandoffResponse{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	replayReq := req
+	replayReq.OperationID = ""
+	replayReq.InvocationMode = invocationMode
+	fingerprint := requestFingerprint(replayReq)
+	if outcome, found, err := replayOperation[core.HandoffResponse](ctx, tx, req.OperationID, core.OperationKindHandoff, issueID, fingerprint); err != nil || found {
+		return outcome, err
+	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	nowTime := time.Now().UTC()
+	now := nowTime.Format(time.RFC3339)
 	var holder, attemptID string
 	var leaseGeneration int64
 	err = tx.QueryRowContext(ctx,
@@ -933,10 +1013,16 @@ func HandoffLease(ctx context.Context, db *sql.DB, issueID string, req core.Hand
 	}
 
 	runCoordinationProofHook(ctx, coordinationProofHandoffBeforeCommit)
+	outcome := core.HandoffResponse{Note: note}
+	if req.OperationID != "" {
+		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindHandoff, issueID, holder, fingerprint, outcome, nowTime); err != nil {
+			return core.HandoffResponse{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return core.HandoffResponse{}, fmt.Errorf("commit handoff: %w", err)
 	}
-	return core.HandoffResponse{Note: note}, nil
+	return outcome, nil
 }
 
 func getActiveLease(ctx context.Context, db *sql.DB, issueID string) (*core.IssueLease, error) {
@@ -992,12 +1078,32 @@ func scanIssue(s scanner) (core.Issue, error) {
 
 // UpdateIssue updates an issue's mutable fields with optimistic concurrency.
 func UpdateIssue(ctx context.Context, db *sql.DB, issueID string, req core.UpdateIssueRequest) (core.Issue, error) {
+	if err := core.ValidateOperationID(req.OperationID); err != nil {
+		return core.Issue{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		outcome, err := updateIssueAttempt(ctx, db, issueID, req)
+		if errors.Is(err, errOperationRace) {
+			continue
+		}
+		return outcome, err
+	}
+	return core.Issue{}, core.NewAPIError(core.ErrConflict, "update raced a concurrent operation; retry")
+}
+
+func updateIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core.UpdateIssueRequest) (core.Issue, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return core.Issue{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	replayReq := req
+	replayReq.OperationID = ""
+	fingerprint := requestFingerprint(replayReq)
+	if outcome, found, err := replayOperation[core.Issue](ctx, tx, req.OperationID, core.OperationKindUpdate, issueID, fingerprint); err != nil || found {
+		return outcome, err
+	}
 
 	// Read version, state, and lease ownership after the immediate transaction
 	// begins. GetIssue intentionally hides expired lease rows, so using it here
@@ -1187,16 +1293,43 @@ func UpdateIssue(ctx context.Context, db *sql.DB, issueID string, req core.Updat
 		}
 	}
 
+	// Capture the public outcome before commit, while this transaction still
+	// owns the exact version it wrote. A later update must not change replay.
+	updated, err := issueOutcome(ctx, tx, issueID, now)
+	if err != nil {
+		return core.Issue{}, fmt.Errorf("read update outcome: %w", err)
+	}
+	if req.OperationID != "" {
+		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindUpdate, issueID, req.Actor, fingerprint, updated, time.Now().UTC()); err != nil {
+			return core.Issue{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return core.Issue{}, fmt.Errorf("commit tx: %w", err)
 	}
-
-	// Re-read to get updated version, timestamps, etc.
-	updated, _, err := GetIssue(ctx, db, issueID)
-	if err != nil {
-		return core.Issue{}, fmt.Errorf("re-read issue: %w", err)
-	}
 	return updated, nil
+}
+
+func issueOutcome(ctx context.Context, tx *sql.Tx, issueID, now string) (core.Issue, error) {
+	issue, err := scanIssue(tx.QueryRowContext(ctx,
+		`SELECT i.id, i.short_id, i.project_id, i.repository_id, i.worktree_id, i.scope_kind,
+		        i.issue_type, i.title, i.external_key, i.description, i.acceptance_criteria, i.status, i.priority, i.assignee, i.version,
+		        i.claimed_at, i.closed_at, i.created_at, i.updated_at,
+		        COALESCE(l.holder, ''), COALESCE(l.expires_at, '')
+		 FROM issues i LEFT JOIN leases l ON l.issue_id = i.id AND l.expires_at > ?
+		 WHERE i.id = ?`, now, issueID))
+	if err != nil {
+		return core.Issue{}, err
+	}
+	withDependencies, err := populateDependencies(ctx, tx, []core.Issue{issue})
+	if err != nil {
+		return core.Issue{}, err
+	}
+	withTags, err := populateTags(ctx, tx, withDependencies)
+	if err != nil {
+		return core.Issue{}, err
+	}
+	return withTags[0], nil
 }
 
 // buildChangedFields returns the list of field names that were changed in the update request.
@@ -1232,6 +1365,20 @@ func buildChangedFields(req core.UpdateIssueRequest) []string {
 // CloseIssue closes a non-terminal issue through the agent path. The caller
 // must prove it still owns an active lease for the exact issue version.
 func CloseIssue(ctx context.Context, db *sql.DB, issueID string, req core.CloseIssueRequest) (core.CloseIssueResult, error) {
+	if err := core.ValidateOperationID(req.OperationID); err != nil {
+		return core.CloseIssueResult{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		outcome, err := closeIssueAttempt(ctx, db, issueID, req)
+		if errors.Is(err, errOperationRace) {
+			continue
+		}
+		return outcome, err
+	}
+	return core.CloseIssueResult{}, core.NewAPIError(core.ErrConflict, "close raced a concurrent operation; retry")
+}
+
+func closeIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core.CloseIssueRequest) (core.CloseIssueResult, error) {
 	if err := validateResolution(req.Resolution); err != nil {
 		return core.CloseIssueResult{}, err
 	}
@@ -1241,12 +1388,20 @@ func CloseIssue(ctx context.Context, db *sql.DB, issueID string, req core.CloseI
 		return core.CloseIssueResult{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	nowTime := time.Now().UTC()
+	now := nowTime.Format(time.RFC3339)
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return core.CloseIssueResult{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	replayReq := req
+	replayReq.OperationID = ""
+	replayReq.InvocationMode = invocationMode
+	fingerprint := requestFingerprint(replayReq)
+	if outcome, found, err := replayOperation[core.CloseIssueResult](ctx, tx, req.OperationID, core.OperationKindClose, issueID, fingerprint); err != nil || found {
+		return outcome, err
+	}
 
 	issue, err := getIssueForTerminalTransition(ctx, tx, issueID, req.ExpectedVersion)
 	if err != nil {
@@ -1328,6 +1483,11 @@ func CloseIssue(ctx context.Context, db *sql.DB, issueID string, req core.CloseI
 	}
 	if err := insertEvent(ctx, tx, issueID, req.Actor, "issue_closed", payload, now); err != nil {
 		return core.CloseIssueResult{}, err
+	}
+	if req.OperationID != "" {
+		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindClose, issueID, req.Actor, fingerprint, result, nowTime); err != nil {
+			return core.CloseIssueResult{}, err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

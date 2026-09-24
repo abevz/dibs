@@ -426,8 +426,8 @@ creates a new logical action. No caller can recover a token from holder name.
 
 **Dependencies.** `afc-101`, `afc-111`.
 
-**Implementation status.** The remaining create slice is implemented and
-locally verified in `afc-112`; the PR awaits owner review and merge. Store,
+**Implementation status.** The remaining create slice was merged in `afc-112`
+via PR #72 (`9ac2eec`). Store,
 HTTP, CLI, and production-migration concurrency evidence is in `review.md`.
 
 ## AFC-SDD-0161 / afc-113 — Retry-safe lease lifecycle mutations
@@ -458,6 +458,10 @@ Same ID with changed payload fails. Different operation IDs continue to enforce
 current lease/version/state normally.
 
 **Dependencies.** `afc-101`, `afc-111`.
+
+**Implementation status.** Implemented in the `afc-113` worktree for owner
+review. Store, HTTP, and explicit CLI `--operation-id` paths accept the same
+ledger identity; the verification ledger is in `review.md`.
 
 ## AFC-SDD-0162 / afc-114 — Crash, restart, migration, and restore proof
 

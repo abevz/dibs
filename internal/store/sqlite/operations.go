@@ -130,3 +130,29 @@ func decodeCreateOutcome(rec *operationRecord) (core.Issue, error) {
 	}
 	return issue, nil
 }
+
+// requestFingerprint includes every caller-supplied argument except the
+// operation ID itself. Struct JSON has stable field order and no map fields.
+func requestFingerprint(req any) string {
+	payload, _ := json.Marshal(req)
+	return core.OperationFingerprint(map[string]string{"request": string(payload)})
+}
+
+func replayOperation[T any](ctx context.Context, tx *sql.Tx, operationID, kind, targetID, fingerprint string) (T, bool, error) {
+	var zero T
+	if operationID == "" {
+		return zero, false, nil
+	}
+	rec, err := lookupOperation(ctx, tx, operationID)
+	if err != nil || rec == nil {
+		return zero, false, err
+	}
+	if err := authorizeReplay(rec, kind, targetID, fingerprint); err != nil {
+		return zero, false, err
+	}
+	var outcome T
+	if err := json.Unmarshal([]byte(rec.OutcomeJSON), &outcome); err != nil {
+		return zero, false, fmt.Errorf("decode %s outcome: %w", kind, err)
+	}
+	return outcome, true, nil
+}

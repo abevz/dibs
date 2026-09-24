@@ -38,12 +38,12 @@ var commandRoutes = map[string]argRoute{
 	"issue get":         {"--full?", 1}, "issue list": {"--project --status --type --repo --worktree --assignee --external-key --tag --limit --offset --columns", 0},
 	"issue ready":     {"--project --repo --tag --columns", 0},
 	"issue claim":     {"--holder --actor --ttl --session-id --invocation-mode --operation-id --retry-last?", 1},
-	"issue heartbeat": {"--lease-token --lease-generation --ttl", 1}, "issue release": {"--lease-token --lease-generation", 1},
-	"issue handoff":          {"--lease-token --lease-generation --note --invocation-mode", 1},
+	"issue heartbeat": {"--lease-token --lease-generation --ttl --operation-id", 1}, "issue release": {"--lease-token --lease-generation --operation-id", 1},
+	"issue handoff":          {"--lease-token --lease-generation --note --invocation-mode --operation-id", 1},
 	"issue run":              {"--actor --ttl --close-resolution --branch --pr-url --commit-sha --note --invocation-mode", 1},
-	"issue edit":             {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release?", 1},
-	"issue update":           {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release?", 1},
-	"issue close":            {"--resolution --expected-version --lease-token --lease-generation --branch --pr-url --commit-sha --note --invocation-mode", 1},
+	"issue edit":             {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release? --operation-id", 1},
+	"issue update":           {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release? --operation-id", 1},
+	"issue close":            {"--resolution --expected-version --lease-token --lease-generation --branch --pr-url --commit-sha --note --invocation-mode --operation-id", 1},
 	"issue operator-close":   {"--resolution --expected-version --force? --reason --branch --pr-url --commit-sha --note", 1},
 	"issue operator-reopen":  {"--expected-version --force? --reason", 1},
 	"issue operator-release": {"--expected-version --force? --reason", 1},
@@ -150,6 +150,7 @@ func validateCommandArgs(args []string) error {
 	}
 	allowed := make(map[string]bool)
 	seen := make(map[string]bool)
+	values := make(map[string]string)
 	for _, flag := range strings.Fields(route.flags) {
 		bare := strings.TrimSuffix(flag, "?")
 		allowed[bare] = !strings.HasSuffix(flag, "?")
@@ -182,6 +183,7 @@ func validateCommandArgs(args []string) error {
 		if err := validateFlagValue(key, a, v); err != nil {
 			return err
 		}
+		values[a] = v
 		i++
 	}
 	if route.pos >= 0 && positionals != route.pos {
@@ -222,6 +224,10 @@ func validateCommandArgs(args []string) error {
 	}
 	if (key == "issue edit" || key == "issue update") && seen["--lease-token"] && !seen["--lease-generation"] {
 		return argumentError("--lease-generation is required with --lease-token")
+	}
+	if (key == "issue edit" || key == "issue update") && seen["--operation-id"] &&
+		(!seen["--expected-version"] || values["--expected-version"] == "latest" || seen["--force"]) {
+		return argumentError("--operation-id requires an explicit numeric --expected-version; latest/force cannot replay the original request")
 	}
 	return nil
 }

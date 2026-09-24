@@ -4,6 +4,56 @@
 
 Specification and backlog slicing complete; implementation in progress.
 
+## AFC-SDD-0161 / afc-113 — retry-safe lifecycle mutations
+
+Heartbeat, release, update, handoff, and ordinary close now accept an optional
+caller-owned `operation_id` through core, HTTP, client, CLI, and SQLite. A
+transaction checks the ledger before current lease/version/status, then records
+the original public outcome in the same commit as the mutation. Exact replay
+does not renew expiry twice, change the issue version twice, or duplicate a
+release event, HANDOFF note, close note, or close event. A changed payload,
+target, or operation kind returns `idempotency_conflict` (409). Update captures
+its complete public issue inside the mutation transaction, before any later
+update can change the returned result.
+
+The API and explicit CLI `--operation-id` accept caller-persisted IDs. Omitted
+IDs keep the existing behavior per `docs/api-v1.md`; callers without an ID must
+reconcile an ambiguous outcome before attempting a new logical action.
+Independent review found that update's `latest`/omitted version would change
+the fingerprint on retry. The CLI now requires an explicit numeric
+`--expected-version` whenever `--operation-id` is supplied, and argument
+tests prove `latest`, `--force`, and omission fail before daemon contact.
+Automatic retry policy, `issue run` retry decisions, operator overrides, MCP
+argument propagation (`afc-140`), and crash/restore proof (`afc-114`) remain
+outside this slice. Fingerprints include the presented lease token through a
+hash, generation, expected version, actor, normalized invocation mode, and all
+other request fields; operation IDs and lease tokens are absent from events.
+
+`TestHeartbeatOperationReplaysOriginalExpiry`,
+`TestReleaseOperationReplaysAfterReplacement`,
+`TestHandoffOperationReplaysNoteAndRelease`,
+`TestCloseOperationReplaysTerminalOutcome`, and
+`TestUpdateOperationReplaysOriginalIssue` use production embedded migrations
+and independent file-backed SQLite handles. They simulate a lost response by
+discarding the first result, change current state, retry the original request,
+and check the exact outcome and one set of effects. Each also checks a changed
+payload and a new operation ID against stale state.
+`TestLifecycleOperationKindConflictAndConcurrentHeartbeat` races two
+independent handles with the same ID but different daemon times; both receive
+one stored expiry and there is one ledger row. The HTTP table test exercises
+all five endpoints for original response, replay, and typed 409 conflict.
+CLI argument tests cover each new flag.
+
+`make test` (race), `make build`, `make vet`, and
+`GOTOOLCHAIN=go1.26.4 make lint` passed; logs are under
+`/tmp/afc-113-{test,build,vet,lint}-final.log` after the review correction.
+A temporary `HOME`, `DIBS_DB`, and
+`DIBS_SOCKET` with `make build-install BINDIR=<temp>/bin` launched a scratch
+`dibsd`; installed `dibs` created and claimed `smoke-1`, then repeated the
+same heartbeat and close IDs. Output: `scratch install and daemon: ok;
+heartbeat replay: True close replay: True issue: smoke-1`. The owner's daemon
+and live database were not changed. This PR awaits owner review and merge.
+
 ## AFC-SDD-0160 / afc-112 — retry-safe create
 
 The claim half was delivered by `afc-111`. Create now accepts an optional

@@ -327,17 +327,39 @@ This is the compact route-to-implementation inventory for the current daemon.
   operation ID is genuinely lost, `operator-release` remains the separate,
   audited break-glass path.
 - `POST /v1/issues/{issue_id}/heartbeat` — body: `lease_token`,
-  `ttl_seconds`; extends `expires_at`; appends no event
-- `POST /v1/issues/{issue_id}/release` — body: `lease_token`; deletes the
+  `lease_generation`, `ttl_seconds`, optional `operation_id`; extends
+  `expires_at`; appends no event. An exact retry returns the original expiry.
+- `POST /v1/issues/{issue_id}/release` — body: `lease_token`,
+  `lease_generation`, optional `operation_id`; deletes the
   lease, moves `in_progress -> open` unless left `blocked`, and records the
-  attempt outcome. Lazy replacement of an expired lease emits `lease_expired`
+  attempt outcome. Exact replay returns the original 204 without another
+  transition. Lazy replacement of an expired lease emits `lease_expired`
   before the next `issue_claimed` event.
-- `POST /v1/issues/{issue_id}/handoff` — body: `lease_token`, `note`; requires
+- `POST /v1/issues/{issue_id}/handoff` — body: `lease_token`,
+  `lease_generation`, `note`, optional `operation_id`; requires
   a non-empty note beginning `HANDOFF:` and atomically records it under the
   active lease holder before releasing the lease. The event sequence is
   `note_added` then `issue_released` with `end_reason: handoff`; lease tokens
   never enter either event payload. Missing, wrong, or expired leases fail with
-  `lease_expired` and leave no note or release behind.
+  `lease_expired` and leave no note or release behind. Exact replay returns the
+  original note ID without another note or release.
+
+Heartbeat, release, handoff, `PATCH /v1/issues/{issue_id}`, and ordinary
+`POST /v1/issues/{issue_id}/close` accept an optional client-generated
+`operation_id` under the claim/create ledger contract above. The same ID,
+kind, target, and request returns the original public outcome before checking
+the current lease/version/status; changed arguments or reuse across kinds
+return `idempotency_conflict` (409). The ledger row and mutation commit
+together. A caller must persist the ID and repeat the original arguments,
+including `expected_version`, after an ambiguous response. The CLI accepts
+`--operation-id` on these commands; omitting it keeps legacy behavior and an
+ambiguous outcome then requires a read/reconciliation step before any new
+logical action. Automatic retry policy and operator commands are outside this
+contract.
+For `dibs issue update` / `issue edit`, `--operation-id` also requires an
+explicit numeric `--expected-version`; `latest`, `--force`, or omission would
+resolve a different version on retry and are rejected before contacting the
+daemon.
 
 ## Notes, links, dependencies, events
 

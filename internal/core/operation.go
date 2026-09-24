@@ -40,8 +40,13 @@ func CreateFingerprintFields(projectKey string, req CreateIssueRequest) map[stri
 // ledger identity, so the same operation_id presented for a different kind is
 // a conflict rather than a replay (AFC-SDD-0159).
 const (
-	OperationKindClaim  = "claim"
-	OperationKindCreate = "create"
+	OperationKindClaim     = "claim"
+	OperationKindCreate    = "create"
+	OperationKindHeartbeat = "heartbeat"
+	OperationKindRelease   = "release"
+	OperationKindUpdate    = "update"
+	OperationKindHandoff   = "handoff"
+	OperationKindClose     = "close"
 )
 
 // MaxOperationIDLength bounds the opaque client-generated identifier. The
