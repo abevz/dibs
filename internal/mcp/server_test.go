@@ -15,9 +15,11 @@ type fakeClient struct {
 	getIssueResp           core.Issue
 	getLeaseResp           *core.IssueLease
 	readyResp              []core.Issue
+	createResp             core.Issue
 	claimResp              core.ClaimResponse
 	heartbeatResp          string
 	handoffResp            core.HandoffResponse
+	updateResp             core.Issue
 	noteResp               core.Note
 	notesResp              []core.Note
 	eventsResp             []core.Event
@@ -34,6 +36,12 @@ type fakeClient struct {
 	lastNoteAuthor         string
 	lastNoteBody           string
 	lastCloseReq           core.CloseIssueRequest
+	lastCreateReq          core.CreateIssueRequest
+	lastClaimReq           core.ClaimRequest
+	lastHeartbeatReq       core.HeartbeatRequest
+	lastReleaseReq         core.ReleaseRequest
+	lastHandoffReq         core.HandoffRequest
+	lastUpdateReq          core.UpdateIssueRequest
 	lastOperatorCloseReq   core.OperatorCloseIssueRequest
 	lastOperatorReopenReq  core.OperatorReopenIssueRequest
 	lastOperatorReleaseReq core.OperatorReleaseIssueRequest
@@ -51,6 +59,10 @@ func (f *fakeClient) ListReadyIssues(_ context.Context, _, _ string, tags []stri
 	f.lastReadyTags = tags
 	return f.readyResp, nil
 }
+func (f *fakeClient) CreateIssue(_ context.Context, req core.CreateIssueRequest) (core.Issue, error) {
+	f.lastCreateReq = req
+	return f.createResp, nil
+}
 func (f *fakeClient) ClaimIssue(_ context.Context, issueID, holder string, ttlSeconds int) (core.ClaimResponse, error) {
 	f.lastIssueID = issueID
 	f.lastHolder = holder
@@ -67,11 +79,24 @@ func (f *fakeClient) ClaimIssueWithSession(_ context.Context, issueID, holder st
 func (f *fakeClient) ClaimIssueWithSessionAndMode(ctx context.Context, issueID, holder string, ttlSeconds int, sessionID, _ string) (core.ClaimResponse, error) {
 	return f.ClaimIssueWithSession(ctx, issueID, holder, ttlSeconds, sessionID)
 }
+func (f *fakeClient) ClaimIssueWithRequest(_ context.Context, issueID string, req core.ClaimRequest) (core.ClaimResponse, error) {
+	f.lastIssueID, f.lastClaimReq = issueID, req
+	f.lastHolder, f.lastTTL, f.lastSessionID = req.Holder, req.TTLSeconds, req.SessionID
+	return f.claimResp, nil
+}
 func (f *fakeClient) HeartbeatLease(_ context.Context, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int) (string, error) {
 	f.lastIssueID = issueID
 	f.lastLeaseToken = leaseToken
 	f.lastTTL = ttlSeconds
 	return f.heartbeatResp, nil
+}
+func (f *fakeClient) HeartbeatLeaseWithOperation(ctx context.Context, issueID string, req core.HeartbeatRequest) (string, error) {
+	f.lastHeartbeatReq = req
+	return f.HeartbeatLease(ctx, issueID, req.LeaseToken, req.LeaseGeneration, req.TTLSeconds)
+}
+func (f *fakeClient) ReleaseLeaseWithOperation(_ context.Context, issueID string, req core.ReleaseRequest) error {
+	f.lastIssueID, f.lastReleaseReq = issueID, req
+	return nil
 }
 func (f *fakeClient) HandoffLease(_ context.Context, issueID, leaseToken string, leaseGeneration int64, note string) (core.HandoffResponse, error) {
 	f.lastIssueID = issueID
@@ -81,6 +106,14 @@ func (f *fakeClient) HandoffLease(_ context.Context, issueID, leaseToken string,
 }
 func (f *fakeClient) HandoffLeaseWithMode(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, note, _ string) (core.HandoffResponse, error) {
 	return f.HandoffLease(ctx, issueID, leaseToken, leaseGeneration, note)
+}
+func (f *fakeClient) HandoffLeaseWithOperation(ctx context.Context, issueID string, req core.HandoffRequest) (core.HandoffResponse, error) {
+	f.lastHandoffReq = req
+	return f.HandoffLease(ctx, issueID, req.LeaseToken, req.LeaseGeneration, req.Note)
+}
+func (f *fakeClient) UpdateIssue(_ context.Context, issueID string, req core.UpdateIssueRequest) (core.Issue, error) {
+	f.lastIssueID, f.lastUpdateReq = issueID, req
+	return f.updateResp, nil
 }
 func (f *fakeClient) CreateNote(_ context.Context, issueID, author, body string) (core.Note, error) {
 	f.lastIssueID = issueID

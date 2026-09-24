@@ -19,6 +19,14 @@ failure. The journal is under `~/.local/state/dibs/operations/` or the active
 legacy path; it must stay private because claim operation IDs can recover
 lease tokens. This is operation retry, not title-based deduplication.
 
+For MCP clients, `create_issue`, `claim_issue`, `heartbeat_issue`,
+`release_issue`, `update_issue`, `handoff_issue`, and `close_issue` accept the
+same optional `operation_id` contract. Generate and retain an ID before the
+first call when the entire MCP response might be lost. The server generates
+and returns an ID when omitted, but that ID is recoverable only if the caller
+receives the result or tool error. Retry with the identical arguments;
+changed arguments return `idempotency_conflict`. See `docs/mcp-server-v1.md`.
+
 ## Session loop
 
 Every agent session follows this cycle:

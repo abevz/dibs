@@ -4,6 +4,40 @@
 
 Specification and backlog slicing complete; implementation in progress.
 
+## afc-140 — MCP operation ID propagation
+
+The MCP create, claim, heartbeat, release, update, handoff, and close tools
+accept an optional caller-provided `operation_id`, validate it against the
+core contract, and forward it unchanged to the daemon. If omitted, MCP
+generates a UUID and returns it in success or tool-error structured content.
+The result retains its existing fields; an exact retry returns the daemon's
+original committed result, and a changed request preserves the typed
+`idempotency_conflict`. MCP adds no automatic retry policy. A caller that can
+lose the entire response must persist its own ID before the first request;
+claim IDs are private because replay can return the lease token.
+
+`TestMCPOperationIDWireReplayAgainstTestDaemon` sends raw NDJSON to
+`Server.Run` against a separate daemon and SQLite initialized with the real
+embedded migrations. It covers exact replay of all seven operations, changed
+create/claim/heartbeat conflicts, one create event, three fresh claim events,
+one close event, and no operation IDs in event payloads. Schema and
+generated-ID/error tests cover optional tool arguments, forwarding,
+validation, and typed error content. Existing invocation-mode tests pass with
+the same result shape.
+
+`make build`, `make test` (race), `make vet`, and
+`GOTOOLCHAIN=go1.26.4 make lint` passed; logs are
+`/tmp/afc-140-{build,test,vet,lint}.log`. `make build-install` targeted a
+temporary bin directory; installed `dibsd`, `dibs`, and `dibs-mcp` used a
+scratch HOME, DB, and socket to create `smoke-1` and replay the same MCP
+create ID with an identical result. No live daemon or DB was touched.
+Cross-reference: R-09 in this packet and the transport contract in
+`docs/mcp-server-v1.md`, with the retry rule also in
+`docs/agent-protocol-v1.md` and its embedded CLI copy; no new idempotency
+semantics were introduced. The protocol-copy check and targeted
+`go test ./cmd/dibs ./internal/mcp -count=1` passed after that doc update.
+Pending independent review and PR CI before merge.
+
 ## AFC-SDD-0161 / afc-113 — retry-safe lifecycle mutations
 
 Heartbeat, release, update, handoff, and ordinary close now accept an optional

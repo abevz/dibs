@@ -13,6 +13,7 @@ import (
 
 	"github.com/abevz/dibs/internal/client"
 	"github.com/abevz/dibs/internal/core"
+	"github.com/google/uuid"
 )
 
 const (
@@ -25,12 +26,18 @@ type CoordinatorClient interface {
 	Health(ctx context.Context) (core.Health, error)
 	GetIssue(ctx context.Context, issueID string) (core.Issue, *core.IssueLease, error)
 	ListReadyIssues(ctx context.Context, project, repo string, tags []string) ([]core.Issue, error)
+	CreateIssue(ctx context.Context, req core.CreateIssueRequest) (core.Issue, error)
 	ClaimIssue(ctx context.Context, issueID, holder string, ttlSeconds int) (core.ClaimResponse, error)
 	ClaimIssueWithSession(ctx context.Context, issueID, holder string, ttlSeconds int, sessionID string) (core.ClaimResponse, error)
 	ClaimIssueWithSessionAndMode(ctx context.Context, issueID, holder string, ttlSeconds int, sessionID, invocationMode string) (core.ClaimResponse, error)
+	ClaimIssueWithRequest(ctx context.Context, issueID string, req core.ClaimRequest) (core.ClaimResponse, error)
 	HeartbeatLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int) (string, error)
+	HeartbeatLeaseWithOperation(ctx context.Context, issueID string, req core.HeartbeatRequest) (string, error)
+	ReleaseLeaseWithOperation(ctx context.Context, issueID string, req core.ReleaseRequest) error
 	HandoffLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, note string) (core.HandoffResponse, error)
 	HandoffLeaseWithMode(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, note, invocationMode string) (core.HandoffResponse, error)
+	HandoffLeaseWithOperation(ctx context.Context, issueID string, req core.HandoffRequest) (core.HandoffResponse, error)
+	UpdateIssue(ctx context.Context, issueID string, req core.UpdateIssueRequest) (core.Issue, error)
 	CreateNote(ctx context.Context, issueID, author, body string) (core.Note, error)
 	CreateNoteWithMode(ctx context.Context, issueID, author, body, invocationMode string) (core.Note, error)
 	ListNotes(ctx context.Context, issueID string) ([]core.Note, error)
@@ -234,6 +241,26 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			return nil, err
 		}
 		return map[string]any{"issues": issues}, nil
+	case "create_issue":
+		var args core.CreateIssueRequest
+		if err := unmarshalArgs(params.Arguments, &args); err != nil {
+			return nil, err
+		}
+		actor, err := s.resolveActor(args.Actor, "")
+		if err != nil {
+			return nil, err
+		}
+		args.Actor = actor
+		if err := core.ValidateCreateIssue(args); err != nil {
+			return nil, err
+		}
+		id, err := toolOperationID(args.OperationID)
+		if err != nil {
+			return nil, err
+		}
+		args.OperationID = id
+		issue, err := s.client.CreateIssue(ctx, args)
+		return operationOutcome(id, map[string]any{"issue": issue}, err)
 	case "claim_issue":
 		var args struct {
 			IssueID        string `json:"issue_id"`
@@ -242,6 +269,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			TTLSeconds     int    `json:"ttl_seconds"`
 			SessionID      string `json:"session_id"`
 			InvocationMode string `json:"invocation_mode"`
+			OperationID    string `json:"operation_id"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
@@ -257,13 +285,22 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		if err != nil {
 			return nil, err
 		}
-		return s.client.ClaimIssueWithSessionAndMode(ctx, args.IssueID, holder, args.TTLSeconds, args.SessionID, mode)
+		id, err := toolOperationID(args.OperationID)
+		if err != nil {
+			return nil, err
+		}
+		claim, err := s.client.ClaimIssueWithRequest(ctx, args.IssueID, core.ClaimRequest{
+			Holder: holder, TTLSeconds: args.TTLSeconds, SessionID: args.SessionID,
+			InvocationMode: mode, OperationID: id,
+		})
+		return operationOutcome(id, claim, err)
 	case "heartbeat_issue":
 		var args struct {
 			IssueID         string `json:"issue_id"`
 			LeaseToken      string `json:"lease_token"`
 			LeaseGeneration int64  `json:"lease_generation"`
 			TTLSeconds      int    `json:"ttl_seconds"`
+			OperationID     string `json:"operation_id"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
@@ -274,11 +311,36 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		if args.LeaseGeneration <= 0 {
 			return nil, fmt.Errorf("lease_generation is required")
 		}
-		expiresAt, err := s.client.HeartbeatLease(ctx, args.IssueID, args.LeaseToken, args.LeaseGeneration, args.TTLSeconds)
+		id, err := toolOperationID(args.OperationID)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"expires_at": expiresAt}, nil
+		expiresAt, err := s.client.HeartbeatLeaseWithOperation(ctx, args.IssueID, core.HeartbeatRequest{
+			LeaseToken: args.LeaseToken, LeaseGeneration: args.LeaseGeneration,
+			TTLSeconds: args.TTLSeconds, OperationID: id,
+		})
+		return operationOutcome(id, map[string]any{"expires_at": expiresAt}, err)
+	case "release_issue":
+		var args struct {
+			IssueID         string `json:"issue_id"`
+			LeaseToken      string `json:"lease_token"`
+			LeaseGeneration int64  `json:"lease_generation"`
+			OperationID     string `json:"operation_id"`
+		}
+		if err := unmarshalArgs(params.Arguments, &args); err != nil {
+			return nil, err
+		}
+		if args.IssueID == "" || args.LeaseToken == "" || args.LeaseGeneration <= 0 {
+			return nil, fmt.Errorf("issue_id, lease_token, and lease_generation are required")
+		}
+		id, err := toolOperationID(args.OperationID)
+		if err != nil {
+			return nil, err
+		}
+		err = s.client.ReleaseLeaseWithOperation(ctx, args.IssueID, core.ReleaseRequest{
+			LeaseToken: args.LeaseToken, LeaseGeneration: args.LeaseGeneration, OperationID: id,
+		})
+		return operationOutcome(id, map[string]any{"status": "ok"}, err)
 	case "handoff_issue":
 		var args struct {
 			IssueID         string `json:"issue_id"`
@@ -286,6 +348,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			LeaseGeneration int64  `json:"lease_generation"`
 			Note            string `json:"note"`
 			InvocationMode  string `json:"invocation_mode"`
+			OperationID     string `json:"operation_id"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
@@ -303,7 +366,15 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		if err != nil {
 			return nil, err
 		}
-		return s.client.HandoffLeaseWithMode(ctx, args.IssueID, args.LeaseToken, args.LeaseGeneration, args.Note, mode)
+		id, err := toolOperationID(args.OperationID)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := s.client.HandoffLeaseWithOperation(ctx, args.IssueID, core.HandoffRequest{
+			LeaseToken: args.LeaseToken, LeaseGeneration: args.LeaseGeneration,
+			Note: args.Note, InvocationMode: mode, OperationID: id,
+		})
+		return operationOutcome(id, resp, err)
 	case "add_note":
 		var args struct {
 			IssueID        string `json:"issue_id"`
@@ -397,6 +468,29 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			return nil, err
 		}
 		return map[string]any{"events": events}, nil
+	case "update_issue":
+		var args struct {
+			IssueID string `json:"issue_id"`
+			core.UpdateIssueRequest
+		}
+		if err := unmarshalArgs(params.Arguments, &args); err != nil {
+			return nil, err
+		}
+		if args.IssueID == "" || args.ExpectedVersion <= 0 {
+			return nil, fmt.Errorf("issue_id and expected_version are required")
+		}
+		actor, err := s.resolveActor(args.Actor, "")
+		if err != nil {
+			return nil, err
+		}
+		id, err := toolOperationID(args.OperationID)
+		if err != nil {
+			return nil, err
+		}
+		req := args.UpdateIssueRequest
+		req.Actor, req.OperationID = actor, id
+		issue, err := s.client.UpdateIssue(ctx, args.IssueID, req)
+		return operationOutcome(id, map[string]any{"issue": issue}, err)
 	case "close_issue":
 		var args struct {
 			IssueID         string `json:"issue_id"`
@@ -410,6 +504,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			Actor           string `json:"actor"`
 			Note            string `json:"note"`
 			InvocationMode  string `json:"invocation_mode"`
+			OperationID     string `json:"operation_id"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
@@ -428,7 +523,11 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		if err != nil {
 			return nil, err
 		}
-		return s.client.CloseIssue(ctx, args.IssueID, core.CloseIssueRequest{
+		id, err := toolOperationID(args.OperationID)
+		if err != nil {
+			return nil, err
+		}
+		result, err := s.client.CloseIssue(ctx, args.IssueID, core.CloseIssueRequest{
 			Resolution:      args.Resolution,
 			Branch:          args.Branch,
 			PRURL:           args.PRURL,
@@ -439,7 +538,9 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			Actor:           actor,
 			Note:            args.Note,
 			InvocationMode:  mode,
+			OperationID:     id,
 		})
+		return operationOutcome(id, result, err)
 	case "operator_close_issue":
 		var args struct {
 			IssueID         string `json:"issue_id"`
@@ -530,6 +631,21 @@ func (s *Server) tools() []map[string]any {
 			{name: "repo", fieldType: "string", description: "Optional repository id or logical name."},
 			{name: "tags", fieldType: "array", itemType: "string", description: "Optional namespaced tags; an issue must carry every listed tag (AND)."},
 		})),
+		toolDefinition("create_issue", "Create an issue with a retry-safe operation ID.", objectSchema([]schemaField{
+			{name: "project", fieldType: "string", description: "Project key.", required: true},
+			{name: "scope_kind", fieldType: "string", description: "project, repository, or worktree.", required: true},
+			{name: "title", fieldType: "string", description: "Issue title.", required: true},
+			{name: "issue_type", fieldType: "string", description: "Optional task, bug, feature, epic, or chore."},
+			{name: "repo", fieldType: "string", description: "Repository reference for repository/worktree scope."},
+			{name: "worktree", fieldType: "string", description: "Optional worktree reference."},
+			{name: "external_key", fieldType: "string", description: "Optional external key."},
+			{name: "description", fieldType: "string", description: "Optional description."},
+			{name: "acceptance_criteria", fieldType: "string", description: "Optional acceptance criteria."},
+			{name: "priority", fieldType: "integer", description: "Optional priority; daemon default applies when omitted."},
+			{name: "tags", fieldType: "array", itemType: "string", description: "Optional namespaced tags."},
+			{name: "actor", fieldType: "string", description: "Optional actor; falls back to DIBS_ACTOR."},
+			operationIDField(),
+		})),
 		toolDefinition("claim_issue", "Claim an issue and acquire a lease token.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "holder", fieldType: "string", description: "Optional holder name; falls back to actor or DIBS_ACTOR."},
@@ -537,12 +653,20 @@ func (s *Server) tools() []map[string]any {
 			{name: "ttl_seconds", fieldType: "integer", description: "Optional lease TTL in seconds; daemon default applies when omitted."},
 			{name: "session_id", fieldType: "string", description: "Optional non-secret caller session correlation ID."},
 			invocationModeField(),
+			operationIDField(),
 		})),
 		toolDefinition("heartbeat_issue", "Extend an active lease.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "lease_token", fieldType: "string", description: "Current lease token.", required: true},
 			{name: "lease_generation", fieldType: "integer", description: "Fencing generation from the claim that created the lease.", required: true},
 			{name: "ttl_seconds", fieldType: "integer", description: "Optional lease TTL in seconds; daemon default applies when omitted."},
+			operationIDField(),
+		})),
+		toolDefinition("release_issue", "Release the current active lease.", objectSchema([]schemaField{
+			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
+			{name: "lease_token", fieldType: "string", description: "Current lease token.", required: true},
+			{name: "lease_generation", fieldType: "integer", description: "Fencing generation from claim.", required: true},
+			operationIDField(),
 		})),
 		toolDefinition("handoff_issue", "Atomically add a required HANDOFF note and release an active lease.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
@@ -550,6 +674,7 @@ func (s *Server) tools() []map[string]any {
 			{name: "lease_generation", fieldType: "integer", description: "Fencing generation from the claim that created the lease.", required: true},
 			{name: "note", fieldType: "string", description: "Non-empty note beginning with HANDOFF:.", required: true},
 			invocationModeField(),
+			operationIDField(),
 		})),
 		toolDefinition("add_note", "Append a note to an issue.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
@@ -574,6 +699,23 @@ func (s *Server) tools() []map[string]any {
 		toolDefinition("list_issue_events", "List activity events for an issue.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 		})),
+		toolDefinition("update_issue", "Update issue metadata with an explicit expected version.", objectSchema([]schemaField{
+			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
+			{name: "expected_version", fieldType: "integer", description: "Original numeric issue version; reuse it on retry.", required: true},
+			{name: "title", fieldType: "string", description: "Optional new title."},
+			{name: "issue_type", fieldType: "string", description: "Optional new issue type."},
+			{name: "external_key", fieldType: "string", description: "Optional external key."},
+			{name: "description", fieldType: "string", description: "Optional description."},
+			{name: "acceptance_criteria", fieldType: "string", description: "Optional acceptance criteria."},
+			{name: "priority", fieldType: "integer", description: "Optional priority."},
+			{name: "assignee", fieldType: "string", description: "Optional assignee."},
+			{name: "status", fieldType: "string", description: "Optional nonterminal status."},
+			{name: "lease_token", fieldType: "string", description: "Current lease token for a leased issue."},
+			{name: "lease_generation", fieldType: "integer", description: "Fencing generation for a leased issue."},
+			{name: "release_lease", fieldType: "boolean", description: "Release current lease in the update transaction."},
+			{name: "actor", fieldType: "string", description: "Optional actor; falls back to DIBS_ACTOR."},
+			operationIDField(),
+		})),
 		toolDefinition("close_issue", "Close an issue through the daemon API with structured resolution metadata.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "resolution", fieldType: "string", description: "Resolution: done or cancelled.", required: true},
@@ -586,6 +728,7 @@ func (s *Server) tools() []map[string]any {
 			{name: "note", fieldType: "string", description: "Optional closing note appended atomically before close."},
 			{name: "actor", fieldType: "string", description: "Optional actor; falls back to DIBS_ACTOR."},
 			invocationModeField(),
+			operationIDField(),
 		})),
 		toolDefinition("operator_close_issue", "Explicit local operator closure for unclaimable or administratively managed work; it never accepts a lease token.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
@@ -660,12 +803,54 @@ func toolSuccessResult(payload any) map[string]any {
 	}
 }
 
+// A generated ID remains visible even when the daemon returns an ambiguous
+// transport/server error, so an MCP caller can retry the exact request.
+type operationToolError struct {
+	id  string
+	err error
+}
+
+func (e operationToolError) Error() string { return e.err.Error() }
+func (e operationToolError) Unwrap() error { return e.err }
+
+func toolOperationID(provided string) (string, error) {
+	if provided == "" {
+		provided = uuid.NewString()
+	}
+	if err := core.ValidateOperationID(provided); err != nil {
+		return "", err
+	}
+	return provided, nil
+}
+
+func operationResult(id string, payload any) map[string]any {
+	data, _ := json.Marshal(payload)
+	var result map[string]any
+	_ = json.Unmarshal(data, &result)
+	if result == nil {
+		result = make(map[string]any)
+	}
+	result["operation_id"] = id
+	return result
+}
+
+func operationOutcome(id string, payload any, err error) (any, error) {
+	if err != nil {
+		return nil, operationToolError{id: id, err: err}
+	}
+	return operationResult(id, payload), nil
+}
+
 func toolErrorResult(err error) map[string]any {
 	payload := map[string]any{"message": err.Error()}
 	var clientErr *client.ClientError
 	if ok := asClientError(err, &clientErr); ok {
 		payload["code"] = clientErr.Code
 		payload["message"] = clientErr.Message
+	}
+	var operationErr operationToolError
+	if errors.As(err, &operationErr) {
+		payload["operation_id"] = operationErr.id
 	}
 	text, _ := json.MarshalIndent(payload, "", "  ")
 	return map[string]any{
@@ -696,6 +881,10 @@ type schemaField struct {
 
 func invocationModeField() schemaField {
 	return schemaField{name: "invocation_mode", fieldType: "string", description: "Optional caller-declared mode; omitted records unknown.", enum: core.InvocationModes}
+}
+
+func operationIDField() schemaField {
+	return schemaField{name: "operation_id", fieldType: "string", description: "Optional caller-persisted retry ID; omitted generates a new ID returned in the tool result."}
 }
 
 func toolDefinition(name, description string, inputSchema map[string]any) map[string]any {
