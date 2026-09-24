@@ -24,6 +24,15 @@ that must close only after this packet is merged.
 | `afc-115` | AFC-SDD-0163 | P2 | 4 | `exec/auto` | `afc-101`, `afc-114` |
 | `afc-116` | AFC-SDD-0164 | P2 | 4 | `exec/auto` | `afc-101`, `afc-114` |
 
+Closure check (2026-09-24): every required leaf in this map is `done` in the
+coordinator, as are the discovered contract leaves `afc-120`–`afc-122` and
+`afc-140`; each recorded commit is an ancestor of `main` at PR #77.
+Requirement evidence and remaining limits are in `traceability.md` and
+`review.md`. Concurrent factory use remains disabled by owner decision.
+The per-leaf implementation-status paragraphs below are snapshots from each
+leaf's authoring stage; references there to pending PRs or owner review are
+historical. This closure check and live coordinator status supersede them.
+
 `Factory` is routing metadata, not permission to bypass a claim, SDD, worktree,
 or dependency. Manual leaves change cross-cutting contracts and require an
 operator-driven architecture review before implementation.

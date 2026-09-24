@@ -2,7 +2,81 @@
 
 ## Status
 
-Specification and backlog slicing complete; implementation in progress.
+Packet 015 implementation complete; epic `afc-102` closure evidence follows.
+
+## Epic closure / afc-102 — 2026-09-24
+
+Coordinator status and the merge DAG were checked for every required leaf:
+`afc-103` through `afc-116`, plus discovered contract leaves `afc-120`,
+`afc-121`, `afc-122`, and `afc-140`, are `done`, and each recorded commit SHA
+is an ancestor of `main` at PR #77 merge `8dfc05a`. The six-race matrix in
+`TestCoordinationRaceMatrix` uses separate production-initialized SQLite
+connections and controlled schedules; the eight failure cases are mapped to
+process-kill/restart and restore tests in the afc-114 section below. The
+2026-08-11 `audit.md` remains the immutable baseline, not the current verdict.
+For the packet's tested local, cooperative topology, all six required race
+outcomes now have a safe result and all eight failure cases have explicit
+evidence; none remains `UNSAFE` or `UNKNOWN` under that test model.
+
+| Leaf(s) | Final PR | Recorded commit |
+| --- | --- | --- |
+| `afc-103` | #47 | `78a6489` |
+| `afc-104`, `afc-105` | #62 | `6620f0c` |
+| `afc-106` | #49 | `2a83437` |
+| `afc-107` | #54 | `bb3fef9` |
+| `afc-108` | #60 | `41d5517` |
+| `afc-109` | #58 | `fcc768e` |
+| `afc-110` | #64 | `01d7052` |
+| `afc-111` | #65 | `60b3164` |
+| `afc-112` | #72 | `9ac2eec` |
+| `afc-113` | #73 | `463c763` |
+| `afc-114` | #75 | `0e81bcb` |
+| `afc-115` | #76 | `c10884d` |
+| `afc-116` | #77 | `8dfc05a` |
+| `afc-120`, `afc-121`, `afc-122`, `afc-140` | #69, #70, #71, #74 | `a6f8298`, `9871fad`, `9f13ed2`, `c339996` |
+
+`afc-104` also shipped its original heartbeat/release slice in #53, and
+`afc-106` its original ready-qualified claim in #48; the table names the
+later correction PR recorded on each issue.
+
+| Requirement | Completion evidence |
+| --- | --- |
+| R-01 authoritative restart state | PR #75: `TestRestartRetainsActiveLeaseAndFencesExpiredWorker` and `TestCrashAfterCommitReplaysOriginalOutcome` reopen the same file-backed SQLite state after daemon death. |
+| R-02 one mutation authority | PR #60: singleton lock, per-connection SQLite settings, restrictive runtime modes, and two-process recovery proof; same-UID cooperation remains the trust boundary. |
+| R-03 ready-qualified atomic claim | PRs #49/#64: blocked direct claim returns `issue_not_ready`; `TestCoordinationRaceMatrix` proves one winner and one claim event across two SQLite handles. |
+| R-04 lease identity and fencing | PRs #47/#62/#64: generation, token, expiry, and affected-row fencing; race matrix proves stale close and heartbeat cannot act after reclaim. |
+| R-05 heartbeat and release | PRs #53/#73: unexpired lease CAS and exact operation-ID replay for heartbeat/release, including original historical expiry. |
+| R-06 update, handoff, close | PRs #62/#73/#75: atomic lease/version checks, exact replay, and before/after-commit daemon-kill tests with no partial state. |
+| R-07 dependency and ready view | PRs #54/#64: serialized edge/cycle checks over separate SQLite handles; ready view follows blocker close without a mutable cache. |
+| R-08 lease time | PRs #53/#75: daemon-time expiry and restart proof for active and expired leases, with stale generation fenced. |
+| R-09 idempotent mutations | PRs #65/#72/#73/#74: durable operation ledger, create/claim/lifecycle replay, changed-payload conflict, and MCP operation-ID propagation. |
+| R-10 crash and recovery | PR #75: `TestCrashBeforeCommitHasNoPartialState`, `TestCrashAfterCommitReplaysOriginalOutcome`, `TestLiveWALBackupRestoresEventsAndMigrationLedger`, startup integrity/migration failures, and the exact restore runbook check. |
+| R-11 protocol decisions | PRs #58/#77: `issue run` stops the child on lease loss, proves fresh liveness after historical heartbeat replay, and fences short TTLs; canonical/embedded protocol, API, and MCP decision contracts agree. |
+| R-12 audit and observability | PR #76: `TestSafetyAuditSurvivesSecondConnectionWithoutSecrets` and `TestDaemonSafetyFieldsAndMutationLogs` prove durable rejection counts, bounded renewal summaries, stable health/stats/log fields, and no token leakage. |
+| R-13 verification | PRs #64/#75: six deterministic multi-connection races and eight crash/restart cases, plus per-leaf regressions, race-enabled suites, and scratch installed-binary checks recorded below. |
+
+The updated maturity assessment is: local concurrent cooperative agents and
+restart-safe coordination (audit levels 3–4) are supported by these tests;
+the minimum local unattended-daemon signals (level 5) are present, but this is
+not factory rollout approval. After PR #77 merged, `dibs doctor` reported all
+six checks OK, including daemon revision equal to `main` HEAD. Limits
+remain explicit: the same-UID filesystem boundary does not isolate hostile
+processes; Git/file/external effects require caller reconciliation and
+downstream generation fencing where available; abrupt host power loss was
+approximated by process kill and WAL reopen, not hardware certification.
+Operation-ledger and rejected-attempt rows have documented retention windows
+but no automatic pruning in this packet. The packet does not enable a remote
+or multi-host coordination service.
+
+Owner decision (Aleksey Bevz, 2026-09-24): concurrent factory use stays
+**DISABLED** at epic closure. The current 90-day plan allocates zero Aion
+hours; aion-forge still uses legacy `afctl`/`AF_*` names (`aion-924` open);
+and factory-level concurrency has not been proven by coordinator safety tests.
+Enabling it requires a separate owner-approved rollout after `aion-924`, with
+a bounded concurrency trial and rollback. No rollout issue is created here.
+
+The sections below record evidence at each leaf's implementation time; their
+historical "pending" wording does not override the closure table above.
 
 ## AFC-SDD-0164 / afc-116 — agent lease-loss and retry protocol
 
@@ -688,20 +762,19 @@ Focused verification in the sibling worktree:
 - Reconciled stale packet 011 and rewrote/gated the pre-existing live backlog
   rather than deleting product ideas.
 
-## What has not shipped
+## Earlier implementation state
 
-Packet 015 remains incomplete. Lease-bound mutation fencing and the
-pre-idempotency concurrency matrix are now implemented, while durable
-idempotency, black-box crash/restart proof, integrity and backup recovery, and
-operational observability remain assigned to later leaves. The historical race
-classifications in `audit.md` retain the original audit result; current
-implementation evidence and remaining boundaries are recorded in this review
-and `traceability.md`.
+At this point in the implementation history, lease-bound mutation fencing and
+the pre-idempotency concurrency matrix had shipped; durable idempotency,
+black-box crash/restart proof, integrity and backup recovery, and operational
+observability were assigned to later leaves. Those leaves are now merged, as
+recorded in the epic closure table above. The historical race classifications
+in `audit.md` retain the original audit result.
 
 ## Implementation review gate
 
-Packet 015 must not be marked complete until all of the following are recorded
-here:
+The closure table above and the leaf evidence below satisfy these packet
+completion checks:
 
 - commits and PRs for every required leaf;
 - focused regression tests added in each behavior change;
