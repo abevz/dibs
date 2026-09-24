@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -186,6 +187,12 @@ func runIssueCreateForm(ctx context.Context, c *client.Client, args []string) er
 		Priority:           priority,
 		Actor:              actor,
 	}
+	req.OperationID = newOperationID()
+	journalTarget := req.Project + "-" + core.OperationFingerprint(core.CreateFingerprintFields(req.Project, req))
+	journalPath, previousOperationID, err := journalOperationID("create", journalTarget, req.OperationID)
+	if err != nil {
+		return err
+	}
 
 	// Duplicate title warning: flag open/in_progress issues with the same title
 	// in the same project, unless --allow-duplicate is explicitly passed.
@@ -206,10 +213,16 @@ func runIssueCreateForm(ctx context.Context, c *client.Client, args []string) er
 
 	issue, err := c.CreateIssue(ctx, req)
 	if err != nil {
+		if createFailureDefinitelyRejected(err) {
+			restoreJournaledOperationID(journalPath, previousOperationID)
+		} else {
+			fmt.Fprintf(os.Stderr, "create outcome is unconfirmed; operation_id: %s; journaled at: %s; retry with the same create arguments and --operation-id %s\n", req.OperationID, journalPath, req.OperationID)
+		}
 		return fmt.Errorf("failed to create issue: %w", err)
 	}
 
 	fmt.Printf("Created issue: %s (%s)\n", issue.ShortID, issue.ID)
+	fmt.Printf("Operation ID: %s\n", req.OperationID)
 
 	// Post-create steps
 	if assignee != "" {

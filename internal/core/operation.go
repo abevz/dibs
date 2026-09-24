@@ -3,16 +3,45 @@ package core
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
+
+// CreateFingerprintFields binds a create operation to every value that affects
+// its committed issue or event. Defaults and tag order are canonicalized;
+// repository/worktree references remain exact caller arguments so a changed
+// request can never replay a different create.
+func CreateFingerprintFields(projectKey string, req CreateIssueRequest) map[string]string {
+	issueType := req.IssueType
+	if issueType == "" {
+		issueType = "task"
+	}
+	priority := req.Priority
+	if priority <= 0 {
+		priority = 3
+	}
+	tags := append([]string(nil), req.Tags...)
+	sort.Strings(tags)
+	tagJSON, _ := json.Marshal(tags)
+	return map[string]string{
+		"project": projectKey, "scope_kind": req.ScopeKind,
+		"issue_type": issueType, "repo": req.Repo, "worktree": req.Worktree,
+		"title": req.Title, "external_key": req.ExternalKey,
+		"description": req.Description, "acceptance_criteria": req.AcceptanceCriteria,
+		"priority": strconv.Itoa(priority), "actor": req.Actor,
+		"tags": string(tagJSON),
+	}
+}
 
 // Operation kinds recorded in the idempotency ledger. The kind is part of the
 // ledger identity, so the same operation_id presented for a different kind is
 // a conflict rather than a replay (AFC-SDD-0159).
 const (
-	OperationKindClaim = "claim"
+	OperationKindClaim  = "claim"
+	OperationKindCreate = "create"
 )
 
 // MaxOperationIDLength bounds the opaque client-generated identifier. The

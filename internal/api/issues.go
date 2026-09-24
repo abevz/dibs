@@ -25,6 +25,10 @@ func handleCreateIssue(st store.CoordinatorStore, logger *slog.Logger) http.Hand
 			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
 			return
 		}
+		if err := core.ValidateOperationID(req.OperationID); err != nil {
+			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
+			return
+		}
 
 		if req.Actor == "" {
 			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, "actor is required")
@@ -34,6 +38,10 @@ func handleCreateIssue(st store.CoordinatorStore, logger *slog.Logger) http.Hand
 		issue, err := st.CreateIssue(r.Context(), req.Project, req)
 		if err != nil {
 			if apiErr, ok := errAsAPIError(err); ok {
+				if apiErr.Code == core.ErrIdempotencyConflict {
+					writeError(w, http.StatusConflict, core.ErrIdempotencyConflict, apiErr.Message)
+					return
+				}
 				if apiErr.Code == core.ErrNotFound {
 					writeError(w, http.StatusNotFound, core.ErrNotFound, apiErr.Message)
 					return

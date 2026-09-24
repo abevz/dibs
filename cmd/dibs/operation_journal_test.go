@@ -1,10 +1,92 @@
 package main
 
 import (
+	"context"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/abevz/dibs/internal/client"
+	"github.com/abevz/dibs/internal/core"
 )
+
+func TestCreateCLIPreservesJournalAfterServerInternalError(t *testing.T) {
+	if os.Getenv("DIBS_TEST_CREATE_CHILD") == "1" {
+		runIssueCreate(context.Background(), client.New(os.Getenv("DIBS_TEST_CREATE_SOCKET")), []string{
+			"--project", "demo", "--scope-kind", "project", "--title", "uncertain", "--allow-duplicate",
+		})
+		return
+	}
+	home := t.TempDir()
+	socket := filepath.Join(testSocketDir(t), "create-error.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/issues" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"commit outcome unknown"}}`))
+	}))
+	server.Listener.Close()
+	server.Listener = listener
+	server.Start()
+	defer server.Close()
+	command := exec.Command(os.Args[0], "-test.run=^TestCreateCLIPreservesJournalAfterServerInternalError$")
+	command.Env = append(os.Environ(), "HOME="+home, "DIBS_ACTOR=tester", "DIBS_TEST_CREATE_CHILD=1", "DIBS_TEST_CREATE_SOCKET="+socket)
+	output, err := command.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "create outcome is unconfirmed") {
+		t.Fatalf("child error = %v, output = %q", err, output)
+	}
+	req := core.CreateIssueRequest{Project: "demo", ScopeKind: "project", Title: "uncertain", Actor: "tester"}
+	target := "demo-" + core.OperationFingerprint(core.CreateFingerprintFields("demo", req))
+	t.Setenv("HOME", home)
+	id, _, err := readJournaledOperationID("create", target)
+	if err != nil || id == "" {
+		t.Fatalf("journal after API 500: id=%q err=%v", id, err)
+	}
+}
+
+func TestCreateJournalSurvivesUncertainServerError(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	const previous = "op-previous-1111-2222-3333-444455556666"
+	const current = "op-current-1111-2222-3333-444455556666"
+	if _, _, err := journalOperationID("create", "demo-request", previous); err != nil {
+		t.Fatal(err)
+	}
+	path, displaced, err := journalOperationID("create", "demo-request", current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if createFailureDefinitelyRejected(&client.ClientError{Code: "internal_error", Message: "commit outcome unknown"}) {
+		t.Fatal("internal_error was treated as a definite rejection")
+	}
+	got, _, err := readJournaledOperationID("create", "demo-request")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != current {
+		t.Fatalf("journal after uncertain server error = %q, want %q", got, current)
+	}
+	if !createFailureDefinitelyRejected(&client.ClientError{Code: "validation_failed", Message: "invalid request"}) {
+		t.Fatal("validation_failed was not treated as a definite rejection")
+	}
+	restoreJournaledOperationID(path, displaced)
+	got, _, err = readJournaledOperationID("create", "demo-request")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != previous {
+		t.Fatalf("journal after definite rejection = %q, want %q", got, previous)
+	}
+}
 
 func TestExistingLegacyOperationJournalRemainsInUse(t *testing.T) {
 	home := t.TempDir()

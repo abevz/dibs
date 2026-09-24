@@ -426,6 +426,10 @@ creates a new logical action. No caller can recover a token from holder name.
 
 **Dependencies.** `afc-101`, `afc-111`.
 
+**Implementation status.** The remaining create slice is implemented and
+locally verified in `afc-112`; the PR awaits owner review and merge. Store,
+HTTP, CLI, and production-migration concurrency evidence is in `review.md`.
+
 ## AFC-SDD-0161 / afc-113 — Retry-safe lease lifecycle mutations
 
 **Problem.** Heartbeat changes expiry on each retry; successful release,
