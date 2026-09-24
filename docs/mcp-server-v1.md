@@ -104,6 +104,17 @@ the entire MCP response must generate and persist its own ID before sending.
 Claim operation IDs can recover lease tokens, so store them privately. The
 daemon remains the only mutation authority; MCP does not retry automatically.
 
+An exact heartbeat replay returns the original `expires_at` even after the
+lease was released, expired, or replaced. It is historical evidence, not
+proof of current ownership. After resolving an ambiguous heartbeat with the
+same ID, issue a heartbeat with a **new** ID before continuing work; stop the
+child if that fresh heartbeat returns `lease_expired` or cannot prove ownership
+before the last known deadline. Responses have no `replayed` field; callers
+know whether they reused their ID. See the decision table in
+`docs/agent-protocol-v1.md`. MCP is the secondary interface for shell-less
+clients; shell-capable agents should use `dibs issue run` so lease tokens stay
+out of argv.
+
 ## Design constraints
 
 - tools are thin wrappers over `internal/client`

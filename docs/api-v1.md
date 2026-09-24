@@ -74,12 +74,24 @@ Errors use one envelope:
 | 422  | `dependency_cycle` | a `blocks` edge would create a cycle               |
 | 500  | `internal_error`   | internal daemon/database failure                   |
 
-Clients handle `version_conflict` by rereading and retrying;
-`lease_held` by backing off or picking other ready work;
-`issue_not_ready` by rereading dependencies and picking ready work;
-`lease_expired` by re-claiming;
-`idempotency_conflict` by using a fresh `operation_id` for a genuinely new
-request, never by retrying the same one.
+Agent decision table (the full CLI flow is in `docs/agent-protocol-v1.md`):
+
+| Observation | Safe next action |
+| --- | --- |
+| Fresh success | Record the outcome; a fresh heartbeat establishes ownership only through its new deadline. |
+| `lease_held` / `issue_not_ready` | Pick other ready work or reread dependencies; holder is not authentication. |
+| `version_conflict` / `idempotency_conflict` | Reread and reconcile; never change arguments under the same operation ID. |
+| `lease_expired` or generation mismatch | Stop the child and external work; reconcile before a new claim. |
+| Timeout before known expiry | Retry identical arguments with the same ID to resolve the outcome. A heartbeat replayed this way is historical; send a new-ID heartbeat for current ownership. Stop if no fresh proof arrives before the deadline. |
+| Timeout after known expiry or daemon restart | Stop work until a fresh heartbeat proves ownership. Same-ID retry may resolve history, not liveness; reconcile uncertain external effects. |
+
+The API returns no `replayed` marker. An exact retry returns the original
+committed response, including a heartbeat's original `expires_at` after the
+lease is released, expired, or replaced. The caller knows whether it reused
+the ID; only a heartbeat with a **new** ID can prove current ownership.
+New IDs are for new logical mutations, never blind retries. For external
+publication, propagate `lease_generation` to consumers that can fence older
+generations; the coordinator cannot fence a Git push or filesystem write.
 
 ## Health
 
@@ -344,6 +356,16 @@ This is the compact route-to-implementation inventory for the current daemon.
 - `POST /v1/issues/{issue_id}/heartbeat` — body: `lease_token`,
   `lease_generation`, `ttl_seconds`, optional `operation_id`; extends
   `expires_at`; appends no event. An exact retry returns the original expiry.
+
+  For curl, put the JSON body (including the token) in a private mode-0600
+  file and send it without placing the token in argv:
+
+  ```bash
+  curl --unix-socket ~/.local/state/dibs/dibsd.sock \
+    -H 'Content-Type: application/json' \
+    --data-binary @/private/heartbeat-request.json \
+    http://localhost/v1/issues/<issue-id>/heartbeat
+  ```
 - `POST /v1/issues/{issue_id}/release` — body: `lease_token`,
   `lease_generation`, optional `operation_id`; deletes the
   lease, moves `in_progress -> open` unless left `blocked`, and records the

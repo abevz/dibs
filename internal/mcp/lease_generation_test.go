@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/abevz/dibs/internal/core"
@@ -43,6 +44,25 @@ func TestLifecycleToolSchemasRequireLeaseGeneration(t *testing.T) {
 	if len(want) != 0 {
 		t.Fatalf("lifecycle tools absent: %v", want)
 	}
+}
+
+func TestHeartbeatSchemaExplainsHistoricalReplay(t *testing.T) {
+	s := NewServer(&fakeClient{}, "test", "test")
+	for _, tool := range s.tools() {
+		if tool["name"] != "heartbeat_issue" {
+			continue
+		}
+		if !strings.Contains(tool["description"].(string), "historical expiry") {
+			t.Fatalf("heartbeat description = %q", tool["description"])
+		}
+		fields := tool["inputSchema"].(map[string]any)["properties"].(map[string]any)
+		id := fields["operation_id"].(map[string]any)
+		if !strings.Contains(id["description"].(string), "never for lease liveness") {
+			t.Fatalf("operation_id description = %q", id["description"])
+		}
+		return
+	}
+	t.Fatal("heartbeat_issue schema missing")
 }
 
 func TestLifecycleToolsFenceGenerationAgainstDaemon(t *testing.T) {

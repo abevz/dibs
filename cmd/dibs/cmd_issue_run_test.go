@@ -82,13 +82,17 @@ func TestIssueRunHelpFlagShortCircuits(t *testing.T) {
 // since claim/heartbeat/exec/close all happen inside a single compiled
 // binary invocation -- there's no lighter-weight in-process seam for it.
 type mockCoordinator struct {
-	mu                sync.Mutex
-	claimVersion      int
-	closeReqs         []map[string]any
-	handoffReqs       []map[string]any
-	heartbeatCount    int
-	heartbeatFailures int  // transient (non-envelope) failures before success
-	heartbeatExpired  bool // respond with a lease_expired envelope
+	mu                         sync.Mutex
+	claimVersion               int
+	claimExpiry                string
+	closeReqs                  []map[string]any
+	handoffReqs                []map[string]any
+	heartbeatCount             int
+	heartbeatOperationIDs      []string
+	heartbeatTokens            []string
+	heartbeatFailures          int  // transient (non-envelope) failures before success
+	heartbeatExpired           bool // respond with a lease_expired envelope
+	heartbeatExpireAfterReplay bool // first ID retries successfully; next fresh ID loses ownership
 }
 
 // mockLeaseGeneration is the generation this mock hands out on claim. The
@@ -115,22 +119,39 @@ func writeLeaseExpired(w http.ResponseWriter) {
 func (m *mockCoordinator) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/issues/{id}/claim", func(w http.ResponseWriter, r *http.Request) {
+		expiry := m.claimExpiry
+		if expiry == "" {
+			expiry = "2099-01-01T00:00:00Z"
+		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"lease_token":      "test-lease-token",
 			"lease_generation": mockLeaseGeneration,
-			"expires_at":       "2099-01-01T00:00:00Z",
+			"expires_at":       expiry,
 			"attempt_id":       "test-attempt-id",
 			"version":          m.claimVersion,
 		})
 	})
 	mux.HandleFunc("POST /v1/issues/{id}/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			OperationID string `json:"operation_id"`
+			LeaseToken  string `json:"lease_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid heartbeat body", http.StatusBadRequest)
+			return
+		}
 		m.mu.Lock()
 		m.heartbeatCount++
+		m.heartbeatOperationIDs = append(m.heartbeatOperationIDs, body.OperationID)
+		m.heartbeatTokens = append(m.heartbeatTokens, body.LeaseToken)
 		failNext := m.heartbeatFailures > 0
 		if failNext {
 			m.heartbeatFailures--
 		}
 		expired := m.heartbeatExpired
+		if m.heartbeatExpireAfterReplay && len(m.heartbeatOperationIDs) >= 3 && body.OperationID != m.heartbeatOperationIDs[0] {
+			expired = true
+		}
 		m.mu.Unlock()
 
 		if expired {
@@ -209,6 +230,31 @@ func startMockCoordinator(t *testing.T, mock *mockCoordinator) string {
 	t.Cleanup(func() { l.Close() })
 	go http.Serve(l, mock.handler())
 	return sockPath
+}
+
+func TestIssueHeartbeatReadsPrivateTokenFileWithoutArgv(t *testing.T) {
+	binPath := buildAfctlForRunTest(t)
+	mock := &mockCoordinator{}
+	sockPath := startMockCoordinator(t, mock)
+	tokenFile := filepath.Join(t.TempDir(), "lease-token")
+	if err := os.WriteFile(tokenFile, []byte("private-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binPath, "issue", "heartbeat", "afc-1", "--lease-generation", "7", "--ttl", "60")
+	cmd.Env = append(os.Environ(), "AF_COORDINATOR_SOCKET="+sockPath,
+		"DIBS_LEASE_TOKEN=", "AF_LEASE_TOKEN=", "DIBS_LEASE_TOKEN_FILE="+tokenFile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("heartbeat: %v: %s", err, out)
+	}
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if len(mock.heartbeatTokens) != 1 || mock.heartbeatTokens[0] != "private-token" {
+		t.Fatalf("heartbeat token was not read from private file")
+	}
+	if strings.Contains(string(out), "private-token") {
+		t.Fatal("heartbeat exposed token in output")
+	}
 }
 
 func TestIssueRunClosesOnSuccess(t *testing.T) {
@@ -417,11 +463,82 @@ func TestIssueRunRetriesTransientHeartbeatFailure(t *testing.T) {
 	if len(mock.handoffReqs) != 0 {
 		t.Fatalf("expected no handoff requests, got %d", len(mock.handoffReqs))
 	}
-	if mock.heartbeatCount < 2 {
-		t.Fatalf("expected the transient failure to be retried, heartbeatCount = %d", mock.heartbeatCount)
+	if mock.heartbeatCount < 3 {
+		t.Fatalf("expected exact-ID retry and fresh proof, heartbeatCount = %d", mock.heartbeatCount)
+	}
+	ids := mock.heartbeatOperationIDs
+	if ids[0] == "" || ids[0] != ids[1] || ids[1] == ids[2] {
+		t.Fatalf("heartbeat retry/fresh operation IDs = %v", ids)
 	}
 	if strings.Contains(stderr.String(), "lease ownership lost") {
 		t.Errorf("stderr = %q, must not report ownership loss for a retried transient failure", stderr.String())
+	}
+}
+
+func TestIssueRunTreatsReplayedHeartbeatExpiryAsHistorical(t *testing.T) {
+	binPath := buildAfctlForRunTest(t)
+	mock := &mockCoordinator{claimVersion: 2, heartbeatFailures: 1, heartbeatExpireAfterReplay: true}
+	sockPath := startMockCoordinator(t, mock)
+	cmd := exec.Command(binPath, "issue", "run", "afc-6", "--actor", "tester", "--ttl", "15", "--", "sh", "-c", "sleep 60")
+	cmd.Env = append(os.Environ(), "AF_COORDINATOR_SOCKET="+sockPath)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 4 {
+		t.Fatalf("replayed heartbeat loss exit = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	ids := mock.heartbeatOperationIDs
+	if len(ids) < 3 || ids[0] == "" || ids[0] != ids[1] || ids[1] == ids[2] {
+		t.Fatalf("heartbeat operation IDs = %v", ids)
+	}
+	if len(mock.closeReqs) != 0 || len(mock.handoffReqs) != 0 {
+		t.Fatalf("replayed expiry allowed close/handoff: close=%d handoff=%d", len(mock.closeReqs), len(mock.handoffReqs))
+	}
+}
+
+func TestIssueRunShortTTLStopsBeforeExpiredChildContinues(t *testing.T) {
+	binPath := buildAfctlForRunTest(t)
+	mock := &mockCoordinator{
+		claimVersion:     1,
+		claimExpiry:      time.Now().Add(2 * time.Second).UTC().Format(time.RFC3339Nano),
+		heartbeatExpired: true,
+	}
+	sockPath := startMockCoordinator(t, mock)
+	cmd := exec.Command(binPath, "issue", "run", "afc-7", "--ttl", "2", "--", "sh", "-c", "sleep 10")
+	cmd.Env = append(os.Environ(), "AF_COORDINATOR_SOCKET="+sockPath)
+	start := time.Now()
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 4 {
+		t.Fatalf("short-TTL loss exit = %v; output=%s", err, out)
+	}
+	if elapsed := time.Since(start); elapsed >= 3*time.Second {
+		t.Fatalf("short-TTL child continued after lease expiry for %s", elapsed)
+	}
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if mock.heartbeatCount == 0 || len(mock.closeReqs) != 0 || len(mock.handoffReqs) != 0 {
+		t.Fatalf("short-TTL heartbeat=%d close=%d handoff=%d", mock.heartbeatCount, len(mock.closeReqs), len(mock.handoffReqs))
+	}
+}
+
+func TestIssueRunRejectsUnknownClaimDeadlineBeforeStartingChild(t *testing.T) {
+	binPath := buildAfctlForRunTest(t)
+	mock := &mockCoordinator{claimExpiry: "invalid-date"}
+	sockPath := startMockCoordinator(t, mock)
+	marker := filepath.Join(t.TempDir(), "started")
+	cmd := exec.Command(binPath, "issue", "run", "afc-8", "--ttl", "2", "--", "sh", "-c", "touch \"$MARKER\"")
+	cmd.Env = append(os.Environ(), "AF_COORDINATOR_SOCKET="+sockPath, "MARKER="+marker)
+	out, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "invalid claim lease expiry") {
+		t.Fatalf("unknown deadline result = %v; output=%s", err, out)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("child started without a known lease deadline: %v", err)
 	}
 }
 

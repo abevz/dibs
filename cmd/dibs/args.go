@@ -191,6 +191,9 @@ func validateCommandArgs(args []string) error {
 	}
 	for _, flag := range strings.Fields(requiredCommandFlags[key]) {
 		if !seen[flag] {
+			if flag == "--lease-token" && leaseTokenSourceAvailable() {
+				continue
+			}
 			return argumentError(key + " requires " + flag)
 		}
 	}

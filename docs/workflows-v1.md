@@ -35,17 +35,16 @@ dibs issue create --project utils --scope-kind project \
   --title "rotate backup keys" --priority 2
 
 dibs issue ready                      # the menu
-dibs issue claim utils-7 --ttl 28800  # a working day; nobody to compete with
-# ... work ...
-dibs issue close utils-7 --resolution done \
-  --expected-version N --lease-token <token> \
-  --branch codex/utils-7 --pr-url https://example/pr/7 --commit-sha abc1234
+dibs issue run utils-7 --ttl 900 \
+  --branch codex/utils-7 --pr-url https://example/pr/7 --commit-sha abc1234 \
+  -- ./do-the-work.sh
 ```
 
-Pick the TTL for how long you actually intend to hold the issue. Agents
-use short TTLs (900s) and heartbeat; a human claiming for the day takes a
-long TTL and skips heartbeats. The trade-off is symmetric: a long TTL you
-forget to release blocks the issue for everyone until it expires.
+Pick the TTL for the work window. `issue run` heartbeats at one-third of TTL.
+If a manual command is unavoidable, set `DIBS_LEASE_TOKEN_FILE` to a private
+0600 token file first and use the claim's non-secret generation; never put the
+token in argv. A long manual TTL that is forgotten blocks the issue until it
+expires.
 
 ## Switching away mid-task
 
@@ -54,8 +53,8 @@ Three exits, in order of preference:
 1. **Note + release** — the clean one:
 
    ```bash
-   dibs issue note add utils-7 --body "HANDOFF: parser done, DB write remains"
-   dibs issue release utils-7 --lease-token <token>
+   dibs issue handoff utils-7 --lease-generation <generation> \
+     --note "HANDOFF: parser done, DB write remains"
    ```
 
    Status returns to `open`, the issue is honestly back in the pool, and
@@ -66,7 +65,7 @@ Three exits, in order of preference:
 
    ```bash
    dibs issue update utils-7 --status deferred --expected-version N \
-     --lease-token <token>
+     --lease-generation <generation>
    ```
 
    `deferred` is excluded from `ready` entirely until you unpark it

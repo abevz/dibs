@@ -16,7 +16,7 @@ import (
 )
 
 const issueRunUsage = "Usage: dibs issue run <issue-id> [--actor <name>] [--ttl <seconds>] [--close-resolution done|cancelled] [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note <text>] [--invocation-mode interactive|scheduled|unknown] -- <command> [args...]\n" + lifecycleHint +
-	"\nOwns claim -> heartbeat -> close/handoff around a single subprocess, so the lease token never leaves this process's memory: it cannot be lost the way a multi-step script can lose it before persisting it. On exit 0, closes with --close-resolution (default done). On any other exit, or on Ctrl-C, hands the lease off with an auto-generated HANDOFF: note instead of closing. On confirmed lease ownership loss (heartbeat rejected with lease_expired, or the lease window closing without proof), the child is terminated and the CLI exits non-zero with lease_expired without sending a close request."
+	"\nOwns claim -> heartbeat -> close/handoff around a single subprocess; the child receives the lease token in its environment, never in argv. On exit 0, closes with --close-resolution (default done). On any other exit, or on Ctrl-C, hands the lease off with an auto-generated HANDOFF: note instead of closing. On confirmed lease ownership loss (heartbeat rejected with lease_expired, or the lease window closing without proof), the child is terminated and the CLI exits non-zero with lease_expired without sending a close request."
 
 // runIssueRun claims issueID, execs the given command with the lease
 // exported as environment variables, heartbeats in the background for the
@@ -129,9 +129,6 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	fmt.Printf("Claimed %s (version %d, expires %s)\n", issueID, claim.Version, claim.ExpiresAt)
 
 	heartbeatInterval := time.Duration(ttl) * time.Second / 3
-	if heartbeatInterval < 5*time.Second {
-		heartbeatInterval = 5 * time.Second
-	}
 
 	// knownExpiry is the last deadline the daemon gave us, from the claim or
 	// a successful heartbeat. Transient heartbeat failures may be retried only
@@ -139,7 +136,7 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	// ownership is treated as lost and the child is stopped.
 	knownExpiry, err := time.Parse(time.RFC3339, claim.ExpiresAt)
 	if err != nil {
-		knownExpiry = time.Now().Add(time.Duration(ttl) * time.Second)
+		return fmt.Errorf("issue run: invalid claim lease expiry: %w", err)
 	}
 
 	// childCtx lets the heartbeat goroutine cancel the child the moment
@@ -315,15 +312,36 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 
 	retryDelay := initialRetryDelay
 	attempt := func() bool {
+		operationID := newOperationID()
+		ambiguous := false
 		for {
 			if ctx.Err() != nil {
 				return false
 			}
-			newExpiry, err := c.HeartbeatLease(ctx, issueID, leaseToken, leaseGeneration, ttlSeconds)
+			if !time.Now().Before(knownExpiry) {
+				reportLoss("known lease window closed before a fresh heartbeat proved ownership")
+				return false
+			}
+			requestCtx, cancel := context.WithDeadline(ctx, knownExpiry)
+			newExpiry, err := c.HeartbeatLeaseWithOperation(requestCtx, issueID, core.HeartbeatRequest{
+				LeaseToken: leaseToken, LeaseGeneration: leaseGeneration,
+				TTLSeconds: ttlSeconds, OperationID: operationID,
+			})
+			cancel()
 			if err == nil {
-				if parsed, perr := time.Parse(time.RFC3339, newExpiry); perr == nil {
-					knownExpiry = parsed
+				if ambiguous {
+					// This exact-ID response may be an old committed outcome. It
+					// resolves ambiguity but says nothing about current ownership.
+					operationID = newOperationID()
+					ambiguous = false
+					continue
 				}
+				parsed, perr := time.Parse(time.RFC3339, newExpiry)
+				if perr != nil || !time.Now().Before(parsed) {
+					reportLoss("fresh heartbeat returned no future lease deadline")
+					return false
+				}
+				knownExpiry = parsed
 				retryDelay = initialRetryDelay
 				return true
 			}
@@ -335,6 +353,10 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 				reportLoss(fmt.Sprintf("heartbeat rejected: %s", clientErr.Message))
 				return false
 			}
+			if errors.As(err, &clientErr) && clientErr.Code != "internal_error" {
+				reportLoss(fmt.Sprintf("heartbeat rejected with %s", clientErr.Code))
+				return false
+			}
 			// A transient failure (transport or daemon hiccup) is retried with
 			// backoff only while the known lease window is still open; once the
 			// deadline passes without proof, ownership is gone.
@@ -343,20 +365,32 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 				return false
 			}
 			fmt.Fprintf(os.Stderr, "issue run: heartbeat failed, retrying within lease window: %v\n", err)
+			ambiguous = true
 			select {
 			case <-ctx.Done():
 				return false
-			case <-time.After(retryDelay):
+			case <-time.After(min(retryDelay, time.Until(knownExpiry))):
 			}
 			retryDelay = min(retryDelay*2, maxRetryDelay)
 		}
 	}
 
 	for {
+		remaining := time.Until(knownExpiry)
+		if remaining <= 0 {
+			reportLoss("known lease window closed without fresh proof")
+			return
+		}
+		deadline := time.NewTimer(remaining)
 		select {
 		case <-ctx.Done():
+			deadline.Stop()
+			return
+		case <-deadline.C:
+			reportLoss("known lease window closed without fresh proof")
 			return
 		case <-ticker.C:
+			deadline.Stop()
 			if !attempt() {
 				return
 			}
