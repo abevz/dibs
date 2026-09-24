@@ -31,8 +31,8 @@ Status: approved by owner; packet active. afc-137 implementation awaits owner re
   `GOTOOLCHAIN=go1.26.4 pre-commit run --all-files` passed in platform-iac;
   the system Go 1.27 toolchain is newer than its installed golangci-lint.
 - `hybrid-cloud-optimizer/AGENTS.md` is ignored and explicitly local-only;
-  the owner chose a local update without a commit. Other changes remain
-  local for the owner to push.
+  the owner chose a local update without a commit. Tracked changes were pushed
+  to the respective repository branches for owner review.
 
 ### afc-137 — rename with legacy compatibility (owner review pending)
 
