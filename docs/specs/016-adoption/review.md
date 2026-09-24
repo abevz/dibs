@@ -14,6 +14,26 @@ Status: approved by owner; packet active. afc-137 implementation awaits owner re
 
 ## Implementation ledger
 
+### afc-144 — coordinated repository guidance
+
+- `cmd/dibs/init-snippet.md` now carries the afc-116 rule: use `dibs issue run`
+  for the lifecycle; never put lease tokens on an executed command line.
+  Manual lifecycle calls use `DIBS_LEASE_TOKEN` or a private
+  `DIBS_LEASE_TOKEN_FILE` instead.
+- Refreshed managed blocks with `dibs init` in dibs, budget-tracker,
+  vault-bridge, vault-bridge-5, job-scout-bot, utils, platform-iac,
+  englishdrills, and hybrid-cloud-optimizer. Updated handwritten `afctl`
+  workflow text in utils, platform-iac, and englishdrills. The aion-forge
+  guidance belongs to aion-924 and was not changed.
+- Verified all nine managed blocks exactly match the current snippet and no
+  in-scope AGENTS.md contains `afctl`; `go test ./cmd/dibs -run TestInit`
+  passed. `make build` and `go test ./...` passed in budget-tracker.
+  `GOTOOLCHAIN=go1.26.4 pre-commit run --all-files` passed in platform-iac;
+  the system Go 1.27 toolchain is newer than its installed golangci-lint.
+- `hybrid-cloud-optimizer/AGENTS.md` is ignored and explicitly local-only;
+  the owner chose a local update without a commit. Tracked changes were pushed
+  to the respective repository branches for owner review.
+
 ### afc-137 — rename with legacy compatibility (owner review pending)
 
 - Scope: `github.com/abevz/dibs` module/imports; `dibs`, `dibsd`, and
