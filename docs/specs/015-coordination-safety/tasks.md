@@ -19,6 +19,7 @@ that must close only after this packet is merged.
 | `afc-111` | AFC-SDD-0159 | P1 | 3 | manual | `afc-101`, `afc-110` |
 | `afc-112` | AFC-SDD-0160 | P1 | 3 | `exec/auto` | `afc-101`, `afc-111` |
 | `afc-113` | AFC-SDD-0161 | P1 | 3 | `exec/auto` | `afc-101`, `afc-111` |
+| `afc-140` | R-09 MCP transport | P1 | 3 | manual | `afc-112`, `afc-113` |
 | `afc-114` | AFC-SDD-0162 | P1 | 3 | `exec/auto` | `afc-101`, `afc-110`, `afc-112`, `afc-113` |
 | `afc-115` | AFC-SDD-0163 | P2 | 4 | `exec/auto` | `afc-101`, `afc-114` |
 | `afc-116` | AFC-SDD-0164 | P2 | 4 | `exec/auto` | `afc-101`, `afc-114` |
@@ -462,6 +463,12 @@ current lease/version/state normally.
 **Implementation status.** Implemented in the `afc-113` worktree for owner
 review. Store, HTTP, and explicit CLI `--operation-id` paths accept the same
 ledger identity; the verification ledger is in `review.md`.
+
+## afc-140 — MCP operation ID propagation
+
+`afc-140` carries R-09 operation IDs through the MCP create, claim, heartbeat,
+release, update, handoff, and close tools. It exposes caller-provided IDs or
+returns a generated ID and verifies replay against the production daemon API.
 
 ## AFC-SDD-0162 / afc-114 — Crash, restart, migration, and restore proof
 

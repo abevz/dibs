@@ -9,6 +9,23 @@ import (
 	"github.com/abevz/dibs/internal/core"
 )
 
+func claimFromMCPResult(t *testing.T, result map[string]any) core.ClaimResponse {
+	t.Helper()
+	content, ok := result["structuredContent"].(map[string]any)
+	if !ok || content["operation_id"] == "" {
+		t.Fatalf("claim structured content missing operation_id: %v", result)
+	}
+	data, err := json.Marshal(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var claim core.ClaimResponse
+	if err := json.Unmarshal(data, &claim); err != nil {
+		t.Fatal(err)
+	}
+	return claim
+}
+
 func TestInvocationModeToolSchemas(t *testing.T) {
 	resp := NewServer(&fakeClient{}, "test", "test").handleRequest(context.Background(), rpcRequest{
 		JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "tools/list",
@@ -107,7 +124,7 @@ func TestInvocationModeMCPAuditEvents(t *testing.T) {
 	claimArgs := map[string]any{"issue_id": issue.ShortID, "holder": "test"}
 	rejectInvalid("claim_issue", issue.ShortID, claimArgs)
 	claimArgs["invocation_mode"] = "interactive"
-	claim := call("claim_issue", claimArgs, false)["structuredContent"].(core.ClaimResponse)
+	claim := claimFromMCPResult(t, call("claim_issue", claimArgs, false))
 	modeEvent(issue.ShortID, "issue_claimed", "interactive")
 	noteArgs := map[string]any{"issue_id": issue.ShortID, "body": "scheduled note"}
 	rejectInvalid("add_note", issue.ShortID, noteArgs)
@@ -123,7 +140,7 @@ func TestInvocationModeMCPAuditEvents(t *testing.T) {
 	rejectInvalid("handoff_issue", issue.ShortID, handoffArgs)
 	call("handoff_issue", handoffArgs, false)
 	modeEvent(issue.ShortID, "note_added", "unknown")
-	claim = call("claim_issue", map[string]any{"issue_id": issue.ShortID, "holder": "test", "invocation_mode": "scheduled"}, false)["structuredContent"].(core.ClaimResponse)
+	claim = claimFromMCPResult(t, call("claim_issue", map[string]any{"issue_id": issue.ShortID, "holder": "test", "invocation_mode": "scheduled"}, false))
 	modeEvent(issue.ShortID, "issue_claimed", "scheduled")
 	call("handoff_issue", map[string]any{
 		"issue_id": issue.ShortID, "lease_token": claim.LeaseToken,
@@ -131,7 +148,7 @@ func TestInvocationModeMCPAuditEvents(t *testing.T) {
 		"invocation_mode": "scheduled",
 	}, false)
 	modeEvent(issue.ShortID, "note_added", "scheduled")
-	claim = call("claim_issue", map[string]any{"issue_id": issue.ShortID, "holder": "test", "invocation_mode": "interactive"}, false)["structuredContent"].(core.ClaimResponse)
+	claim = claimFromMCPResult(t, call("claim_issue", map[string]any{"issue_id": issue.ShortID, "holder": "test", "invocation_mode": "interactive"}, false))
 	closeArgs := map[string]any{
 		"issue_id": issue.ShortID, "resolution": "done", "expected_version": claim.Version,
 		"lease_token": claim.LeaseToken, "lease_generation": claim.LeaseGeneration,
@@ -144,7 +161,7 @@ func TestInvocationModeMCPAuditEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defaultClaim := call("claim_issue", map[string]any{"issue_id": defaultIssue.ShortID, "holder": "test"}, false)["structuredContent"].(core.ClaimResponse)
+	defaultClaim := claimFromMCPResult(t, call("claim_issue", map[string]any{"issue_id": defaultIssue.ShortID, "holder": "test"}, false))
 	modeEvent(defaultIssue.ShortID, "issue_claimed", "unknown")
 	call("close_issue", map[string]any{
 		"issue_id": defaultIssue.ShortID, "resolution": "done", "expected_version": defaultClaim.Version,

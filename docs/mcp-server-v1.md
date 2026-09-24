@@ -50,12 +50,15 @@ daemon restart when `dibs-mcp` is rebuilt.
 - `health`
 - `get_issue`
 - `list_ready_issues`
+- `create_issue`
 - `claim_issue`
 - `heartbeat_issue`
+- `release_issue`
 - `handoff_issue`
 - `add_note`
 - `list_notes`
 - `list_issue_events`
+- `update_issue`
 - `close_issue`
 - `operator_close_issue`
 - `operator_reopen_issue`
@@ -81,6 +84,25 @@ terminal transition.
 every listed tag to match (AND). `add_tag`/`remove_tag` apply or remove a
 namespaced tag (`namespace/value`); `get_issue` and `list_ready_issues`
 already surface an issue's `tags` field.
+
+## Retrying lifecycle mutations
+
+`create_issue`, `claim_issue`, `heartbeat_issue`, `release_issue`,
+`update_issue`, `handoff_issue`, and `close_issue` accept an optional
+`operation_id` (8–128 printable ASCII characters). Supply and retain one ID
+for each logical mutation before the first call, then reuse that ID with the
+same arguments after an uncertain response. Exact replay returns the original
+outcome; changed arguments or reuse for another operation return
+`idempotency_conflict`. For `update_issue`, retain the original numeric
+`expected_version` on retry. A new ID is a new logical mutation and must
+meet the current lease, version, and state checks.
+
+When omitted, the MCP server generates a UUID for each call and includes it
+as `operation_id` in the result or tool-error `structuredContent`. That ID
+can be reused if the caller received the response. A caller that might lose
+the entire MCP response must generate and persist its own ID before sending.
+Claim operation IDs can recover lease tokens, so store them privately. The
+daemon remains the only mutation authority; MCP does not retry automatically.
 
 ## Design constraints
 
