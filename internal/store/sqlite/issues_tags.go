@@ -13,7 +13,7 @@ import (
 // populateTags batch-loads issue_tags rows for the given issues and appends
 // them into each issue's Tags, mirroring populateDependencies' batch-load
 // shape.
-func populateTags(ctx context.Context, db *sql.DB, issues []core.Issue) ([]core.Issue, error) {
+func populateTags(ctx context.Context, db dependencyQueryer, issues []core.Issue) ([]core.Issue, error) {
 	if len(issues) == 0 {
 		return issues, nil
 	}

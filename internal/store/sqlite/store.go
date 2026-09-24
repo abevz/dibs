@@ -128,8 +128,16 @@ func (s *Store) HeartbeatLease(ctx context.Context, issueID, leaseToken string, 
 	return HeartbeatLease(ctx, s.db, issueID, leaseToken, leaseGeneration, ttlSeconds, now)
 }
 
+func (s *Store) HeartbeatLeaseWithOperation(ctx context.Context, issueID string, req core.HeartbeatRequest, now time.Time) (string, error) {
+	return HeartbeatLeaseWithOperation(ctx, s.db, issueID, req, now)
+}
+
 func (s *Store) ReleaseLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, now time.Time) error {
 	return ReleaseLease(ctx, s.db, issueID, leaseToken, leaseGeneration, now)
+}
+
+func (s *Store) ReleaseLeaseWithOperation(ctx context.Context, issueID string, req core.ReleaseRequest, now time.Time) error {
+	return ReleaseLeaseWithOperation(ctx, s.db, issueID, req, now)
 }
 
 func (s *Store) HandoffLease(ctx context.Context, issueID string, req core.HandoffRequest) (core.HandoffResponse, error) {

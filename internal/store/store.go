@@ -54,9 +54,11 @@ type CoordinatorStore interface {
 	// wall-clock boundary; the renewal must affect exactly the lease identified
 	// by issueID, leaseToken, and leaseGeneration or it fails with lease_expired.
 	HeartbeatLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int, now time.Time) (string, error)
+	HeartbeatLeaseWithOperation(ctx context.Context, issueID string, req core.HeartbeatRequest, now time.Time) (string, error)
 	// ReleaseLease atomically removes the current unexpired lease and records
 	// the release transition/event. now is the daemon's UTC wall-clock boundary.
 	ReleaseLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, now time.Time) error
+	ReleaseLeaseWithOperation(ctx context.Context, issueID string, req core.ReleaseRequest, now time.Time) error
 	HandoffLease(ctx context.Context, issueID string, req core.HandoffRequest) (core.HandoffResponse, error)
 	UpdateIssue(ctx context.Context, issueID string, req core.UpdateIssueRequest) (core.Issue, error)
 	CloseIssue(ctx context.Context, issueID string, req core.CloseIssueRequest) (core.CloseIssueResult, error)

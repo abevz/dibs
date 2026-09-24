@@ -358,6 +358,10 @@ func (c *Client) ClaimIssueWithRequest(ctx context.Context, issueID string, req 
 // lease generation from the claim that created the lease.
 func (c *Client) HeartbeatLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int) (string, error) {
 	body := core.HeartbeatRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, TTLSeconds: ttlSeconds}
+	return c.HeartbeatLeaseWithOperation(ctx, issueID, body)
+}
+
+func (c *Client) HeartbeatLeaseWithOperation(ctx context.Context, issueID string, body core.HeartbeatRequest) (string, error) {
 	var result struct {
 		ExpiresAt string `json:"expires_at"`
 	}
@@ -371,6 +375,10 @@ func (c *Client) HeartbeatLease(ctx context.Context, issueID, leaseToken string,
 // lease generation from the claim that created the lease.
 func (c *Client) ReleaseLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64) error {
 	body := core.ReleaseRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration}
+	return c.ReleaseLeaseWithOperation(ctx, issueID, body)
+}
+
+func (c *Client) ReleaseLeaseWithOperation(ctx context.Context, issueID string, body core.ReleaseRequest) error {
 	return c.doJSON(ctx, http.MethodPost, "/v1/issues/"+issueID+"/release", body, nil)
 }
 
@@ -385,6 +393,10 @@ func (c *Client) HandoffLease(ctx context.Context, issueID, leaseToken string, l
 // audit event. An empty mode normalizes to "unknown" on the daemon.
 func (c *Client) HandoffLeaseWithMode(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, note, invocationMode string) (core.HandoffResponse, error) {
 	body := core.HandoffRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, Note: note, InvocationMode: invocationMode}
+	return c.HandoffLeaseWithOperation(ctx, issueID, body)
+}
+
+func (c *Client) HandoffLeaseWithOperation(ctx context.Context, issueID string, body core.HandoffRequest) (core.HandoffResponse, error) {
 	var result core.HandoffResponse
 	if err := c.doJSON(ctx, http.MethodPost, "/v1/issues/"+issueID+"/handoff", body, &result); err != nil {
 		return core.HandoffResponse{}, err

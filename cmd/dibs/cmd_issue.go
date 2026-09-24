@@ -692,7 +692,7 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 	return nil
 }
 
-const issueHeartbeatUsage = "Usage: dibs issue heartbeat <issue-id> --lease-token <token> --lease-generation <generation> [--ttl <seconds>]\n" + lifecycleHint
+const issueHeartbeatUsage = "Usage: dibs issue heartbeat <issue-id> --lease-token <token> --lease-generation <generation> [--ttl <seconds>] [--operation-id <id>]\n" + lifecycleHint
 
 func runIssueHeartbeat(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -707,6 +707,7 @@ func runIssueHeartbeat(ctx context.Context, c *client.Client, args []string) err
 	leaseToken := ""
 	var leaseGeneration int64
 	ttl := 3600
+	operationID := ""
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -725,6 +726,11 @@ func runIssueHeartbeat(ctx context.Context, c *client.Client, args []string) err
 				fmt.Sscanf(args[i+1], "%d", &ttl)
 				i++
 			}
+		case "--operation-id":
+			if i+1 < len(args) {
+				operationID = args[i+1]
+				i++
+			}
 		}
 	}
 
@@ -735,7 +741,7 @@ func runIssueHeartbeat(ctx context.Context, c *client.Client, args []string) err
 		return usageErr(issueHeartbeatUsage, "--lease-generation is required")
 	}
 
-	expiresAt, err := c.HeartbeatLease(ctx, issueID, leaseToken, leaseGeneration, ttl)
+	expiresAt, err := c.HeartbeatLeaseWithOperation(ctx, issueID, core.HeartbeatRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, TTLSeconds: ttl, OperationID: operationID})
 	if err != nil {
 		fail(err)
 	}
@@ -747,7 +753,7 @@ func runIssueHeartbeat(ctx context.Context, c *client.Client, args []string) err
 	return nil
 }
 
-const issueReleaseUsage = "Usage: dibs issue release <issue-id> --lease-token <token> --lease-generation <generation>\n" + lifecycleHint
+const issueReleaseUsage = "Usage: dibs issue release <issue-id> --lease-token <token> --lease-generation <generation> [--operation-id <id>]\n" + lifecycleHint
 
 func runIssueRelease(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -761,6 +767,7 @@ func runIssueRelease(ctx context.Context, c *client.Client, args []string) error
 	issueID := args[0]
 	leaseToken := ""
 	var leaseGeneration int64
+	operationID := ""
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -774,6 +781,11 @@ func runIssueRelease(ctx context.Context, c *client.Client, args []string) error
 				fmt.Sscanf(args[i+1], "%d", &leaseGeneration)
 				i++
 			}
+		case "--operation-id":
+			if i+1 < len(args) {
+				operationID = args[i+1]
+				i++
+			}
 		}
 	}
 
@@ -784,7 +796,7 @@ func runIssueRelease(ctx context.Context, c *client.Client, args []string) error
 		return usageErr(issueReleaseUsage, "--lease-generation is required")
 	}
 
-	if err := c.ReleaseLease(ctx, issueID, leaseToken, leaseGeneration); err != nil {
+	if err := c.ReleaseLeaseWithOperation(ctx, issueID, core.ReleaseRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, OperationID: operationID}); err != nil {
 		fail(err)
 	}
 	if jsonOutput {
@@ -795,7 +807,7 @@ func runIssueRelease(ctx context.Context, c *client.Client, args []string) error
 	return nil
 }
 
-const issueHandoffUsage = "Usage: dibs issue handoff <issue-id> --lease-token <token> --lease-generation <generation> --note \"HANDOFF: next steps\" [--invocation-mode interactive|scheduled|unknown]\n" + lifecycleHint
+const issueHandoffUsage = "Usage: dibs issue handoff <issue-id> --lease-token <token> --lease-generation <generation> --note \"HANDOFF: next steps\" [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>]\n" + lifecycleHint
 
 func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -811,6 +823,7 @@ func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error
 	var leaseGeneration int64
 	note := ""
 	invocationMode := ""
+	operationID := ""
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--lease-generation":
@@ -831,6 +844,11 @@ func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error
 		case "--invocation-mode":
 			if i+1 < len(args) {
 				invocationMode = args[i+1]
+				i++
+			}
+		case "--operation-id":
+			if i+1 < len(args) {
+				operationID = args[i+1]
 				i++
 			}
 		default:
@@ -855,7 +873,7 @@ func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error
 		invocationMode = normalized
 	}
 
-	resp, err := c.HandoffLeaseWithMode(ctx, issueID, leaseToken, leaseGeneration, note, invocationMode)
+	resp, err := c.HandoffLeaseWithOperation(ctx, issueID, core.HandoffRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, Note: note, InvocationMode: invocationMode, OperationID: operationID})
 	if err != nil {
 		fail(err)
 	}
@@ -867,7 +885,7 @@ func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error
 	return nil
 }
 
-const issueUpdateUsage = "Usage: dibs issue update <issue-id> [--title ...] [--type <task|bug|feature|epic|chore>] [--external-key ...] [--description ...] [--acceptance ...] [--priority N] [--assignee ...] [--status ...] [--expected-version N|latest] [--force] [--lease-token ...] [--lease-generation <generation>] [--release]"
+const issueUpdateUsage = "Usage: dibs issue update <issue-id> [--title ...] [--type <task|bug|feature|epic|chore>] [--external-key ...] [--description ...] [--acceptance ...] [--priority N] [--assignee ...] [--status ...] [--expected-version N|latest] [--force] [--lease-token ...] [--lease-generation <generation>] [--release] [--operation-id <id>]"
 
 func runIssueUpdate(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -948,6 +966,11 @@ func runIssueUpdate(ctx context.Context, c *client.Client, args []string) error 
 			}
 		case "--release":
 			req.ReleaseLease = true
+		case "--operation-id":
+			if i+1 < len(args) {
+				req.OperationID = args[i+1]
+				i++
+			}
 		case "--force":
 			req.ExpectedVersion = -1
 		}
@@ -982,7 +1005,7 @@ func runIssueUpdate(ctx context.Context, c *client.Client, args []string) error 
 	return nil
 }
 
-const issueCloseUsage = "Usage: dibs issue close <issue-id> --resolution done|cancelled --expected-version N --lease-token ... --lease-generation <generation> [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note \"what was done\"] [--invocation-mode interactive|scheduled|unknown]\n" + lifecycleHint
+const issueCloseUsage = "Usage: dibs issue close <issue-id> --resolution done|cancelled --expected-version N --lease-token ... --lease-generation <generation> [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note \"what was done\"] [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>]\n" + lifecycleHint
 
 func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -1042,6 +1065,11 @@ func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 		case "--note":
 			if i+1 < len(args) {
 				req.Note = args[i+1]
+				i++
+			}
+		case "--operation-id":
+			if i+1 < len(args) {
+				req.OperationID = args[i+1]
 				i++
 			}
 		}

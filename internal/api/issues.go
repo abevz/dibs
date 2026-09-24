@@ -251,10 +251,17 @@ func handleHeartbeatLease(st store.CoordinatorStore, logger *slog.Logger) http.H
 			req.TTLSeconds = 3600
 		}
 
-		newExpiresAt, err := st.HeartbeatLease(r.Context(), issueID, req.LeaseToken, req.LeaseGeneration, req.TTLSeconds, time.Now().UTC())
+		if err := core.ValidateOperationID(req.OperationID); err != nil {
+			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
+			return
+		}
+		newExpiresAt, err := st.HeartbeatLeaseWithOperation(r.Context(), issueID, req, time.Now().UTC())
 		if err != nil {
 			if apiErr, ok := errAsAPIError(err); ok {
 				switch apiErr.Code {
+				case core.ErrIdempotencyConflict, core.ErrConflict:
+					writeError(w, http.StatusConflict, apiErr.Code, apiErr.Message)
+					return
 				case core.ErrLeaseExpired:
 					writeError(w, http.StatusGone, core.ErrLeaseExpired, apiErr.Message)
 					return
@@ -294,10 +301,17 @@ func handleReleaseLease(st store.CoordinatorStore, logger *slog.Logger) http.Han
 			return
 		}
 
-		err := st.ReleaseLease(r.Context(), issueID, req.LeaseToken, req.LeaseGeneration, time.Now().UTC())
+		if err := core.ValidateOperationID(req.OperationID); err != nil {
+			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
+			return
+		}
+		err := st.ReleaseLeaseWithOperation(r.Context(), issueID, req, time.Now().UTC())
 		if err != nil {
 			if apiErr, ok := errAsAPIError(err); ok {
 				switch apiErr.Code {
+				case core.ErrIdempotencyConflict, core.ErrConflict:
+					writeError(w, http.StatusConflict, apiErr.Code, apiErr.Message)
+					return
 				case core.ErrLeaseExpired:
 					writeError(w, http.StatusGone, core.ErrLeaseExpired, apiErr.Message)
 					return
@@ -341,11 +355,18 @@ func handleHandoffLease(st store.CoordinatorStore, logger *slog.Logger) http.Han
 			return
 		}
 		req.InvocationMode = normalizedMode
+		if err := core.ValidateOperationID(req.OperationID); err != nil {
+			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
+			return
+		}
 
 		resp, err := st.HandoffLease(r.Context(), issueID, req)
 		if err != nil {
 			if apiErr, ok := errAsAPIError(err); ok {
 				switch apiErr.Code {
+				case core.ErrIdempotencyConflict, core.ErrConflict:
+					writeError(w, http.StatusConflict, apiErr.Code, apiErr.Message)
+					return
 				case core.ErrLeaseExpired:
 					writeError(w, http.StatusGone, core.ErrLeaseExpired, apiErr.Message)
 					return
@@ -445,11 +466,18 @@ func handleUpdateIssue(st store.CoordinatorStore, logger *slog.Logger) http.Hand
 			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, "actor is required")
 			return
 		}
+		if err := core.ValidateOperationID(req.OperationID); err != nil {
+			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
+			return
+		}
 
 		updated, err := st.UpdateIssue(r.Context(), issueID, req)
 		if err != nil {
 			if apiErr, ok := errAsAPIError(err); ok {
 				switch apiErr.Code {
+				case core.ErrIdempotencyConflict:
+					writeError(w, http.StatusConflict, core.ErrIdempotencyConflict, apiErr.Message)
+					return
 				case core.ErrConflict:
 					writeError(w, http.StatusConflict, core.ErrConflict, apiErr.Message)
 					return
@@ -496,11 +524,18 @@ func handleCloseIssue(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 			return
 		}
 		req.InvocationMode = normalizedMode
+		if err := core.ValidateOperationID(req.OperationID); err != nil {
+			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
+			return
+		}
 
 		result, err := st.CloseIssue(r.Context(), issueID, req)
 		if err != nil {
 			if apiErr, ok := errAsAPIError(err); ok {
 				switch apiErr.Code {
+				case core.ErrIdempotencyConflict:
+					writeError(w, http.StatusConflict, core.ErrIdempotencyConflict, apiErr.Message)
+					return
 				case core.ErrConflict:
 					writeError(w, http.StatusConflict, core.ErrConflict, apiErr.Message)
 					return

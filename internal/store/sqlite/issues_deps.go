@@ -2,14 +2,13 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/abevz/dibs/internal/core"
 )
 
-func populateDependencies(ctx context.Context, db *sql.DB, issues []core.Issue) ([]core.Issue, error) {
+func populateDependencies(ctx context.Context, db dependencyQueryer, issues []core.Issue) ([]core.Issue, error) {
 	if len(issues) == 0 {
 		return issues, nil
 	}

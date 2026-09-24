@@ -273,6 +273,7 @@ type HeartbeatRequest struct {
 	LeaseToken      string `json:"lease_token"`
 	LeaseGeneration int64  `json:"lease_generation"`
 	TTLSeconds      int    `json:"ttl_seconds"`
+	OperationID     string `json:"operation_id,omitempty"`
 }
 
 // ReleaseRequest is the JSON body for POST /v1/issues/{issue_id}/release.
@@ -282,6 +283,7 @@ type HeartbeatRequest struct {
 type ReleaseRequest struct {
 	LeaseToken      string `json:"lease_token"`
 	LeaseGeneration int64  `json:"lease_generation"`
+	OperationID     string `json:"operation_id,omitempty"`
 }
 
 // HandoffRequest is the JSON body for POST /v1/issues/{issue_id}/handoff.
@@ -293,6 +295,7 @@ type HandoffRequest struct {
 	LeaseGeneration int64  `json:"lease_generation"`
 	Note            string `json:"note"`
 	InvocationMode  string `json:"invocation_mode,omitempty"`
+	OperationID     string `json:"operation_id,omitempty"`
 }
 
 // HandoffResponse is returned after atomically recording a HANDOFF note and
@@ -316,6 +319,7 @@ type UpdateIssueRequest struct {
 	LeaseGeneration    int64  `json:"lease_generation"`
 	ReleaseLease       bool   `json:"release_lease,omitempty"`
 	Actor              string `json:"actor,omitempty"`
+	OperationID        string `json:"operation_id,omitempty"`
 }
 
 // CloseIssueRequest is the JSON body for POST /v1/issues/{issue_id}/close.
@@ -330,6 +334,7 @@ type CloseIssueRequest struct {
 	Actor           string `json:"actor,omitempty"`
 	Note            string `json:"note,omitempty"`
 	InvocationMode  string `json:"invocation_mode,omitempty"`
+	OperationID     string `json:"operation_id,omitempty"`
 }
 
 // OperatorCloseIssueRequest closes an issue through the explicit local
