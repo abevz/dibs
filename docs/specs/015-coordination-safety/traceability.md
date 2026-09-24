@@ -1,22 +1,23 @@
 # 015 Coordination Safety Traceability
 
-Status values describe implementation, not specification completeness.
+All requirements are verified at epic closure after PR #77. Historical leaf
+evidence and remaining trust boundaries are recorded in `review.md`.
 
 | Requirement | Primary leaves | Audit evidence | Status |
 | --- | --- | --- | --- |
-| R-01 authoritative restart state | `afc-114` | Current Architecture; Crash/Recovery Analysis | local subprocess restart evidence for active and expired leases; owner review pending |
-| R-02 one mutation authority | `afc-108` | Authoritative state; Write ownership; SQLite correctness | verified by corrected PR `#60`, automated two-process recovery, CI, and scratch installed black-box at `41d5517`; cooperative same-UID boundary remains explicit |
-| R-03 atomic ready-qualified claim | `afc-106`, `afc-110` | Claim semantics; Race 1; Dependencies | ready-qualified claim implemented by `afc-106`; `afc-110` proves one winner, one typed loser, one generation, and one claim event across independent SQLite handles for 100 schedules |
-| R-04 lease identity and fencing | `afc-103`, `afc-104`, `afc-105`, `afc-106` | Claim semantics; Races 2-4 | generation and lease-bound fencing verified through corrected PR `#62`; `afc-110` proves both heartbeat/reclaim and handoff/heartbeat serialization orders plus stale close after reclaim for 100 schedules each |
-| R-05 heartbeat and release | `afc-104`, `afc-113` | Lease/TTL; Heartbeat; Race 2 | atomic unexpired lease CAS verified by PR `#53` and the `afc-110` multi-connection matrix; `afc-113` locally proves exact heartbeat expiry and release replay (owner review pending) |
-| R-06 update/handoff/close | `afc-105`, `afc-113` | Handoff; Close; Races 3-5 | expiry-window and affected-row correction verified by PR `#62`; `afc-110` proves stale-close rejection, both handoff/heartbeat orders, and cancelled pre-write rollback; `afc-113` locally proves exact update, handoff, and close replay (owner review pending); process-kill proof remains `afc-114` |
-| R-07 dependency/ready consistency | `afc-107`, `afc-110` | Dependencies / ready queue | afc-107 serialization and traversal behavior is verified across two production-initialized SQLite handles for 100 opposite-edge schedules by `afc-110` |
-| R-08 lease time semantics | `afc-104`, `afc-114` | Lease/TTL; restart failure cases | daemon-time unexpired CAS implemented by `afc-104`; `afc-114` locally proves persisted active expiry, stale heartbeat fencing, and generation increment after restart; owner review pending |
-| R-09 idempotent mutations | `afc-111`, `afc-112`, `afc-113`, `afc-140` | Idempotency; Race 6 | ledger and claim replay implemented by `afc-111`; create replay merged in `afc-112` PR #72; `afc-113` proves lifecycle replay and merged in PR #73; `afc-140` covers MCP operation ID propagation and raw NDJSON replay against the test daemon |
-| R-10 crash/recovery | `afc-114` | Crash/Recovery Analysis; SQLite correctness | `afc-110` proves cancellation rollback; `afc-114` locally proves process-kill before/after commit, original replay, live-WAL backup/restore, migration/integrity fail-closed startup; owner review pending |
-| R-11 protocol and agent decisions | `afc-109`, `afc-116` | Protocol/API; Agent UX | fail-closed `issue run` ownership-loss behavior verified by corrected PR `#58`; afc-116 adds the agent decision table, historical replay/fresh-heartbeat rule, token-safe manual CLI, and protocol/schema/subprocess tests (PR/CI pending) |
-| R-12 audit/observability | `afc-115` | Auditability; Observability | owner resolution in design §12; `TestSafetyAuditSurvivesSecondConnectionWithoutSecrets`, `TestExpiryEventCarriesHeartbeatSummary`, `TestStaleLifecycleRejectionsDoNotAppendEvents`, `TestOperatorVersionRejectionsHaveDurableCountsWithoutEvents`, `TestDaemonSafetyFieldsAndMutationLogs`, and `TestBusyMutationGetsStableTelemetryCode` verify the implementation locally; CI/merge pending |
-| R-13 verification evidence | each behavior leaf, then `afc-110`, `afc-114` | Six races; eight failure cases | pre-idempotency multi-connection matrix implemented by `afc-110`; `afc-114` locally maps all eight audit failure cases to subprocess crash/restart and replay assertions; owner review pending |
+| R-01 authoritative restart state | `afc-114` | Current Architecture; Crash/Recovery Analysis | **verified** — PR #75; active/expired lease restart and committed-outcome replay tests reopen file-backed SQLite |
+| R-02 one mutation authority | `afc-108` | Authoritative state; Write ownership; SQLite correctness | **verified** — PR #60; singleton/two-process recovery, per-connection PRAGMAs, modes, installed runtime; same-UID limit explicit |
+| R-03 atomic ready-qualified claim | `afc-106`, `afc-110` | Claim semantics; Race 1; Dependencies | **verified** — PRs #49/#64; blocked direct claim fails; race matrix gives one valid owner/event across independent handles |
+| R-04 lease identity and fencing | `afc-103`–`afc-106`, `afc-110` | Claim semantics; Races 2–4 | **verified** — PRs #47/#62/#64; generation/token/expiry CAS and stale-owner race schedules |
+| R-05 heartbeat and release | `afc-104`, `afc-113` | Lease/TTL; Heartbeat; Race 2 | **verified** — PRs #53/#73; unexpired CAS and original-outcome heartbeat/release replay |
+| R-06 update/handoff/close | `afc-105`, `afc-113`, `afc-114` | Handoff; Close; Races 3–5 | **verified** — PRs #62/#73/#75; atomic fencing, exact replay, and daemon-kill before/after-commit proof |
+| R-07 dependency/ready consistency | `afc-107`, `afc-110` | Dependencies / ready queue | **verified** — PRs #54/#64; serialized edge/cycle traversal and computed ready view over independent handles |
+| R-08 lease time semantics | `afc-104`, `afc-114` | Lease/TTL; restart failure cases | **verified** — PRs #53/#75; daemon-time CAS, persisted expiry, stale generation fenced after restart |
+| R-09 idempotent mutations | `afc-111`–`afc-113`, `afc-140` | Idempotency; Race 6 | **verified** — PRs #65/#72/#73/#74; ledger, create/claim/lifecycle replay, MCP ID forwarding, conflict and response-loss regressions |
+| R-10 crash/recovery | `afc-114` | Crash/Recovery Analysis; SQLite correctness | **verified** — PR #75; process kill, WAL backup/restore, migration/integrity failure, restore-runbook proof |
+| R-11 protocol and agent decisions | `afc-109`, `afc-116` | Protocol/API; Agent UX | **verified** — PRs #58/#77; child termination, historical replay/new-ID proof, short-TTL deadline, token-safe CLI, protocol/schema tests |
+| R-12 audit/observability | `afc-115` | Auditability; Observability | **verified** — PR #76; durable rejected-attempt counts, renewal summaries, second-connection proof, health/stats/log fields, token exclusion |
+| R-13 verification evidence | each behavior leaf, `afc-110`, `afc-114` | Six races; eight failure cases | **verified** — PRs #64/#75; deterministic multi-connection matrix, process-kill/restart/WAL matrix, per-leaf regressions, CI and scratch binaries |
 
 For `afc-121`, invocation-mode behavior is sourced from `docs/specs/002-agent-protocol/requirements.md` through its canonical `docs/agent-protocol-v1.md` and the existing CLI/API contract.
 For `afc-122`, the existing CLI JSON error envelope and exit-code contract is sourced from `docs/specs/002-agent-protocol/requirements.md` and `docs/agent-protocol-v1.md`.

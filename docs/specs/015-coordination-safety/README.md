@@ -1,6 +1,7 @@
 # 015 Coordination Safety
 
-Status: specified; implementation has not started.
+Status: implementation complete; epic closure evidence and remaining limits are
+in `review.md` and `traceability.md`.
 
 Planning issue: `afc-101`. Implementation epic: `afc-102`.
 
@@ -10,12 +11,14 @@ program. The audit is preserved in `audit.md`; `requirements.md` and
 
 ## Decision
 
-At the audited revision, `af-coordinator` is useful as a local execution ledger
-for one agent or carefully sequenced agents. It is not yet a trustworthy
-coordination authority for multiple autonomous agents working concurrently.
-The blocking defects are atomic lease fencing, enforcement of the single-writer
+At the audited 2026-08-11 revision, `af-coordinator` was useful as a local
+execution ledger for one agent or carefully sequenced agents. It was not yet a
+trustworthy coordination authority for multiple autonomous agents working
+concurrently.
+The blocking defects were atomic lease fencing, enforcement of the single-writer
 model, retry safety after ambiguous outcomes, and production-like failure
-tests. SQLite remains the intended storage engine.
+tests. The implementation and current maturity assessment are in `review.md`;
+SQLite remains the storage engine.
 
 ## Delivery order
 
@@ -32,6 +35,9 @@ external tracker synchronization, bulk operator UX, and cosmetic work stay
 behind the safety epic.
 
 ## Factory routing
+
+Concurrent factory use remains disabled by the owner decision recorded in
+`review.md`; routing tags do not authorize that separate rollout.
 
 Some bounded leaves carry the live tag `exec/auto`. A factory may select them
 only through `afctl issue ready --project afc --tag exec/auto`; it must not
