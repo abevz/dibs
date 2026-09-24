@@ -15,9 +15,12 @@ const (
 )
 
 type Config struct {
-	SocketPath string
-	DBPath     string
-	LogLevel   string
+	SocketPath                  string
+	DBPath                      string
+	LogLevel                    string
+	SingletonLockHeld           bool
+	MigrationsVerifiedAtStartup bool
+	IntegrityVerifiedAtStartup  bool
 }
 
 func Default() Config {

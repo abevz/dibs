@@ -38,7 +38,7 @@ func handleCreateRepo(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 				return
 			}
 			logger.Error("failed to create repo", "logical_name", req.LogicalName, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create repository")
+			writeInternalError(w, err, "failed to create repository")
 			return
 		}
 
@@ -65,14 +65,14 @@ func handleListRepos(st store.CoordinatorStore, logger *slog.Logger) http.Handle
 					return
 				}
 				logger.Error("failed to list repos by project", "project", projectFilter, "error", err)
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to list repositories")
+				writeInternalError(w, err, "failed to list repositories")
 				return
 			}
 		} else {
 			repos, err = st.ListRepos(r.Context(), "")
 			if err != nil {
 				logger.Error("failed to list repos", "error", err)
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to list repositories")
+				writeInternalError(w, err, "failed to list repositories")
 				return
 			}
 		}

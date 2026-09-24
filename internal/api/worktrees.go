@@ -29,14 +29,14 @@ func handleRegisterWorktree(st store.CoordinatorStore, logger *slog.Logger) http
 				return
 			}
 			logger.Error("failed to resolve repo for worktree", "repo", req.Repo, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve repository")
+			writeInternalError(w, err, "failed to resolve repository")
 			return
 		}
 
 		wt, isNew, err := st.UpsertWorktree(r.Context(), repo.ID, req)
 		if err != nil {
 			logger.Error("failed to upsert worktree", "path", req.AbsolutePath, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to register worktree")
+			writeInternalError(w, err, "failed to register worktree")
 			return
 		}
 
@@ -63,7 +63,7 @@ func handleListWorktrees(st store.CoordinatorStore, logger *slog.Logger) http.Ha
 					return
 				}
 				logger.Error("failed to resolve repo for worktree list", "repo", repoFilter, "error", err)
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve repository")
+				writeInternalError(w, err, "failed to resolve repository")
 				return
 			}
 			worktrees, err = st.ListWorktrees(r.Context(), repoFilter)
@@ -73,7 +73,7 @@ func handleListWorktrees(st store.CoordinatorStore, logger *slog.Logger) http.Ha
 
 		if err != nil {
 			logger.Error("failed to list worktrees", "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to list worktrees")
+			writeInternalError(w, err, "failed to list worktrees")
 			return
 		}
 
@@ -103,7 +103,7 @@ func handleDeleteWorktree(st store.CoordinatorStore, logger *slog.Logger) http.H
 			}
 
 			logger.Error("failed to delete worktree", "worktree_id", worktreeID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to delete worktree")
+			writeInternalError(w, err, "failed to delete worktree")
 			return
 		}
 

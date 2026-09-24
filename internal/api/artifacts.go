@@ -29,7 +29,7 @@ func handleCreateArtifactRoot(st store.CoordinatorStore, logger *slog.Logger) ht
 				return
 			}
 			logger.Error("failed to resolve repo for artifact root", "repo", req.Repo, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve repository")
+			writeInternalError(w, err, "failed to resolve repository")
 			return
 		}
 
@@ -41,7 +41,7 @@ func handleCreateArtifactRoot(st store.CoordinatorStore, logger *slog.Logger) ht
 				return
 			}
 			logger.Error("failed to create artifact root", "path", req.RootPath, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create artifact root")
+			writeInternalError(w, err, "failed to create artifact root")
 			return
 		}
 
@@ -64,7 +64,7 @@ func handleListArtifactRoots(st store.CoordinatorStore, logger *slog.Logger) htt
 					return
 				}
 				logger.Error("failed to resolve repo for artifact root list", "repo", repoFilter, "error", getErr)
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve repository")
+				writeInternalError(w, getErr, "failed to resolve repository")
 				return
 			}
 			roots, err = st.ListArtifactRoots(r.Context(), repo.ID)
@@ -74,7 +74,7 @@ func handleListArtifactRoots(st store.CoordinatorStore, logger *slog.Logger) htt
 
 		if err != nil {
 			logger.Error("failed to list artifact roots", "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to list artifact roots")
+			writeInternalError(w, err, "failed to list artifact roots")
 			return
 		}
 
@@ -102,7 +102,7 @@ func handleCreateArtifact(st store.CoordinatorStore, logger *slog.Logger) http.H
 				return
 			}
 			logger.Error("failed to resolve repo for artifact", "repo", req.Repo, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve repository")
+			writeInternalError(w, err, "failed to resolve repository")
 			return
 		}
 
@@ -114,7 +114,7 @@ func handleCreateArtifact(st store.CoordinatorStore, logger *slog.Logger) http.H
 				return
 			}
 			logger.Error("failed to create artifact", "path", req.RelativePath, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create artifact")
+			writeInternalError(w, err, "failed to create artifact")
 			return
 		}
 
@@ -137,7 +137,7 @@ func handleListArtifacts(st store.CoordinatorStore, logger *slog.Logger) http.Ha
 					return
 				}
 				logger.Error("failed to resolve repo for artifact list", "repo", repoFilter, "error", getErr)
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve repository")
+				writeInternalError(w, getErr, "failed to resolve repository")
 				return
 			}
 			artifacts, err = st.ListArtifacts(r.Context(), repo.ID)
@@ -147,7 +147,7 @@ func handleListArtifacts(st store.CoordinatorStore, logger *slog.Logger) http.Ha
 
 		if err != nil {
 			logger.Error("failed to list artifacts", "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to list artifacts")
+			writeInternalError(w, err, "failed to list artifacts")
 			return
 		}
 

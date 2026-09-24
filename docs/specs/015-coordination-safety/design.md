@@ -286,6 +286,17 @@ Structured logs and local health/stats expose at least:
 No Prometheus dependency is required. Stable JSON health/stats plus structured
 logs are sufficient for the local unattended-daemon maturity gate.
 
+Owner resolution for R-12 (2026-09-24): rejected claim and stale mutation
+attempts are counted in a separate bounded durable table keyed by issue, kind,
+holder, and reason code. The rejected mutation rolls back first; recording the
+counter is a short independent transaction, and counter failure is logged
+without changing the caller's error. The issue event stream stays unchanged.
+The row stores first/last seen time, last presented/current generation, and
+last declared invocation mode; it never stores lease tokens or operation IDs.
+Rows for issues closed more than 30 days ago are eligible for pruning; no
+automatic pruning is included in this slice. Structured logs and in-memory
+counters remain the immediate operational signal.
+
 ## 13. Deterministic proof matrix
 
 The final harness uses controlled barriers, injected clocks, and crash points;

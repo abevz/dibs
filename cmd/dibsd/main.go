@@ -62,6 +62,9 @@ func main() {
 		logger.Error("failed to run migrations", "error", err)
 		os.Exit(1)
 	}
+	cfg.SingletonLockHeld = true
+	cfg.MigrationsVerifiedAtStartup = true
+	cfg.IntegrityVerifiedAtStartup = true
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

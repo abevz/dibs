@@ -36,7 +36,7 @@ func handleCreateProject(st store.CoordinatorStore, logger *slog.Logger) http.Ha
 					"a project with this key already exists")
 				return
 			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create project")
+			writeInternalError(w, err, "failed to create project")
 			return
 		}
 
@@ -49,7 +49,7 @@ func handleListProjects(st store.CoordinatorStore, logger *slog.Logger) http.Han
 		projects, err := st.ListProjects(r.Context())
 		if err != nil {
 			logger.Error("failed to list projects", "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to list projects")
+			writeInternalError(w, err, "failed to list projects")
 			return
 		}
 

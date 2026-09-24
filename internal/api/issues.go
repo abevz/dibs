@@ -57,7 +57,7 @@ func handleCreateIssue(st store.CoordinatorStore, logger *slog.Logger) http.Hand
 				return
 			}
 			logger.Error("failed to create issue", "project", req.Project, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create issue")
+			writeInternalError(w, err, "failed to create issue")
 			return
 		}
 
@@ -73,7 +73,7 @@ func resolveIssueID(st store.CoordinatorStore, w http.ResponseWriter, r *http.Re
 		if apiErr, ok := errAsAPIError(err); ok && apiErr.Code == core.ErrNotFound {
 			writeError(w, http.StatusNotFound, core.ErrNotFound, err.Error())
 		} else {
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve issue")
+			writeInternalError(w, err, "failed to resolve issue")
 		}
 		return "", false
 	}
@@ -90,7 +90,7 @@ func handleGetIssue(st store.CoordinatorStore, logger *slog.Logger) http.Handler
 		issue, lease, err := st.GetIssue(r.Context(), issueID)
 		if err != nil {
 			logger.Error("failed to get issue", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to get issue")
+			writeInternalError(w, err, "failed to get issue")
 			return
 		}
 
@@ -159,7 +159,7 @@ func handleListIssues(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 				}
 			}
 			logger.Error("failed to list issues", "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to list issues")
+			writeInternalError(w, err, "failed to list issues")
 			return
 		}
 
@@ -217,8 +217,7 @@ func handleClaimIssue(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 					return
 				}
 			}
-			logger.Error("failed to claim issue", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to claim issue")
+			writeIssueMutationError(w, logger, "claim issue", issueID, err)
 			return
 		}
 
@@ -270,8 +269,7 @@ func handleHeartbeatLease(st store.CoordinatorStore, logger *slog.Logger) http.H
 					return
 				}
 			}
-			logger.Error("failed to heartbeat lease", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to heartbeat lease")
+			writeIssueMutationError(w, logger, "heartbeat lease", issueID, err)
 			return
 		}
 
@@ -320,8 +318,7 @@ func handleReleaseLease(st store.CoordinatorStore, logger *slog.Logger) http.Han
 					return
 				}
 			}
-			logger.Error("failed to release lease", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to release lease")
+			writeIssueMutationError(w, logger, "release lease", issueID, err)
 			return
 		}
 
@@ -378,8 +375,7 @@ func handleHandoffLease(st store.CoordinatorStore, logger *slog.Logger) http.Han
 					return
 				}
 			}
-			logger.Error("failed to hand off lease", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to hand off lease")
+			writeIssueMutationError(w, logger, "hand off lease", issueID, err)
 			return
 		}
 
@@ -403,7 +399,7 @@ func handleListReadyIssues(st store.CoordinatorStore, logger *slog.Logger) http.
 					return
 				}
 				logger.Error("failed to resolve project for ready issues", "project", projectFilter, "error", err)
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve project")
+				writeInternalError(w, err, "failed to resolve project")
 				return
 			}
 			projectID = proj.ID
@@ -426,7 +422,7 @@ func handleListReadyIssues(st store.CoordinatorStore, logger *slog.Logger) http.
 					return
 				}
 				logger.Error("failed to resolve repository for ready issues", "repo", repoFilter, "error", err)
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve repository")
+				writeInternalError(w, err, "failed to resolve repository")
 				return
 			}
 			repoID = rp.ID
@@ -441,7 +437,7 @@ func handleListReadyIssues(st store.CoordinatorStore, logger *slog.Logger) http.
 		issues, err := st.ListReadyIssues(r.Context(), projectID, repoID, tags)
 		if err != nil {
 			logger.Error("failed to list ready issues", "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to list ready issues")
+			writeInternalError(w, err, "failed to list ready issues")
 			return
 		}
 
@@ -492,8 +488,7 @@ func handleUpdateIssue(st store.CoordinatorStore, logger *slog.Logger) http.Hand
 					return
 				}
 			}
-			logger.Error("failed to update issue", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to update issue")
+			writeIssueMutationError(w, logger, "update issue", issueID, err)
 			return
 		}
 
@@ -550,8 +545,7 @@ func handleCloseIssue(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 					return
 				}
 			}
-			logger.Error("failed to close issue", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to close issue")
+			writeIssueMutationError(w, logger, "close issue", issueID, err)
 			return
 		}
 
@@ -697,7 +691,7 @@ func writeIssueMutationError(w http.ResponseWriter, logger *slog.Logger, operati
 		}
 	}
 	logger.Error("failed to "+operation, "issue_id", issueID, "error", err)
-	writeError(w, http.StatusInternalServerError, "internal_error", "failed to "+operation)
+	writeInternalError(w, err, "failed to "+operation)
 }
 
 func handleAddDependency(st store.CoordinatorStore, logger *slog.Logger) http.HandlerFunc {
@@ -745,7 +739,7 @@ func handleAddDependency(st store.CoordinatorStore, logger *slog.Logger) http.Ha
 				}
 			}
 			logger.Error("failed to add dependency", "issue_id", issueID, "depends_on", req.DependsOn, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to add dependency")
+			writeInternalError(w, err, "failed to add dependency")
 			return
 		}
 
@@ -774,7 +768,7 @@ func handleRemoveDependency(st store.CoordinatorStore, logger *slog.Logger) http
 				return
 			}
 			logger.Error("failed to remove dependency", "issue_id", issueID, "depends_on", dependsOn, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to remove dependency")
+			writeInternalError(w, err, "failed to remove dependency")
 			return
 		}
 
@@ -813,7 +807,7 @@ func handleLinkArtifact(st store.CoordinatorStore, logger *slog.Logger) http.Han
 				}
 			}
 			logger.Error("failed to link artifact", "issue_id", issueID, "artifact", req.Artifact, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to link artifact")
+			writeInternalError(w, err, "failed to link artifact")
 			return
 		}
 
@@ -843,7 +837,7 @@ func handleUnlinkArtifact(st store.CoordinatorStore, logger *slog.Logger) http.H
 				return
 			}
 			logger.Error("failed to unlink artifact", "issue_id", issueID, "artifact", artifact, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to unlink artifact")
+			writeInternalError(w, err, "failed to unlink artifact")
 			return
 		}
 
@@ -865,7 +859,7 @@ func handleListIssueLinks(st store.CoordinatorStore, logger *slog.Logger) http.H
 				return
 			}
 			logger.Error("failed to list issue links", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to list issue links")
+			writeInternalError(w, err, "failed to list issue links")
 			return
 		}
 
@@ -911,7 +905,7 @@ func handleAddTag(st store.CoordinatorStore, logger *slog.Logger) http.HandlerFu
 				}
 			}
 			logger.Error("failed to add tag", "issue_id", issueID, "tag", req.Tag, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to add tag")
+			writeInternalError(w, err, "failed to add tag")
 			return
 		}
 
@@ -940,7 +934,7 @@ func handleRemoveTag(st store.CoordinatorStore, logger *slog.Logger) http.Handle
 				return
 			}
 			logger.Error("failed to remove tag", "issue_id", issueID, "tag", tag, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to remove tag")
+			writeInternalError(w, err, "failed to remove tag")
 			return
 		}
 
@@ -983,7 +977,7 @@ func handleCreateNote(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 				return
 			}
 			logger.Error("failed to create note", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create note")
+			writeInternalError(w, err, "failed to create note")
 			return
 		}
 
@@ -1005,7 +999,7 @@ func handleListNotes(st store.CoordinatorStore, logger *slog.Logger) http.Handle
 				return
 			}
 			logger.Error("failed to list notes", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to list notes")
+			writeInternalError(w, err, "failed to list notes")
 			return
 		}
 
@@ -1027,7 +1021,7 @@ func handleListEvents(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 				return
 			}
 			logger.Error("failed to list events", "issue_id", issueID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to list events")
+			writeInternalError(w, err, "failed to list events")
 			return
 		}
 
@@ -1074,7 +1068,7 @@ func handleWatchEvents(st store.CoordinatorStore, logger *slog.Logger) http.Hand
 					return
 				}
 				logger.Error("failed to watch events", "since", since, "error", err)
-				writeError(w, http.StatusInternalServerError, "internal_error", "failed to list events")
+				writeInternalError(w, err, "failed to list events")
 				return
 			}
 			if len(page.Events) > 0 || waitMS == 0 || time.Now().After(deadline) {

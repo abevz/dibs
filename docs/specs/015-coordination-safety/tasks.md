@@ -535,6 +535,13 @@ tokens/secrets. Metrics do not require another durable rollup database.
 
 **Dependencies.** `afc-101`, `afc-114`.
 
+**Implementation status.** Verified in the afc-115 worktree: file-backed
+embedded-migration tests cover bounded heartbeat summaries, replay, expiry,
+durable rejected-attempt counts, a second SQLite connection, stable health and
+stats fields, DB-busy telemetry, and token exclusion. Full build/race tests,
+vet, lint, and a scratch installed-binary check passed. PR/CI/merge tracking
+is recorded in `review.md`.
+
 ## AFC-SDD-0164 / afc-116 — Agent lease-loss and retry protocol
 
 **Problem.** Current agent docs describe exit codes and heartbeat cadence but
