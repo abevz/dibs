@@ -595,22 +595,25 @@ func claimIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 	// A row that did not pass the active-lease query is an expired attempt.
 	// Record its terminal outcome before replacing it, so the event stream
 	// remains the complete attempt history.
-	var expiredAttemptID, expiredSessionID, expiredAt string
+	var expiredAttemptID, expiredSessionID, expiredAt, expiredLastHeartbeat string
 	var expiredGeneration int64
+	var expiredHeartbeats int64
 	err = tx.QueryRowContext(ctx,
-		`SELECT attempt_id, session_id, expires_at, lease_generation FROM leases WHERE issue_id = ? AND expires_at <= ?`,
+		`SELECT attempt_id, session_id, expires_at, lease_generation, heartbeat_count, last_heartbeat_at FROM leases WHERE issue_id = ? AND expires_at <= ?`,
 		issueID, nowStr,
-	).Scan(&expiredAttemptID, &expiredSessionID, &expiredAt, &expiredGeneration)
+	).Scan(&expiredAttemptID, &expiredSessionID, &expiredAt, &expiredGeneration, &expiredHeartbeats, &expiredLastHeartbeat)
 	if err != nil && err != sql.ErrNoRows {
 		return core.ClaimResponse{}, fmt.Errorf("select expired lease: %w", err)
 	}
 	if err == nil {
 		payload := map[string]any{
-			"attempt_id":       expiredAttemptID,
-			"lease_generation": expiredGeneration,
-			"end_reason":       "expired",
-			"expired_at":       expiredAt,
-			"session_id":       expiredSessionID,
+			"attempt_id":        expiredAttemptID,
+			"lease_generation":  expiredGeneration,
+			"end_reason":        "expired",
+			"expired_at":        expiredAt,
+			"session_id":        expiredSessionID,
+			"heartbeat_count":   expiredHeartbeats,
+			"last_heartbeat_at": expiredLastHeartbeat,
 		}
 		if err := insertEvent(ctx, tx, issueID, "system", "lease_expired", payload, nowStr); err != nil {
 			return core.ClaimResponse{}, err
@@ -733,9 +736,10 @@ func heartbeatLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req 
 	newExpiresAt := now.UTC().Add(time.Duration(req.TTLSeconds) * time.Second).Format(time.RFC3339)
 
 	result, err := tx.ExecContext(ctx,
-		`UPDATE leases SET expires_at = ?, updated_at = ?
+		`UPDATE leases SET expires_at = ?, updated_at = ?,
+		 heartbeat_count = heartbeat_count + 1, last_heartbeat_at = ?
 		 WHERE issue_id = ? AND lease_token = ? AND lease_generation = ? AND expires_at > ?`,
-		newExpiresAt, nowStr, issueID, req.LeaseToken, req.LeaseGeneration, nowStr,
+		newExpiresAt, nowStr, nowStr, issueID, req.LeaseToken, req.LeaseGeneration, nowStr,
 	)
 	if err != nil {
 		return "", fmt.Errorf("update lease: %w", err)
@@ -802,13 +806,14 @@ func releaseLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req co
 	// Read the current attempt under the full lease predicate so the release
 	// event references the holder/attempt/generation that the conditional
 	// delete below actually removes.
-	var holder, attemptID string
+	var holder, attemptID, lastHeartbeat string
 	var storedGeneration int64
+	var heartbeatCount int64
 	err = tx.QueryRowContext(ctx,
-		`SELECT holder, attempt_id, lease_generation FROM leases
+		`SELECT holder, attempt_id, lease_generation, heartbeat_count, last_heartbeat_at FROM leases
 		 WHERE issue_id = ? AND lease_token = ? AND lease_generation = ? AND expires_at > ?`,
 		issueID, req.LeaseToken, req.LeaseGeneration, nowStr,
-	).Scan(&holder, &attemptID, &storedGeneration)
+	).Scan(&holder, &attemptID, &storedGeneration, &heartbeatCount, &lastHeartbeat)
 	if err == sql.ErrNoRows {
 		return leaseOwnershipError(ctx, tx, issueID, req.LeaseToken, req.LeaseGeneration)
 	}
@@ -855,9 +860,11 @@ func releaseLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req co
 	}
 
 	if err := insertEvent(ctx, tx, issueID, holder, "issue_released", map[string]any{
-		"attempt_id":       attemptID,
-		"lease_generation": storedGeneration,
-		"end_reason":       "released",
+		"attempt_id":        attemptID,
+		"lease_generation":  storedGeneration,
+		"end_reason":        "released",
+		"heartbeat_count":   heartbeatCount,
+		"last_heartbeat_at": lastHeartbeat,
 	}, nowStr); err != nil {
 		return err
 	}
@@ -896,6 +903,18 @@ func leaseOwnershipError(ctx context.Context, tx *sql.Tx, issueID, leaseToken st
 		return core.NewAPIError(core.ErrLeaseExpired, "lease ownership lost: generation mismatch")
 	}
 	return core.NewAPIError(core.ErrLeaseExpired, "lease has expired")
+}
+
+// leaseHeartbeatSummary reads only bounded, non-secret attempt evidence.
+func leaseHeartbeatSummary(ctx context.Context, tx *sql.Tx, issueID string) (int64, string, error) {
+	var count int64
+	var last string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT heartbeat_count, last_heartbeat_at FROM leases WHERE issue_id = ?`, issueID,
+	).Scan(&count, &last); err != nil {
+		return 0, "", fmt.Errorf("read lease heartbeat summary: %w", err)
+	}
+	return count, last, nil
 }
 
 // HandoffLease records a required HANDOFF note and releases its active lease
@@ -943,13 +962,14 @@ func handoffLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req co
 
 	nowTime := time.Now().UTC()
 	now := nowTime.Format(time.RFC3339)
-	var holder, attemptID string
+	var holder, attemptID, lastHeartbeat string
 	var leaseGeneration int64
+	var heartbeatCount int64
 	err = tx.QueryRowContext(ctx,
-		`SELECT holder, attempt_id, lease_generation FROM leases
+		`SELECT holder, attempt_id, lease_generation, heartbeat_count, last_heartbeat_at FROM leases
 		 WHERE issue_id = ? AND lease_token = ? AND lease_generation = ? AND expires_at > ?`,
 		issueID, req.LeaseToken, req.LeaseGeneration, now,
-	).Scan(&holder, &attemptID, &leaseGeneration)
+	).Scan(&holder, &attemptID, &leaseGeneration, &heartbeatCount, &lastHeartbeat)
 	if err == sql.ErrNoRows {
 		return core.HandoffResponse{}, core.NewAPIError(core.ErrLeaseExpired, "active lease not found")
 	}
@@ -1005,9 +1025,11 @@ func handoffLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req co
 		return core.HandoffResponse{}, core.NewAPIError(core.ErrConflict, "issue changed while handing off")
 	}
 	if err := insertEvent(ctx, tx, issueID, holder, "issue_released", map[string]any{
-		"attempt_id":       attemptID,
-		"lease_generation": leaseGeneration,
-		"end_reason":       "handoff",
+		"attempt_id":        attemptID,
+		"lease_generation":  leaseGeneration,
+		"end_reason":        "handoff",
+		"heartbeat_count":   heartbeatCount,
+		"last_heartbeat_at": lastHeartbeat,
 	}, now); err != nil {
 		return core.HandoffResponse{}, err
 	}
@@ -1244,6 +1266,10 @@ func updateIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req cor
 			return core.Issue{}, core.NewAPIError(core.ErrValidationFailed,
 				"no active lease to release")
 		}
+		heartbeatCount, lastHeartbeat, err := leaseHeartbeatSummary(ctx, tx, issueID)
+		if err != nil {
+			return core.Issue{}, err
+		}
 
 		// Re-verify the complete lease predicate at the release write and require
 		// exactly one row, matching the standalone release contract.
@@ -1285,9 +1311,11 @@ func updateIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req cor
 		}
 
 		if err := insertEvent(ctx, tx, issueID, lease.Holder, "issue_released", map[string]any{
-			"attempt_id":       lease.AttemptID,
-			"lease_generation": lease.LeaseGeneration,
-			"end_reason":       "released",
+			"attempt_id":        lease.AttemptID,
+			"lease_generation":  lease.LeaseGeneration,
+			"end_reason":        "released",
+			"heartbeat_count":   heartbeatCount,
+			"last_heartbeat_at": lastHeartbeat,
 		}, now); err != nil {
 			return core.Issue{}, err
 		}
@@ -1436,6 +1464,10 @@ func closeIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 		return core.CloseIssueResult{}, core.NewAPIError(core.ErrLeaseExpired,
 			"lease_generation does not match the active lease")
 	}
+	heartbeatCount, lastHeartbeat, err := leaseHeartbeatSummary(ctx, tx, issueID)
+	if err != nil {
+		return core.CloseIssueResult{}, err
+	}
 
 	result, err := updateTerminalIssue(ctx, tx, issue, req.Resolution, now)
 	if err != nil {
@@ -1472,6 +1504,8 @@ func closeIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 	payload["attempt_id"] = attemptID
 	payload["lease_generation"] = leaseGeneration
 	payload["end_reason"] = req.Resolution
+	payload["heartbeat_count"] = heartbeatCount
+	payload["last_heartbeat_at"] = lastHeartbeat
 	if req.Branch != "" {
 		payload["branch"] = req.Branch
 	}
@@ -1541,9 +1575,11 @@ func OperatorCloseIssue(ctx context.Context, db *sql.DB, issueID string, req cor
 
 	var attemptID sql.NullString
 	var leaseGeneration sql.NullInt64
+	var heartbeatCount sql.NullInt64
+	var lastHeartbeat sql.NullString
 	if err := tx.QueryRowContext(ctx,
-		`SELECT attempt_id, lease_generation FROM leases WHERE issue_id = ?`, issueID,
-	).Scan(&attemptID, &leaseGeneration); err != nil && err != sql.ErrNoRows {
+		`SELECT attempt_id, lease_generation, heartbeat_count, last_heartbeat_at FROM leases WHERE issue_id = ?`, issueID,
+	).Scan(&attemptID, &leaseGeneration, &heartbeatCount, &lastHeartbeat); err != nil && err != sql.ErrNoRows {
 		return core.CloseIssueResult{}, fmt.Errorf("select operator-close lease: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM leases WHERE issue_id = ?`, issueID); err != nil {
@@ -1566,6 +1602,8 @@ func OperatorCloseIssue(ctx context.Context, db *sql.DB, issueID string, req cor
 	}
 	if leaseGeneration.Valid {
 		payload["lease_generation"] = leaseGeneration.Int64
+		payload["heartbeat_count"] = heartbeatCount.Int64
+		payload["last_heartbeat_at"] = lastHeartbeat.String
 	}
 	if req.Branch != "" {
 		payload["branch"] = req.Branch
@@ -1687,9 +1725,11 @@ func OperatorReleaseIssue(ctx context.Context, db *sql.DB, issueID string, req c
 	}
 	var attemptID string
 	var leaseGeneration int64
+	var heartbeatCount int64
+	var lastHeartbeat string
 	if err := tx.QueryRowContext(ctx,
-		`SELECT attempt_id, lease_generation FROM leases WHERE issue_id = ?`, issueID,
-	).Scan(&attemptID, &leaseGeneration); err == sql.ErrNoRows {
+		`SELECT attempt_id, lease_generation, heartbeat_count, last_heartbeat_at FROM leases WHERE issue_id = ?`, issueID,
+	).Scan(&attemptID, &leaseGeneration, &heartbeatCount, &lastHeartbeat); err == sql.ErrNoRows {
 		return core.Issue{}, core.NewAPIError(core.ErrLeaseExpired, "lease not found")
 	} else if err != nil {
 		return core.Issue{}, fmt.Errorf("select operator-release lease: %w", err)
@@ -1698,9 +1738,11 @@ func OperatorReleaseIssue(ctx context.Context, db *sql.DB, issueID string, req c
 		return core.Issue{}, fmt.Errorf("delete leases: %w", err)
 	}
 	if err := insertEvent(ctx, tx, issueID, req.Actor, "issue_operator_released", map[string]any{
-		"reason":           req.Reason,
-		"attempt_id":       attemptID,
-		"lease_generation": leaseGeneration,
+		"reason":            req.Reason,
+		"attempt_id":        attemptID,
+		"lease_generation":  leaseGeneration,
+		"heartbeat_count":   heartbeatCount,
+		"last_heartbeat_at": lastHeartbeat,
 	}, now); err != nil {
 		return core.Issue{}, err
 	}

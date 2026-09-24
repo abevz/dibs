@@ -109,59 +109,77 @@ func (s *Store) ListReadyIssues(ctx context.Context, projectID, repoID string, t
 }
 
 func (s *Store) ClaimIssue(ctx context.Context, issueID, holder string, ttlSeconds int) (core.ClaimResponse, error) {
-	return ClaimIssue(ctx, s.db, issueID, holder, ttlSeconds)
+	return s.ClaimIssueWithOperation(ctx, issueID, core.ClaimRequest{Holder: holder, TTLSeconds: ttlSeconds})
 }
 
 func (s *Store) ClaimIssueWithSession(ctx context.Context, issueID, holder string, ttlSeconds int, sessionID string) (core.ClaimResponse, error) {
-	return ClaimIssueWithSession(ctx, s.db, issueID, holder, ttlSeconds, sessionID)
+	return s.ClaimIssueWithOperation(ctx, issueID, core.ClaimRequest{Holder: holder, TTLSeconds: ttlSeconds, SessionID: sessionID})
 }
 
 func (s *Store) ClaimIssueWithMode(ctx context.Context, issueID, holder string, ttlSeconds int, sessionID, invocationMode string) (core.ClaimResponse, error) {
-	return ClaimIssueWithMode(ctx, s.db, issueID, holder, ttlSeconds, sessionID, invocationMode)
+	return s.ClaimIssueWithOperation(ctx, issueID, core.ClaimRequest{Holder: holder, TTLSeconds: ttlSeconds, SessionID: sessionID, InvocationMode: invocationMode})
 }
 
 func (s *Store) ClaimIssueWithOperation(ctx context.Context, issueID string, req core.ClaimRequest) (core.ClaimResponse, error) {
-	return ClaimIssueWithOperation(ctx, s.db, issueID, req)
+	out, err := ClaimIssueWithOperation(ctx, s.db, issueID, req)
+	s.recordStaleRejection(issueID, "claim", req.Holder, req.InvocationMode, 0, err)
+	return out, err
 }
 
 func (s *Store) HeartbeatLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int, now time.Time) (string, error) {
-	return HeartbeatLease(ctx, s.db, issueID, leaseToken, leaseGeneration, ttlSeconds, now)
+	return s.HeartbeatLeaseWithOperation(ctx, issueID, core.HeartbeatRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, TTLSeconds: ttlSeconds}, now)
 }
 
 func (s *Store) HeartbeatLeaseWithOperation(ctx context.Context, issueID string, req core.HeartbeatRequest, now time.Time) (string, error) {
-	return HeartbeatLeaseWithOperation(ctx, s.db, issueID, req, now)
+	out, err := HeartbeatLeaseWithOperation(ctx, s.db, issueID, req, now)
+	s.recordStaleRejection(issueID, "heartbeat", "", "", req.LeaseGeneration, err)
+	return out, err
 }
 
 func (s *Store) ReleaseLease(ctx context.Context, issueID, leaseToken string, leaseGeneration int64, now time.Time) error {
-	return ReleaseLease(ctx, s.db, issueID, leaseToken, leaseGeneration, now)
+	return s.ReleaseLeaseWithOperation(ctx, issueID, core.ReleaseRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration}, now)
 }
 
 func (s *Store) ReleaseLeaseWithOperation(ctx context.Context, issueID string, req core.ReleaseRequest, now time.Time) error {
-	return ReleaseLeaseWithOperation(ctx, s.db, issueID, req, now)
+	err := ReleaseLeaseWithOperation(ctx, s.db, issueID, req, now)
+	s.recordStaleRejection(issueID, "release", "", "", req.LeaseGeneration, err)
+	return err
 }
 
 func (s *Store) HandoffLease(ctx context.Context, issueID string, req core.HandoffRequest) (core.HandoffResponse, error) {
-	return HandoffLease(ctx, s.db, issueID, req)
+	out, err := HandoffLease(ctx, s.db, issueID, req)
+	s.recordStaleRejection(issueID, "handoff", "", req.InvocationMode, req.LeaseGeneration, err)
+	return out, err
 }
 
 func (s *Store) UpdateIssue(ctx context.Context, issueID string, req core.UpdateIssueRequest) (core.Issue, error) {
-	return UpdateIssue(ctx, s.db, issueID, req)
+	out, err := UpdateIssue(ctx, s.db, issueID, req)
+	s.recordStaleRejection(issueID, "update", req.Actor, "", req.LeaseGeneration, err)
+	return out, err
 }
 
 func (s *Store) CloseIssue(ctx context.Context, issueID string, req core.CloseIssueRequest) (core.CloseIssueResult, error) {
-	return CloseIssue(ctx, s.db, issueID, req)
+	out, err := CloseIssue(ctx, s.db, issueID, req)
+	s.recordStaleRejection(issueID, "close", req.Actor, req.InvocationMode, req.LeaseGeneration, err)
+	return out, err
 }
 
 func (s *Store) OperatorCloseIssue(ctx context.Context, issueID string, req core.OperatorCloseIssueRequest) (core.CloseIssueResult, error) {
-	return OperatorCloseIssue(ctx, s.db, issueID, req)
+	out, err := OperatorCloseIssue(ctx, s.db, issueID, req)
+	s.recordStaleRejection(issueID, "operator_close", req.Actor, req.InvocationMode, 0, err)
+	return out, err
 }
 
 func (s *Store) OperatorReopenIssue(ctx context.Context, issueID string, req core.OperatorReopenIssueRequest) (core.Issue, error) {
-	return OperatorReopenIssue(ctx, s.db, issueID, req)
+	out, err := OperatorReopenIssue(ctx, s.db, issueID, req)
+	s.recordStaleRejection(issueID, "operator_reopen", req.Actor, "", 0, err)
+	return out, err
 }
 
 func (s *Store) OperatorReleaseIssue(ctx context.Context, issueID string, req core.OperatorReleaseIssueRequest) (core.Issue, error) {
-	return OperatorReleaseIssue(ctx, s.db, issueID, req)
+	out, err := OperatorReleaseIssue(ctx, s.db, issueID, req)
+	s.recordStaleRejection(issueID, "operator_release", req.Actor, "", 0, err)
+	return out, err
 }
 
 func (s *Store) AddDependency(ctx context.Context, issueID string, req core.AddDependencyRequest) error {

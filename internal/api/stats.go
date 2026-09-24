@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -30,9 +31,21 @@ func handleStats(st store.CoordinatorStore, logger *slog.Logger) http.HandlerFun
 				}
 			}
 			logger.Error("build stats report", "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to build statistics report")
+			writeInternalError(w, err, "failed to build statistics report")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]report.Report{"report": reportResult})
+		response := map[string]any{"report": reportResult}
+		if safetyStore, ok := st.(interface {
+			SafetySnapshot(context.Context, time.Time) (core.SafetySnapshot, error)
+		}); ok {
+			safety, err := safetyStore.SafetySnapshot(r.Context(), time.Now().UTC())
+			if err != nil {
+				logger.Error("build safety snapshot", "error", err)
+				writeInternalError(w, err, "failed to build safety snapshot")
+				return
+			}
+			response["safety"] = safety
+		}
+		writeJSON(w, http.StatusOK, response)
 	}
 }

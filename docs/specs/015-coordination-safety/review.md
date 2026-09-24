@@ -4,6 +4,53 @@
 
 Specification and backlog slicing complete; implementation in progress.
 
+## AFC-SDD-0163 / afc-115 — safety telemetry and audit closure
+
+Heartbeat renewals now increment a bounded per-lease count and last-heartbeat
+timestamp in the same transaction as the lease CAS. Release, handoff, close,
+operator release/close, and expiry/reclaim events carry that summary and the
+lease generation; exact operation-ID replay does not increment it again.
+Successful claims remain in issue events. Rejected claims and stale lifecycle
+mutations leave issue events unchanged and upsert a durable counter in a
+separate short transaction after the rejection rolls back. Each row is keyed
+by issue, kind, holder, and reason, with first/last times, last presented and
+current generations, and last declared invocation mode. No lease token or
+operation ID is stored. Lifecycle holder is resolved from the claim event for
+the presented generation, including after reclaim. Counter failure is logged and does not replace the
+original API error. Operator close/reopen/release stale-version rejections use
+the same durable counter path. Rows for issues closed over 30 days ago are eligible for
+future pruning; this slice has no automatic reaper.
+
+`/v1/health` reports the held singleton lock, startup migration/integrity
+verification policy, latest migration, active/expired leases, durable claim
+conflicts and stale rejections, and process-local mutation counters. `/v1/stats`
+adds a read-only `safety` snapshot including at most ten top stale-holder rows.
+Mutation logs on stderr contain operation, result code, HTTP status, and
+latency in milliseconds. `db_busy` and generic transaction failures have
+distinct local result codes; the public `internal_error` envelope is unchanged.
+The result-code classifier is shared across issue and non-issue mutation
+handlers, including project/repository/artifact/worktree writes.
+Startup migration/integrity failures continue to fail closed with diagnostic
+logs rather than serving a degraded daemon.
+
+Verification: `TestSafetyAuditSurvivesSecondConnectionWithoutSecrets` uses
+real embedded migrations and a second file-backed SQLite handle to prove
+durable counts, replay-once heartbeat summary, no rejected issue event, and no
+secret in the snapshot. `TestExpiryEventCarriesHeartbeatSummary` checks an
+expiry/reclaim event. `TestStaleLifecycleRejectionsDoNotAppendEvents` checks
+release, handoff, update, and close with replaced ownership. `TestDaemonSafetyFieldsAndMutationLogs` exercises the
+real Unix-socket daemon, health/stats JSON, claim conflict, and token-free
+logs. `TestOperatorVersionRejectionsHaveDurableCountsWithoutEvents` covers
+operator close/reopen/release conflicts without issue-event changes.
+`TestBusyMutationGetsStableTelemetryCode` holds a separate SQLite write
+lock and checks issue and project DB-busy result headers, logs, and counters. `make build`,
+`make test` (race), `make vet`, and `GOTOOLCHAIN=go1.26.4 make lint` passed;
+logs are `/tmp/afc-115-{build,test,vet,lint}.log`. With temporary HOME, DB,
+socket, and `make build-install BINDIR=<temp>/bin`, installed `dibsd` served
+health `ok` with one active lease and migration `0011_rejection_counts.sql`;
+installed `afctl` read the same issue. The owner's service and database were
+untouched. PR CI and independent final-content review gate the merge.
+
 ## AFC-SDD-0162 / afc-114 — crash, restart, migration, and restore proof
 
 The subprocess harness starts the production `api.RunDaemon` over a scratch

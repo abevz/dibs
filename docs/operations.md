@@ -154,6 +154,14 @@ Since the daemon listens on a Unix socket, use `curl --unix-socket`:
 # Health check
 curl --unix-socket ~/.local/state/dibs/dibsd.sock http://localhost/v1/health
 
+# Safety snapshot, including active/expired leases and top stale holders
+curl --unix-socket ~/.local/state/dibs/dibsd.sock http://localhost/v1/stats
+
+# Mutation logs on stderr include operation, result_code, status, latency_ms.
+# Health safety.mutation_counters is process-local; stats.safety rejection
+# counts are durable. A db_busy result keeps the existing internal_error API
+# envelope and adds the X-Dibs-Result-Code: db_busy response header.
+
 # Create a project
 curl --unix-socket ~/.local/state/dibs/dibsd.sock \
   -X POST http://localhost/v1/projects \

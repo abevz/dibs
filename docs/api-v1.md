@@ -84,6 +84,14 @@ request, never by retrying the same one.
 ## Health
 
 - `GET /healthz` — liveness, also `GET /v1/health`
+- `safety` in health reports `singleton_lock_held`, startup migration and
+  integrity verification, `integrity_policy` (`startup_integrity_check`),
+  `latest_migration`, active/expired lease counts, durable claim-conflict and stale-rejection
+  count, and process-local `mutation_counters`. `transaction_failures` counts
+  internal store failures on mutation routes (including DB-busy failures).
+  Startup verification is not a
+  live integrity scan. Migration/integrity failures prevent daemon startup and
+  are written to stderr as structured error logs.
 
 ## Endpoint map
 
@@ -196,7 +204,14 @@ This is the compact route-to-implementation inventory for the current daemon.
 ## Statistics
 
 - `GET /v1/stats?project=&repo=&since=&until=` — a versioned, read-only
-  execution-flow report in a `{ "report": ... }` envelope. `project` is a
+  execution-flow report in a `{ "report": ..., "safety": ... }` envelope.
+  `safety` is a daemon-wide current snapshot, independent of the report
+  filters: active/expired leases, durable claim-conflict and stale-rejection totals, latest applied
+  migration, and at most ten `top_stale_holders` rows with count, first/last
+  seen, last presented/current generation, and last invocation mode. A stale
+  lifecycle holder is resolved from the presented generation's claim event;
+  missing holder/mode is recorded as `unknown`. No token or operation ID is exposed.
+  `project` is a
   project key; `repo` is a repository UUID or logical name (names must be
   unambiguous without `project`); `since` accepts RFC 3339 or a positive Go
   duration such as `24h`; `until` accepts RFC 3339 and defaults to the daemon

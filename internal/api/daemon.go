@@ -46,6 +46,7 @@ func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st s
 	}
 
 	mux := http.NewServeMux()
+	mutationStats := &mutationCounters{}
 
 	// Health endpoints.
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +64,28 @@ func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st s
 		if err := st.Ping(r.Context()); err != nil {
 			h.Status = "degraded"
 			logger.Warn("health check db ping failed", "error", err)
+		}
+		if safetyStore, ok := st.(interface {
+			SafetySnapshot(context.Context, time.Time) (core.SafetySnapshot, error)
+		}); ok {
+			safety, err := safetyStore.SafetySnapshot(r.Context(), time.Now().UTC())
+			if err != nil {
+				h.Status = "degraded"
+				logger.Warn("health check safety snapshot failed", "error", err)
+			} else {
+				h.Safety = &core.SafetyHealth{
+					SingletonLockHeld:           cfg.SingletonLockHeld,
+					MigrationsVerifiedAtStartup: cfg.MigrationsVerifiedAtStartup,
+					IntegrityVerifiedAtStartup:  cfg.IntegrityVerifiedAtStartup,
+					IntegrityPolicy:             "startup_integrity_check",
+					ActiveLeases:                safety.ActiveLeases,
+					ExpiredLeases:               safety.ExpiredLeases,
+					StaleRejections:             safety.StaleRejections,
+					DurableClaimConflicts:       safety.ClaimConflicts,
+					LatestMigration:             safety.LatestMigration,
+					MutationCounters:            mutationStats.snapshot(),
+				}
+			}
 		}
 
 		writeJSON(w, http.StatusOK, h)
@@ -121,7 +144,7 @@ func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st s
 	mux.HandleFunc("GET /v1/issues", handleListIssues(st, logger))
 
 	server := &http.Server{
-		Handler:           mux,
+		Handler:           observeMutations(mux, logger, mutationStats),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
