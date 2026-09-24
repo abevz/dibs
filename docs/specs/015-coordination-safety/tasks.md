@@ -29,6 +29,9 @@ coordinator, as are the discovered contract leaves `afc-120`–`afc-122` and
 `afc-140`; each recorded commit is an ancestor of `main` at PR #77.
 Requirement evidence and remaining limits are in `traceability.md` and
 `review.md`. Concurrent factory use remains disabled by owner decision.
+The per-leaf implementation-status paragraphs below are snapshots from each
+leaf's authoring stage; references there to pending PRs or owner review are
+historical. This closure check and live coordinator status supersede them.
 
 `Factory` is routing metadata, not permission to bypass a claim, SDD, worktree,
 or dependency. Manual leaves change cross-cutting contracts and require an
