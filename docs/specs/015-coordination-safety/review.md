@@ -19,6 +19,10 @@ update can change the returned result.
 The API and explicit CLI `--operation-id` accept caller-persisted IDs. Omitted
 IDs keep the existing behavior per `docs/api-v1.md`; callers without an ID must
 reconcile an ambiguous outcome before attempting a new logical action.
+Independent review found that update's `latest`/omitted version would change
+the fingerprint on retry. The CLI now requires an explicit numeric
+`--expected-version` whenever `--operation-id` is supplied, and argument
+tests prove `latest`, `--force`, and omission fail before daemon contact.
 Automatic retry policy, `issue run` retry decisions, operator overrides, MCP
 argument propagation (`afc-140`), and crash/restore proof (`afc-114`) remain
 outside this slice. Fingerprints include the presented lease token through a
@@ -42,7 +46,8 @@ CLI argument tests cover each new flag.
 
 `make test` (race), `make build`, `make vet`, and
 `GOTOOLCHAIN=go1.26.4 make lint` passed; logs are under
-`/tmp/afc-113-{test,build,vet,lint}.log`. A temporary `HOME`, `DIBS_DB`, and
+`/tmp/afc-113-{test,build,vet,lint}-final.log` after the review correction.
+A temporary `HOME`, `DIBS_DB`, and
 `DIBS_SOCKET` with `make build-install BINDIR=<temp>/bin` launched a scratch
 `dibsd`; installed `dibs` created and claimed `smoke-1`, then repeated the
 same heartbeat and close IDs. Output: `scratch install and daemon: ok;

@@ -356,6 +356,10 @@ including `expected_version`, after an ambiguous response. The CLI accepts
 ambiguous outcome then requires a read/reconciliation step before any new
 logical action. Automatic retry policy and operator commands are outside this
 contract.
+For `dibs issue update` / `issue edit`, `--operation-id` also requires an
+explicit numeric `--expected-version`; `latest`, `--force`, or omission would
+resolve a different version on retry and are rejected before contacting the
+daemon.
 
 ## Notes, links, dependencies, events
 

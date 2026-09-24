@@ -40,6 +40,9 @@ func TestCommandArgumentsFailClosed(t *testing.T) {
 		{"issue close invalid resolution", []string{"issue", "close", "afc-1", "--resolution", "finished"}},
 		{"issue close latest unsupported", []string{"issue", "close", "afc-1", "--expected-version", "latest"}},
 		{"issue update incomplete lease", []string{"issue", "update", "afc-1", "--lease-token", "t"}},
+		{"issue update operation id without version", []string{"issue", "update", "afc-1", "--title", "New", "--operation-id", "update-op-0001"}},
+		{"issue update operation id with latest", []string{"issue", "update", "afc-1", "--title", "New", "--expected-version", "latest", "--operation-id", "update-op-0001"}},
+		{"issue update operation id with force", []string{"issue", "update", "afc-1", "--title", "New", "--expected-version", "2", "--force", "--operation-id", "update-op-0001"}},
 		{"issue link empty path", []string{"issue", "link", "afc-1", "--path", ""}},
 		{"issue list invalid type", []string{"issue", "list", "--type", "nonsense"}},
 		{"issue list invalid column", []string{"issue", "list", "--columns", "magic"}},
@@ -120,6 +123,8 @@ func TestMalformedJSONCommandNeverContactsDaemon(t *testing.T) {
 		{"--json", "issue", "claim", "--ttl", "900", "afc-1"},
 		{"--json", "issue", "claim", "afc-1", "--retry-last", "--operation-id", "x"},
 		{"--json", "issue", "claim", ""},
+		{"--json", "issue", "update", "afc-1", "--title", "New", "--operation-id", "update-op-0001"},
+		{"--json", "issue", "update", "afc-1", "--title", "New", "--expected-version", "latest", "--operation-id", "update-op-0001"},
 		{"--json", "issue", "link", "afc-1", "--path", ""},
 		{"--actor", "", "--json", "issue", "claim", "afc-1"},
 	} {

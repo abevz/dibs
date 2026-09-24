@@ -885,7 +885,7 @@ func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error
 	return nil
 }
 
-const issueUpdateUsage = "Usage: dibs issue update <issue-id> [--title ...] [--type <task|bug|feature|epic|chore>] [--external-key ...] [--description ...] [--acceptance ...] [--priority N] [--assignee ...] [--status ...] [--expected-version N|latest] [--force] [--lease-token ...] [--lease-generation <generation>] [--release] [--operation-id <id>]"
+const issueUpdateUsage = "Usage: dibs issue update <issue-id> [--title ...] [--type <task|bug|feature|epic|chore>] [--external-key ...] [--description ...] [--acceptance ...] [--priority N] [--assignee ...] [--status ...] [--expected-version N|latest] [--force] [--lease-token ...] [--lease-generation <generation>] [--release] [--operation-id <id>]\n  --operation-id requires a numeric --expected-version for exact replay"
 
 func runIssueUpdate(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -976,6 +976,11 @@ func runIssueUpdate(ctx context.Context, c *client.Client, args []string) error 
 		}
 	}
 
+	// An operation retry must send the original expected version, not resolve
+	// the issue's later version after the first response was lost.
+	if req.OperationID != "" && req.ExpectedVersion < 0 {
+		return usageErr(issueUpdateUsage, "--operation-id requires an explicit numeric --expected-version")
+	}
 	// Auto-resolve the version when omitted, --expected-version latest, or --force.
 	if err := resolveExpectedVersion(ctx, c, issueUpdateUsage, issueID, &req.ExpectedVersion); err != nil {
 		return err

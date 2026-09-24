@@ -150,6 +150,7 @@ func validateCommandArgs(args []string) error {
 	}
 	allowed := make(map[string]bool)
 	seen := make(map[string]bool)
+	values := make(map[string]string)
 	for _, flag := range strings.Fields(route.flags) {
 		bare := strings.TrimSuffix(flag, "?")
 		allowed[bare] = !strings.HasSuffix(flag, "?")
@@ -182,6 +183,7 @@ func validateCommandArgs(args []string) error {
 		if err := validateFlagValue(key, a, v); err != nil {
 			return err
 		}
+		values[a] = v
 		i++
 	}
 	if route.pos >= 0 && positionals != route.pos {
@@ -222,6 +224,10 @@ func validateCommandArgs(args []string) error {
 	}
 	if (key == "issue edit" || key == "issue update") && seen["--lease-token"] && !seen["--lease-generation"] {
 		return argumentError("--lease-generation is required with --lease-token")
+	}
+	if (key == "issue edit" || key == "issue update") && seen["--operation-id"] &&
+		(!seen["--expected-version"] || values["--expected-version"] == "latest" || seen["--force"]) {
+		return argumentError("--operation-id requires an explicit numeric --expected-version; latest/force cannot replay the original request")
 	}
 	return nil
 }
