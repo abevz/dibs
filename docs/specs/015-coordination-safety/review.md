@@ -4,6 +4,54 @@
 
 Specification and backlog slicing complete; implementation in progress.
 
+## AFC-SDD-0162 / afc-114 — crash, restart, migration, and restore proof
+
+The subprocess harness starts the production `api.RunDaemon` over a scratch
+Unix socket with `sqlite.Open` and the embedded migrations. A store wrapper
+only pauses test requests at the existing transaction proof points or after a
+committed store call; the parent sends SIGKILL and starts a fresh process on
+the same file-backed SQLite DB. It checks issue, lease, event, and operation
+ledger state after restart. No production crash switch or live DB access was
+added. Polling waits for an explicit crash-point marker, not for a likely
+timing race. A separate short-lived worker subprocess claims an issue and
+exits, or writes an external-work marker and exits, for the two worker-death
+cases.
+
+| Audit failure | Expected state and automated assertion |
+| --- | --- |
+| 1. Worker dies immediately after claim | `TestRestartRetainsActiveLeaseAndFencesExpiredWorker`: same active attempt, generation, and absolute expiry after kill/restart; current token can renew. |
+| 2. Worker dies after external work before close | `TestWorkerDeathBeforeCloseRequiresReconciliation`: external marker survives, coordinator remains nonterminal with one lease and no close event; explicit reconciled close replays once. External side effects still require caller reconciliation. |
+| 3. Daemon dies during claim | `TestCrashBeforeCommitHasNoPartialState` rolls back lease/status/events/ledger; `TestCrashAfterCommitReplaysOriginalOutcome` returns the committed token, generation, and attempt with one claim event. |
+| 4. Daemon dies during heartbeat | The same before/after tests prove original expiry or one committed new expiry, one ledger outcome, and no second renewal on retry. |
+| 5. Daemon dies during handoff | The before/after tests prove no partial note/release and one original handoff outcome on replay. |
+| 6. Restart with active leases | The active lease test checks persisted ownership and renewal on the new daemon process. |
+| 7. Host reboot equivalent | SIGKILL plus new process/SQLite handle reopens WAL state; `TestLiveWALBackupRestoresEventsAndMigrationLedger` snapshots an active WAL with `VACUUM INTO`, restores on another path, and checks integrity, migration count, committed events, and a read-only issue query. This is not hardware power-loss certification. |
+| 8. Client retry after timeout | After-commit response loss is forced for create, claim, heartbeat, handoff, and close; exact operation-ID replay returns the original result with one ledger row and one effect. |
+
+`TestStartupRejectsUnknownMigrationAndCorruptDatabase` proves the daemon
+refuses to serve an unknown applied migration or invalid SQLite file with a
+diagnostic. Startup now runs `PRAGMA integrity_check` and rejects unknown
+migration-ledger entries before applying embedded migrations.
+`TestInvalidMigrationRollsBackWithoutLedgerEntry` proves an invalid SQL
+migration leaves neither its table nor ledger entry. The restore runbook
+keeps the old DB/WAL/SHM together and validates the backup read-only before
+moving the active files. A shell check of the exact runbook block showed that
+missing and corrupt backup paths leave the active DB byte-for-byte intact,
+while a valid backup replaces it and retains the old DB in a holding directory.
+The established multi-connection race matrix remains in `afc-110`; this
+slice adds real process termination and reopen evidence.
+
+`make build`, `make test` (race), `make vet`, and
+`GOTOOLCHAIN=go1.26.4 make lint` passed, with logs at
+`/tmp/afc-114-{build,test,vet,lint}.log`. A separate temporary HOME, DB,
+socket, and `make build-install BINDIR=<temp>/bin` checked installed
+`dibsd`/`dibs`: after SIGKILL and restart, `smoke-1` remained readable; an
+unknown applied migration then prevented startup with an explicit diagnostic.
+The owner's daemon and live DB were untouched. Independent read-only review
+found no material defects; PR CI remains pending. This core issue remains open
+for owner review and will not be
+merged by the implementer.
+
 ## afc-140 — MCP operation ID propagation
 
 The MCP create, claim, heartbeat, release, update, handoff, and close tools

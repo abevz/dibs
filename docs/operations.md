@@ -175,6 +175,11 @@ sqlite3 ~/.local/share/dibs/dibs.db \
 ```
 
 This creates a consistent, compacted copy of the database while the daemon is running.
+Copying the main `.db` file alone while a live WAL exists is not a backup.
+`dibsd` checks SQLite integrity and rejects unknown applied migrations before
+serving requests. On either startup failure, keep the original DB/WAL/SHM
+together and restore a verified backup or use a compatible binary; it does
+not repair corrupt state in place.
 
 ### Automatic backup
 
@@ -232,20 +237,46 @@ make uninstall-backup
 
 ### Restore
 
+Before stopping the daemon, record the active DB path from `dibs --json
+health`. Keep the original DB and any WAL/SHM files together until the
+restored daemon has been verified.
+
 1. Stop the daemon:
    ```bash
    sh contrib/install/systemctl-user.sh stop dibsd
    ```
-2. Replace the database:
+2. Verify the backup and replace the database:
    ```bash
-   cp /path/to/backup/dibs-20260703.db ~/.local/share/dibs/dibs.db
+   restore_verified() {
+     backup=/path/to/backup/dibs-20260703.db
+     db="$HOME/.local/share/dibs/dibs.db"
+     [ -f "$backup" ] || { echo "backup missing: $backup" >&2; return 1; }
+     integrity=$(sqlite3 -readonly "$backup" 'PRAGMA integrity_check') || return 1
+     [ "$integrity" = ok ] || { echo "backup integrity failed: $integrity" >&2; return 1; }
+     migrations=$(sqlite3 -readonly "$backup" 'SELECT count(*) FROM _migrations') || return 1
+     [ "$migrations" -gt 0 ] 2>/dev/null || { echo 'backup migration ledger missing' >&2; return 1; }
+     staged=$(mktemp "$(dirname "$db")/.dibs-restore.XXXXXX") || return 1
+     cp "$backup" "$staged" && chmod 600 "$staged" || return 1
+     hold=$(mktemp -d "$(dirname "$db")/pre-restore.XXXXXX") || return 1
+     for suffix in '' -wal -shm; do
+       [ ! -e "$db$suffix" ] || mv "$db$suffix" "$hold/$(basename "$db")$suffix" || return 1
+     done
+     mv "$staged" "$db" || return 1
+     printf 'Previous DB/WAL/SHM retained in %s\n' "$hold"
+   }
+   restore_verified
    ```
-   Replace the path above with the existing legacy database path when that is
-   what `dibs --json health` reports. Do not restore into a second path.
+   Set `db` to the path reported by `dibs --json
+   health` before stopping; use the existing legacy path if that is active.
+   Keep the old DB/WAL/SHM together in `hold` until verification succeeds.
+   Do not restore into a second path or leave an old WAL beside the restored
+   file.
 3. Start the daemon:
    ```bash
    sh contrib/install/systemctl-user.sh start dibsd
    ```
+4. Run `dibs doctor` and a read-only `dibs issue get <known-id>` to verify
+   daemon revision, schema startup, and restored coordinator data.
 
 ## CLI usage
 
