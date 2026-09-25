@@ -89,7 +89,7 @@ are historical and do not override that coordinator closure.
   remains required before advertising that separate channel. The scratch
   verification did not restart a live service or change a live database.
 
-### afc-129 — first use implementation (verification pending)
+### afc-129 — first use implementation and preview verification
 
 - `dibs init` now discovers the current Git repository and worktree, shows the
   mapping, starts the companion `dibsd` when needed, reconciles project/repo/
