@@ -2,6 +2,22 @@
 
 ## Primary CLI path and token handling
 
+Every CLI leaf accepts `--help` without contacting the daemon. Registration
+commands accept project keys or UUIDs and repository logical names or UUIDs;
+`--json` registration output exposes a top-level `id`. `dibs issue list`
+supports `--limit` (up to 1000) and `--offset` after filtering.
+
+MCP read-only discovery provides `list_projects`, `list_repositories`,
+`list_worktrees`, `list_issues`, and `list_ready_issues`. The issue tools default
+to 50 results and cap each page at 100; ready results include `project_key`.
+`create_issue` and `update_issue` require an explicit `actor` when
+`DIBS_ACTOR` is unset. CLI-only paths remain available for
+`project add`, `repo add`, `worktree register|unregister|prune`,
+`artifact-root add|list`, `artifact register|list`,
+`issue dependency add|remove`, `issue link|unlink`, `issue cancel`,
+`stats`, `export jsonl`, `init`, and `doctor`. Prefix these with `dibs` and
+inspect each leaf with `--help` first.
+
 The CLI is the primary agent interface; MCP is for clients without a shell.
 For lifecycle work use `dibs issue run <short_id> --ttl 900 -- <command>`.
 It owns claim, heartbeat, and close/handoff, and passes the token to its child

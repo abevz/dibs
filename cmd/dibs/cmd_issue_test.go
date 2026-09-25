@@ -247,7 +247,7 @@ func TestIssueHandoffValidatesRequiredHandoffNote(t *testing.T) {
 		{
 			name:    "missing token",
 			args:    []string{"handoff", "afc-52", "--note", "HANDOFF: next steps"},
-			wantErr: "--lease-token is required",
+			wantErr: "lease token is required",
 		},
 		{
 			name:    "missing note",

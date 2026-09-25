@@ -75,7 +75,13 @@ func main() {
 		printVersion()
 		return
 	}
+	if printLocalHelp(filtered) {
+		return
+	}
 	if err := validateCommandArgs(filtered); err != nil {
+		if help, ok := leafHelp(filtered); ok {
+			fail(argumentError(err.Error() + "\n" + help))
+		}
 		fail(err)
 	}
 

@@ -75,6 +75,27 @@ func TestGetProjectByKey(t *testing.T) {
 	}
 }
 
+func TestProjectUUIDWorksForRegistrationAndIssueCreation(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	p, err := CreateProject(ctx, db, "alpha", "Alpha", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetProjectByKey(ctx, db, p.ID)
+	if err != nil || got.ID != p.ID {
+		t.Fatalf("lookup by ID = %+v, %v", got, err)
+	}
+	repo, _, err := CreateRepo(ctx, db, p.ID, core.CreateRepoRequest{Project: p.ID, LogicalName: "repo", CanonicalGitDir: "/tmp/repo", DefaultBranch: "main"})
+	if err != nil || repo.ProjectID != p.ID {
+		t.Fatalf("repo by project ID = %+v, %v", repo, err)
+	}
+	issue, err := CreateIssue(ctx, db, p.ID, core.CreateIssueRequest{Project: p.ID, ScopeKind: "project", Title: "UUID project"})
+	if err != nil || issue.ProjectID != p.ID || issue.ShortID != "alpha-1" {
+		t.Fatalf("issue by project ID = %+v, %v", issue, err)
+	}
+}
+
 func TestCreateProjectDuplicateKey(t *testing.T) {
 	t.Parallel()
 	db := newTestDB(t)

@@ -219,6 +219,9 @@ func TestGetRepoInProjectByLogicalName(t *testing.T) {
 	if got2.ID != repo2.ID {
 		t.Fatalf("expected repo %q, got %q", repo2.ID, got2.ID)
 	}
+	if _, err := GetRepoInProject(context.Background(), db, p1.ID, repo2.ID); err == nil {
+		t.Fatal("repository UUID from another project must not bypass project scope")
+	}
 }
 
 func TestGetRepoNotFound(t *testing.T) {
