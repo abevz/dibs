@@ -119,6 +119,9 @@ func validateCommandArgs(args []string) error {
 	key := strings.Join(path, " ")
 	route, ok := commandRoutes[key]
 	if !ok {
+		if strings.HasPrefix(path[len(path)-1], "-") {
+			return argumentError("unknown flag: " + path[len(path)-1])
+		}
 		return argumentError("unknown command: " + key)
 	}
 	start := len(path)

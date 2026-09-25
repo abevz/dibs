@@ -47,3 +47,20 @@ and build evidence: `/tmp/afc-146-cli-test.log`, `/tmp/afc-146-build.log`.
 
 Independent read-only review of the final code and test change found no
 remaining material issue.
+
+## afc-147 follow-up
+
+Unknown commands and flags now point to the nearest local `--help` route;
+`--h` is reported as an unknown flag. Leaf help gives typed value names and
+short explanations for every routed flag. Project registration explains the
+issue-prefix key and display name with a concrete example. The route/metadata
+coverage test and CLI regression test preserve local, no-daemon help and
+`issue run` child arguments. `go test ./cmd/dibs` and `go build ./...` passed
+(`/tmp/afc-147-cli-test.log`, `/tmp/afc-147-build.log`).
+
+An installed candidate under a scratch HOME, DB and absent socket passed the
+reported invocations without opening the DB (`/tmp/afc-147-installed-check.log`).
+Independent review found one inaccurate `--force` explanation; the final
+revision fixes it for ordinary and operator updates. Focused help tests passed
+again (`/tmp/afc-147-final-focused.log`), and independent read-only review of
+that final code revision found no remaining material issue.

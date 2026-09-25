@@ -85,12 +85,12 @@ func main() {
 	}
 	if err := validateCommandArgs(filtered); err != nil {
 		if filtered[0] == "projects" {
-			fail(argumentError(err.Error() + "\nDid you mean: dibs project --help?"))
+			fail(argumentError(err.Error() + "\nDid you mean: " + helpPath(filtered) + "?"))
 		}
 		if help, ok := leafHelp(filtered); ok {
-			fail(argumentError(err.Error() + "\n" + help))
+			fail(argumentError(err.Error() + "\nUse: " + helpPath(filtered) + " for flags.\n" + help))
 		}
-		fail(err)
+		fail(argumentError(err.Error() + "\nUse: " + helpPath(filtered) + " for available commands and flags."))
 	}
 
 	c := client.New(cfg.SocketPath)
