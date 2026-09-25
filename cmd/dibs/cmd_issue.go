@@ -400,7 +400,7 @@ Filters:
   --external-key <key>           Exact external key
   --tag <namespace/value[,..]>   Tag(s); an issue must carry every listed
                                   tag (AND), repeatable
-  --limit <n> --offset <n>       Reserved pagination parameters
+  --limit <n> --offset <n>       Page size (max 1000) and zero-based offset
   --columns <key[,key...]>       Table columns to display, in order
                                   (default: id,short,status,type,title,
                                   assignee,claimed,blocked_by,deps,tags)
@@ -477,8 +477,14 @@ func parseIssueListArgs(args []string) (core.IssueListParams, []string, bool, er
 			values, err = core.NormalizeIssueListValues([]string{value})
 			params.Tags = append(params.Tags, values...)
 		case "--limit", "--offset":
-			if _, parseErr := strconv.Atoi(value); parseErr != nil {
+			n, parseErr := strconv.Atoi(value)
+			if parseErr != nil || n < 0 || (flag == "--limit" && n > 1000) {
 				return core.IssueListParams{}, nil, false, fmt.Errorf("%s requires an integer", flag)
+			}
+			if flag == "--limit" {
+				params.Limit = n
+			} else {
+				params.Offset = n
 			}
 		case "--columns":
 			columns, err = parseIssueColumns(value)
@@ -608,7 +614,7 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 	var err error
 	holder, err = resolveActor(holder)
 	if err != nil {
-		return fmt.Errorf("%s", err)
+		return usageErr(issueClaimUsage, err.Error())
 	}
 	if invocationMode != "" {
 		normalized, nerr := core.NormalizeInvocationMode(invocationMode)

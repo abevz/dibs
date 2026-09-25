@@ -138,6 +138,14 @@ func handleListIssues(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 			IssueTypes:  issueTypes,
 			Tags:        tags,
 		}
+		if params.Limit, err = parseListPage(r.URL.Query().Get("limit"), "limit", 1000); err != nil {
+			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
+			return
+		}
+		if params.Offset, err = parseListPage(r.URL.Query().Get("offset"), "offset", 1000000); err != nil {
+			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
+			return
+		}
 		for _, issueType := range params.IssueTypes {
 			if !core.ValidIssueType(issueType) {
 				writeError(w, http.StatusBadRequest, core.ErrValidationFailed,
@@ -165,6 +173,17 @@ func handleListIssues(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 
 		writeJSON(w, http.StatusOK, map[string][]core.Issue{"issues": issues})
 	}
+}
+
+func parseListPage(raw, name string, max int) (int, error) {
+	if raw == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 || n > max {
+		return 0, fmt.Errorf("%s must be an integer from 0 to %d", name, max)
+	}
+	return n, nil
 }
 
 func handleClaimIssue(st store.CoordinatorStore, logger *slog.Logger) http.HandlerFunc {

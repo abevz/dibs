@@ -54,8 +54,10 @@ func createIssueAttempt(ctx context.Context, db *sql.DB, projectKey string, req 
 	// Resolve references after replay lookup: a committed result remains
 	// replayable even if its worktree was later unregistered.
 	var projectID string
+	var canonicalProjectKey string
 	var seq int64
-	err = tx.QueryRowContext(ctx, `SELECT id, next_issue_seq FROM projects WHERE key = ?`, projectKey).Scan(&projectID, &seq)
+	err = tx.QueryRowContext(ctx, `SELECT id, key, next_issue_seq FROM projects WHERE key = ? OR id = ?
+		ORDER BY CASE WHEN key = ? THEN 0 ELSE 1 END LIMIT 1`, projectKey, projectKey, projectKey).Scan(&projectID, &canonicalProjectKey, &seq)
 	if err == sql.ErrNoRows {
 		return core.Issue{}, core.NewAPIError(core.ErrNotFound, "project not found")
 	}
@@ -85,7 +87,7 @@ func createIssueAttempt(ctx context.Context, db *sql.DB, projectKey string, req 
 	now := nowTime.Format(time.RFC3339)
 	id := uuid.New().String()
 
-	shortID := fmt.Sprintf("%s-%d", projectKey, seq)
+	shortID := fmt.Sprintf("%s-%d", canonicalProjectKey, seq)
 
 	status := "open"
 	priority := req.Priority
@@ -313,6 +315,17 @@ func ListIssues(ctx context.Context, db *sql.DB, params core.IssueListParams) ([
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
 	query += " ORDER BY i.updated_at DESC, i.id ASC"
+	if params.Limit < 0 || params.Offset < 0 || params.Limit > 1000 {
+		return nil, core.NewAPIError(core.ErrValidationFailed, "invalid limit or offset")
+	}
+	if params.Limit > 0 || params.Offset > 0 {
+		limit := params.Limit
+		if limit == 0 {
+			limit = -1
+		}
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, params.Offset)
+	}
 
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {

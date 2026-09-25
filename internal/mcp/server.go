@@ -24,6 +24,10 @@ const (
 // CoordinatorClient describes the daemon API surface used by the MCP wrapper.
 type CoordinatorClient interface {
 	Health(ctx context.Context) (core.Health, error)
+	ListProjects(ctx context.Context) ([]core.Project, error)
+	ListRepos(ctx context.Context, project string) ([]core.Repository, error)
+	ListWorktrees(ctx context.Context, repo string) ([]core.Worktree, error)
+	ListIssuesWithFilters(ctx context.Context, params core.IssueListParams) ([]core.Issue, error)
 	GetIssue(ctx context.Context, issueID string) (core.Issue, *core.IssueLease, error)
 	ListReadyIssues(ctx context.Context, project, repo string, tags []string) ([]core.Issue, error)
 	CreateIssue(ctx context.Context, req core.CreateIssueRequest) (core.Issue, error)
@@ -232,15 +236,95 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			Project string   `json:"project"`
 			Repo    string   `json:"repo"`
 			Tags    []string `json:"tags"`
+			Limit   int      `json:"limit"`
+			Offset  int      `json:"offset"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
+		}
+		if args.Limit < 0 || args.Limit > 100 || args.Offset < 0 {
+			return nil, fmt.Errorf("limit must be 1..100 and offset must be nonnegative")
+		}
+		if args.Limit == 0 {
+			args.Limit = 50
 		}
 		issues, err := s.client.ListReadyIssues(ctx, args.Project, args.Repo, args.Tags)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"issues": issues}, nil
+		projects, err := s.client.ListProjects(ctx)
+		if err != nil {
+			return nil, err
+		}
+		keys := make(map[string]string, len(projects))
+		for _, project := range projects {
+			keys[project.ID] = project.Key
+		}
+		total := len(issues)
+		if args.Offset >= total {
+			return map[string]any{"issues": []any{}, "total": total, "limit": args.Limit, "offset": args.Offset}, nil
+		}
+		end := args.Offset + args.Limit
+		if end > total {
+			end = total
+		}
+		page := make([]any, 0, end-args.Offset)
+		for _, issue := range issues[args.Offset:end] {
+			page = append(page, struct {
+				core.Issue
+				ProjectKey string `json:"project_key"`
+			}{Issue: issue, ProjectKey: keys[issue.ProjectID]})
+		}
+		return map[string]any{"issues": page, "total": total, "limit": args.Limit, "offset": args.Offset}, nil
+	case "list_projects":
+		projects, err := s.client.ListProjects(ctx)
+		return map[string]any{"projects": projects}, err
+	case "list_repositories":
+		var args struct {
+			Project string `json:"project"`
+		}
+		if err := unmarshalArgs(params.Arguments, &args); err != nil {
+			return nil, err
+		}
+		repos, err := s.client.ListRepos(ctx, args.Project)
+		return map[string]any{"repositories": repos}, err
+	case "list_worktrees":
+		var args struct {
+			Repo string `json:"repo"`
+		}
+		if err := unmarshalArgs(params.Arguments, &args); err != nil {
+			return nil, err
+		}
+		worktrees, err := s.client.ListWorktrees(ctx, args.Repo)
+		return map[string]any{"worktrees": worktrees}, err
+	case "list_issues":
+		var args struct {
+			Project     string   `json:"project"`
+			Repo        string   `json:"repo"`
+			Worktree    string   `json:"worktree"`
+			Status      string   `json:"status"`
+			IssueType   string   `json:"issue_type"`
+			Assignee    string   `json:"assignee"`
+			ExternalKey string   `json:"external_key"`
+			Tags        []string `json:"tags"`
+			Limit       int      `json:"limit"`
+			Offset      int      `json:"offset"`
+		}
+		if err := unmarshalArgs(params.Arguments, &args); err != nil {
+			return nil, err
+		}
+		if args.Limit < 0 || args.Limit > 100 || args.Offset < 0 {
+			return nil, fmt.Errorf("limit must be 1..100 and offset must be nonnegative")
+		}
+		if args.Limit == 0 {
+			args.Limit = 50
+		}
+		issues, err := s.client.ListIssuesWithFilters(ctx, core.IssueListParams{
+			Project: args.Project, Repo: args.Repo, Worktree: args.Worktree,
+			Status: args.Status, IssueType: args.IssueType, Assignee: args.Assignee,
+			ExternalKey: args.ExternalKey, Tags: args.Tags, Limit: args.Limit, Offset: args.Offset,
+		})
+		return map[string]any{"issues": issues, "limit": args.Limit, "offset": args.Offset}, err
 	case "create_issue":
 		var args core.CreateIssueRequest
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
@@ -626,10 +710,31 @@ func (s *Server) tools() []map[string]any {
 		toolDefinition("get_issue", "Fetch one issue plus its active lease, if any.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 		})),
+		toolDefinition("list_projects", "List projects and their keys/IDs.", objectSchema(nil)),
+		toolDefinition("list_repositories", "List repositories, optionally by project key or ID.", objectSchema([]schemaField{
+			{name: "project", fieldType: "string", description: "Optional project key or ID."},
+		})),
+		toolDefinition("list_worktrees", "List worktrees, optionally by repository name or ID.", objectSchema([]schemaField{
+			{name: "repo", fieldType: "string", description: "Optional repository name or ID."},
+		})),
+		toolDefinition("list_issues", "List up to 100 issues with filters and pagination.", objectSchema([]schemaField{
+			{name: "project", fieldType: "string", description: "Project key or ID."},
+			{name: "repo", fieldType: "string", description: "Repository name or ID."},
+			{name: "worktree", fieldType: "string", description: "Worktree path or ID."},
+			{name: "status", fieldType: "string", description: "Issue status."},
+			{name: "issue_type", fieldType: "string", description: "Issue type."},
+			{name: "assignee", fieldType: "string", description: "Exact assignee."},
+			{name: "external_key", fieldType: "string", description: "Exact external key."},
+			{name: "tags", fieldType: "array", itemType: "string", description: "Required tags (AND)."},
+			{name: "limit", fieldType: "integer", description: "Page size 1..100; default 50."},
+			{name: "offset", fieldType: "integer", description: "Zero-based offset."},
+		})),
 		toolDefinition("list_ready_issues", "List ready issues filtered by optional project, repo, and tags.", objectSchema([]schemaField{
-			{name: "project", fieldType: "string", description: "Optional project key."},
+			{name: "project", fieldType: "string", description: "Optional project key or ID."},
 			{name: "repo", fieldType: "string", description: "Optional repository id or logical name."},
 			{name: "tags", fieldType: "array", itemType: "string", description: "Optional namespaced tags; an issue must carry every listed tag (AND)."},
+			{name: "limit", fieldType: "integer", description: "Page size 1..100; default 50."},
+			{name: "offset", fieldType: "integer", description: "Zero-based offset."},
 		})),
 		toolDefinition("create_issue", "Create an issue with a retry-safe operation ID.", objectSchema([]schemaField{
 			{name: "project", fieldType: "string", description: "Project key.", required: true},
@@ -643,7 +748,7 @@ func (s *Server) tools() []map[string]any {
 			{name: "acceptance_criteria", fieldType: "string", description: "Optional acceptance criteria."},
 			{name: "priority", fieldType: "integer", description: "Optional priority; daemon default applies when omitted."},
 			{name: "tags", fieldType: "array", itemType: "string", description: "Optional namespaced tags."},
-			{name: "actor", fieldType: "string", description: "Optional actor; falls back to DIBS_ACTOR."},
+			{name: "actor", fieldType: "string", description: "Actor; required when DIBS_ACTOR is unset.", required: s.actor == ""},
 			operationIDField(),
 		})),
 		toolDefinition("claim_issue", "Claim an issue and acquire a lease token.", objectSchema([]schemaField{
@@ -713,7 +818,7 @@ func (s *Server) tools() []map[string]any {
 			{name: "lease_token", fieldType: "string", description: "Current lease token for a leased issue."},
 			{name: "lease_generation", fieldType: "integer", description: "Fencing generation for a leased issue."},
 			{name: "release_lease", fieldType: "boolean", description: "Release current lease in the update transaction."},
-			{name: "actor", fieldType: "string", description: "Optional actor; falls back to DIBS_ACTOR."},
+			{name: "actor", fieldType: "string", description: "Actor; required when DIBS_ACTOR is unset.", required: s.actor == ""},
 			operationIDField(),
 		})),
 		toolDefinition("close_issue", "Close an issue through the daemon API with structured resolution metadata.", objectSchema([]schemaField{

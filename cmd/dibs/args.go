@@ -191,8 +191,11 @@ func validateCommandArgs(args []string) error {
 	}
 	for _, flag := range strings.Fields(requiredCommandFlags[key]) {
 		if !seen[flag] {
-			if flag == "--lease-token" && leaseTokenSourceAvailable() {
-				continue
+			if flag == "--lease-token" {
+				if leaseTokenSourceAvailable() {
+					continue
+				}
+				return argumentError(key + " requires DIBS_LEASE_TOKEN or DIBS_LEASE_TOKEN_FILE; use dibs issue run")
 			}
 			return argumentError(key + " requires " + flag)
 		}
@@ -246,7 +249,9 @@ func validateFlagValue(command, flag, value string) error {
 			return nil
 		}
 		n, err := strconv.Atoi(value)
-		if err != nil || (flag != "--priority" && flag != "--offset" && flag != "--limit" && n <= 0) || ((flag == "--offset" || flag == "--limit") && n < 0) {
+		if err != nil || (flag != "--priority" && flag != "--offset" && flag != "--limit" && n <= 0) ||
+			((flag == "--offset" || flag == "--limit") && n < 0) ||
+			(flag == "--limit" && n > 1000) || (flag == "--offset" && n > 1000000) {
 			return argumentError(flag + " requires a valid integer")
 		}
 	case "--invocation-mode":

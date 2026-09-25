@@ -101,6 +101,9 @@ func GetRepoInProject(ctx context.Context, db *sql.DB, projectID, idOrName strin
 	if repo, ok, err := lookupRepoByID(ctx, db, idOrName); err != nil {
 		return core.Repository{}, err
 	} else if ok {
+		if repo.ProjectID != projectID {
+			return core.Repository{}, core.NewAPIError(core.ErrNotFound, "repository not found: "+idOrName)
+		}
 		return repo, nil
 	}
 

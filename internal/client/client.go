@@ -304,6 +304,12 @@ func (c *Client) ListIssuesWithFilters(ctx context.Context, params core.IssueLis
 	appendValues("type", params.IssueTypes, params.IssueType)
 	appendParam("external_key", params.ExternalKey)
 	appendValues("tag", params.Tags, "")
+	if params.Limit > 0 {
+		query.Set("limit", strconv.Itoa(params.Limit))
+	}
+	if params.Offset > 0 {
+		query.Set("offset", strconv.Itoa(params.Offset))
+	}
 	if len(query) > 0 {
 		path += "?" + query.Encode()
 	}

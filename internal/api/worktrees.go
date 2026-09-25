@@ -58,7 +58,9 @@ func handleListWorktrees(st store.CoordinatorStore, logger *slog.Logger) http.Ha
 
 		if repoFilter != "" {
 			// Verify the repo exists first.
-			if _, err := st.GetRepo(r.Context(), repoFilter); err != nil {
+			repo, lookupErr := st.GetRepo(r.Context(), repoFilter)
+			if lookupErr != nil {
+				err = lookupErr
 				if writeRepoLookupError(w, err, repoFilter) {
 					return
 				}
@@ -66,7 +68,7 @@ func handleListWorktrees(st store.CoordinatorStore, logger *slog.Logger) http.Ha
 				writeInternalError(w, err, "failed to resolve repository")
 				return
 			}
-			worktrees, err = st.ListWorktrees(r.Context(), repoFilter)
+			worktrees, err = st.ListWorktrees(r.Context(), repo.ID)
 		} else {
 			worktrees, err = st.ListWorktrees(r.Context(), "")
 		}

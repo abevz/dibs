@@ -44,11 +44,13 @@ func GetProject(ctx context.Context, db *sql.DB, id string) (core.Project, error
 	return scanProject(row)
 }
 
-// GetProjectByKey retrieves a project by its key.
+// GetProjectByKey retrieves a project by its key or UUID. Keys take priority
+// if a user chooses a key that happens to equal another project's UUID.
 func GetProjectByKey(ctx context.Context, db *sql.DB, key string) (core.Project, error) {
 	row := db.QueryRowContext(ctx,
 		`SELECT id, key, name, description, next_issue_seq, created_at, updated_at
-		 FROM projects WHERE key = ?`, key,
+		 FROM projects WHERE key = ? OR id = ?
+		 ORDER BY CASE WHEN key = ? THEN 0 ELSE 1 END LIMIT 1`, key, key, key,
 	)
 	return scanProject(row)
 }

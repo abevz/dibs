@@ -45,7 +45,7 @@ func TestLifecycleTokenSourceMissingFailsClosed(t *testing.T) {
 	t.Setenv("DIBS_LEASE_TOKEN", "")
 	t.Setenv("AF_LEASE_TOKEN", "legacy-secret")
 	t.Setenv("DIBS_LEASE_TOKEN_FILE", "")
-	if err := validateCommandArgs([]string{"issue", "close", "afc-1", "--resolution", "done", "--expected-version", "2", "--lease-generation", "1"}); err == nil || !strings.Contains(err.Error(), "--lease-token") {
+	if err := validateCommandArgs([]string{"issue", "close", "afc-1", "--resolution", "done", "--expected-version", "2", "--lease-generation", "1"}); err == nil || !strings.Contains(err.Error(), "DIBS_LEASE_TOKEN_FILE") {
 		t.Fatalf("missing token validation = %v", err)
 	}
 	if token, err := leaseTokenFromEnvironment(); err == nil || token != "" {

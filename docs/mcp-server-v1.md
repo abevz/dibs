@@ -49,6 +49,10 @@ daemon restart when `dibs-mcp` is rebuilt.
 
 - `health`
 - `get_issue`
+- `list_projects`
+- `list_repositories`
+- `list_worktrees`
+- `list_issues`
 - `list_ready_issues`
 - `create_issue`
 - `claim_issue`
@@ -80,8 +84,13 @@ callers must use this returned `version` — not one read earlier via
 stuck `in_progress` because its lease token was lost before TTL expiry,
 clearing the lease and returning the issue directly to `open` without a
 terminal transition.
-`list_ready_issues` accepts an optional `tags` array; an issue must carry
-every listed tag to match (AND). `add_tag`/`remove_tag` apply or remove a
+`list_issues` supports project, repository, worktree, status, type, assignee,
+external-key, and tag filters. Both issue-list tools default to 50 results
+and accept `limit` (up to 100) and `offset`. `list_ready_issues` includes
+`project_key` on each item alongside `project_id`. It accepts an optional
+`tags` array; an issue must carry every listed tag to match (AND).
+`create_issue` and `update_issue` require `actor` when the server starts
+without `DIBS_ACTOR`. `add_tag`/`remove_tag` apply or remove a
 namespaced tag (`namespace/value`); `get_issue` and `list_ready_issues`
 already surface an issue's `tags` field.
 

@@ -73,6 +73,7 @@ func runRepoAdd(ctx context.Context, c *client.Client, args []string) error {
 	}
 	if jsonOutput {
 		json.NewEncoder(os.Stdout).Encode(map[string]any{
+			"id":         repo.ID,
 			"repository": repo,
 			"remotes":    remotes,
 		})

@@ -177,6 +177,8 @@ type IssueListParams struct {
 	Assignee    string
 	IssueType   string
 	ExternalKey string
+	Limit       int
+	Offset      int
 	Projects    []string
 	Statuses    []string
 	IssueTypes  []string

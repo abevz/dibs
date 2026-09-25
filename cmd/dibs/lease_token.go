@@ -35,5 +35,5 @@ func leaseTokenFromEnvironment() (string, error) {
 			return token, nil
 		}
 	}
-	return "", fmt.Errorf("--lease-token is required: use dibs issue run or DIBS_LEASE_TOKEN_FILE")
+	return "", fmt.Errorf("lease token is required: use dibs issue run or DIBS_LEASE_TOKEN_FILE")
 }

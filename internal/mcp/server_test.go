@@ -11,6 +11,10 @@ import (
 )
 
 type fakeClient struct {
+	projectsResp           []core.Project
+	reposResp              []core.Repository
+	worktreesResp          []core.Worktree
+	issuesResp             []core.Issue
 	healthResp             core.Health
 	getIssueResp           core.Issue
 	getLeaseResp           *core.IssueLease
@@ -52,6 +56,18 @@ type fakeClient struct {
 }
 
 func (f *fakeClient) Health(context.Context) (core.Health, error) { return f.healthResp, nil }
+func (f *fakeClient) ListProjects(context.Context) ([]core.Project, error) {
+	return f.projectsResp, nil
+}
+func (f *fakeClient) ListRepos(context.Context, string) ([]core.Repository, error) {
+	return f.reposResp, nil
+}
+func (f *fakeClient) ListWorktrees(context.Context, string) ([]core.Worktree, error) {
+	return f.worktreesResp, nil
+}
+func (f *fakeClient) ListIssuesWithFilters(context.Context, core.IssueListParams) ([]core.Issue, error) {
+	return f.issuesResp, nil
+}
 func (f *fakeClient) GetIssue(context.Context, string) (core.Issue, *core.IssueLease, error) {
 	return f.getIssueResp, f.getLeaseResp, nil
 }
