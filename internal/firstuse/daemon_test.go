@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/abevz/dibs/internal/api"
 	"github.com/abevz/dibs/internal/config"
 	"github.com/abevz/dibs/internal/core"
 )
@@ -65,6 +67,51 @@ func TestStopDaemonDoesNotMistakeUnhealthySocketForStopped(t *testing.T) {
 	go server.Serve(listener)
 	if err := StopDaemon(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "health is unavailable") {
 		t.Fatalf("stop on unhealthy socket = %v", err)
+	}
+}
+
+func TestEnsureDaemonRefusesUnverifiableReachableSocket(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Config{DBPath: filepath.Join(dir, "data.db"), SocketPath: filepath.Join(dir, "daemon.sock")}
+	listener, err := net.Listen("unix", cfg.SocketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	})}
+	defer server.Close()
+	go server.Serve(listener)
+	if err := EnsureDaemon(context.Background(), cfg, ""); err == nil || !strings.Contains(err.Error(), "health cannot be verified") {
+		t.Fatalf("unverifiable daemon accepted: %v", err)
+	}
+}
+
+func TestWaitForStoppedWaitsForDatabaseLock(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Config{DBPath: filepath.Join(dir, "data.db"), SocketPath: filepath.Join(dir, "daemon.sock")}
+	lock, err := api.AcquireDatabaseLock(cfg.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- waitForStopped(context.Background(), cfg) }()
+	select {
+	case err := <-done:
+		t.Fatalf("returned while database lock held: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("did not return after database lock released")
 	}
 }
 

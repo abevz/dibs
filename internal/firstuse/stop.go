@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/abevz/dibs/internal/api"
 	"github.com/abevz/dibs/internal/client"
 	"github.com/abevz/dibs/internal/config"
 	"github.com/abevz/dibs/internal/core"
@@ -49,20 +50,29 @@ func StopDaemon(ctx context.Context, cfg config.Config) error {
 	if err := proc.Signal(syscall.SIGTERM); err != nil {
 		return err
 	}
+	return waitForStopped(ctx, cfg)
+}
+
+// waitForStopped waits for both the listener and the database ownership lock.
+// RunDaemon removes its socket before dibsd closes the database and lock.
+func waitForStopped(ctx context.Context, cfg config.Config) error {
 	deadline := time.NewTimer(5 * time.Second)
 	defer deadline.Stop()
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
 	for {
+		if _, err := os.Stat(cfg.SocketPath); os.IsNotExist(err) {
+			lock, lockErr := api.AcquireDatabaseLock(cfg.DBPath)
+			if lockErr == nil {
+				return lock.Close()
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-deadline.C:
-			return fmt.Errorf("timed out waiting for dibsd to stop")
+			return fmt.Errorf("timed out waiting for dibsd to release its socket and database lock")
 		case <-tick.C:
-			if _, err := os.Stat(cfg.SocketPath); os.IsNotExist(err) {
-				return nil
-			}
 		}
 	}
 }

@@ -98,6 +98,11 @@ are historical and do not override that coordinator closure.
   process. `go test ./...`, `go build ./...`,
   `shellcheck`, and `actionlint` passed with the live operator-token variables
   removed from the test process.
+- PR #86 review found that a reachable socket with unverifiable health could
+  receive first-use writes, and that `daemon stop` could finish before the
+  database lock was released. The follow-up fails closed on unverifiable
+  health and waits for both socket removal and lock release. Focused tests,
+  the full Go suite, and the built-binary first-use smoke passed after the fix.
 - Still required: independent final review, native macOS/ARM first-use CI,
   and release-artifact first-use timing before closing `afc-129`. No live
   daemon or database was restarted.

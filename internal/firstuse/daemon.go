@@ -24,13 +24,13 @@ func EnsureDaemon(ctx context.Context, cfg config.Config, daemonPath string) err
 			return fmt.Errorf("daemon at %s is unhealthy or uses another database; run dibs doctor", cfg.SocketPath)
 		}
 		return nil
-	}
-	// A reachable socket may belong to a compatible older service or a
-	// command-specific test server. Only an absent/unreachable socket triggers
-	// a new process; the command itself reports API errors if it cannot proceed.
-	if conn, err := net.DialTimeout("unix", cfg.SocketPath, 200*time.Millisecond); err == nil {
-		_ = conn.Close()
-		return nil
+	} else {
+		// A reachable socket must not be trusted when its database cannot be
+		// verified. This also avoids starting a second daemon over that socket.
+		if conn, dialErr := net.DialTimeout("unix", cfg.SocketPath, 200*time.Millisecond); dialErr == nil {
+			_ = conn.Close()
+			return fmt.Errorf("daemon at %s accepts connections but health cannot be verified: %w", cfg.SocketPath, err)
+		}
 	}
 	if daemonPath == "" {
 		return fmt.Errorf("dibsd binary is missing; reinstall dibs or put dibsd next to dibs")
