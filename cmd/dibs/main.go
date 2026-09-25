@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strconv"
@@ -62,10 +63,11 @@ func main() {
 	}
 
 	if len(filtered) < 1 {
-		fail(argumentError("command is required"))
+		printUsage(os.Stdout)
+		return
 	}
-	if filtered[0] == "-h" || filtered[0] == "--help" || filtered[0] == "help" {
-		printUsage()
+	if isHelpArg(filtered[0]) {
+		printUsage(os.Stdout)
 		return
 	}
 	if filtered[0] == "--version" {
@@ -75,10 +77,16 @@ func main() {
 		printVersion()
 		return
 	}
+	if printGroupHelp(filtered) {
+		return
+	}
 	if printLocalHelp(filtered) {
 		return
 	}
 	if err := validateCommandArgs(filtered); err != nil {
+		if filtered[0] == "projects" {
+			fail(argumentError(err.Error() + "\nDid you mean: dibs project --help?"))
+		}
 		if help, ok := leafHelp(filtered); ok {
 			fail(argumentError(err.Error() + "\n" + help))
 		}
@@ -132,7 +140,7 @@ func main() {
 	case "version":
 		printVersion()
 	default:
-		printUsage()
+		printUsage(os.Stderr)
 		os.Exit(1)
 	}
 	if err != nil {
@@ -159,8 +167,8 @@ func shortRev(rev string) string {
 	return rev
 }
 
-func printUsage() {
-	fmt.Fprintf(os.Stderr, `Usage: dibs [--json] [--actor <name>] <command>
+func printUsage(w io.Writer) {
+	fmt.Fprintf(w, `Usage: dibs [--json] [--actor <name>] <command>
 
 Global flags:
   --json                Output in JSON format (default: human-readable)

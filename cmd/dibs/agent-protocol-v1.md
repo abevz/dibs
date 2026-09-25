@@ -2,9 +2,13 @@
 
 ## Primary CLI path and token handling
 
-Every CLI leaf accepts `--help` without contacting the daemon. Registration
-commands accept project keys or UUIDs and repository logical names or UUIDs;
-`--json` registration output exposes a top-level `id`. `dibs issue list`
+Every CLI leaf accepts `--help` without contacting the daemon. `dibs` with no
+arguments prints global usage; `dibs project --help` lists its
+subcommands. `-help` also works for root, group, and leaf help. Unknown
+`projects` suggests `project` without contacting the daemon.
+Registration commands accept project keys or UUIDs and repository logical
+names or UUIDs; `--json` registration output exposes a top-level `id`.
+`dibs issue list`
 supports `--limit` (up to 1000) and `--offset` after filtering.
 
 MCP read-only discovery provides `list_projects`, `list_repositories`,

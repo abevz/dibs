@@ -18,12 +18,14 @@ import (
 
 const issueUsage = "Usage: dibs issue <create|create-form|get|list|ready|claim|heartbeat|release|handoff|run|edit|update|close|operator-close|operator-reopen|operator-release|cancel|link|unlink|dependency|note|tag|events>"
 
-// hasHelpFlag reports whether args requests help via --help or -h, checked
-// before any positional argument is consumed so `<cmd> -h` never gets
-// mistaken for `<cmd> <issue-id>`.
+// hasHelpFlag reports whether args requests help before a -- separator.
+// Arguments after the separator belong to a child command, not dibs.
 func hasHelpFlag(args []string) bool {
 	for _, a := range args {
-		if a == "--help" || a == "-h" {
+		if a == "--" {
+			break
+		}
+		if a == "--help" || a == "-help" || a == "-h" {
 			return true
 		}
 	}

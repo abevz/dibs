@@ -34,3 +34,16 @@ resolution errors include the command usage and lifecycle hint. Targeted
 token/help tests passed (`/tmp/afc-145-token-final.log`) and `go build ./...`
 passed after those corrections. Independent read-only review of the completed
 implementation found no remaining material issue.
+
+## afc-146 follow-up
+
+The installed CLI returned `unknown command: project --help`, rejected
+`-help`, and returned `command is required` for a bare `dibs`. Root and group
+help now dispatch locally before leaf validation. Group subcommands are
+derived from the route table, and `projects` suggests `project` rather than
+silently treating the typo as an alias. A no-daemon CLI test covers the forms
+reported by the user and preserves `issue run` child arguments. Focused test
+and build evidence: `/tmp/afc-146-cli-test.log`, `/tmp/afc-146-build.log`.
+
+Independent read-only review of the final code and test change found no
+remaining material issue.
