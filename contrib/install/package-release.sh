@@ -51,6 +51,7 @@ class Dibs < Formula
   desc "Local execution ledger for AI agents"
   homepage "https://github.com/abevz/dibs"
   version "${version#v}"
+  license "Apache-2.0"
 
   on_arm do
     on_macos do
@@ -76,6 +77,7 @@ class Dibs < Formula
 
   def install
     bin.install "dibs", "dibsd", "dibs-mcp"
+    pkgshare.install "LICENSE"
   end
 
   test do
