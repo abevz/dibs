@@ -109,9 +109,10 @@ func leafHelp(args []string) (string, bool) {
 		if flag == "--lease-token" {
 			continue // Secrets must never be suggested as argv values.
 		}
-		value := " <value>"
-		if strings.HasSuffix(raw, "?") {
-			value = ""
+		info, _ := helpForFlag(key, flag)
+		value := ""
+		if info.value != "" {
+			value = " <" + info.value + ">"
 		}
 		if required[flag] {
 			fmt.Fprintf(&b, " %s%s", flag, value)
@@ -122,47 +123,58 @@ func leafHelp(args []string) (string, bool) {
 	if key == "issue run" {
 		b.WriteString(" -- <command> [args...]")
 	}
-	b.WriteString("\n\nRequired: ")
+	b.WriteString("\n")
+	var requiredParts []string
 	if route.pos == 1 {
-		b.WriteString("<issue-id>")
-	} else {
-		b.WriteString("none")
+		requiredParts = append(requiredParts, "<issue-id>")
 	}
 	for _, flag := range strings.Fields(requiredCommandFlags[key]) {
 		if flag != "--lease-token" {
-			b.WriteString(", " + flag)
+			requiredParts = append(requiredParts, flag)
+		}
+	}
+	if len(requiredParts) > 0 {
+		b.WriteString("\nRequired: " + strings.Join(requiredParts, ", ") + "\n")
+	}
+	if route.pos == 1 {
+		b.WriteString("\nArgument:\n  <issue-id>  Issue ID or short ID (for example, afc-147).\n")
+	}
+	if route.flags != "" {
+		b.WriteString("\nFlags:\n")
+		for _, raw := range strings.Fields(route.flags) {
+			flag := strings.TrimSuffix(raw, "?")
+			if flag == "--lease-token" {
+				continue
+			}
+			info, _ := helpForFlag(key, flag)
+			label := flag
+			if info.value != "" {
+				label += " <" + info.value + ">"
+			}
+			requirement := "Optional"
+			if required[flag] {
+				requirement = "Required"
+			}
+			fmt.Fprintf(&b, "  %-42s %s. %s\n", label, requirement, info.description)
 		}
 	}
 	switch key {
 	case "issue link", "issue unlink":
-		b.WriteString(", one of --artifact or --path")
+		b.WriteString("\nChoose one of --artifact or --path.\n")
 	case "issue dependency add", "issue dependency remove":
-		b.WriteString(", exactly one of --depends-on, --blocked-by, or --blocks")
+		b.WriteString("\nChoose exactly one of --depends-on, --blocked-by, or --blocks.\n")
 	case "issue run":
-		b.WriteString(", -- <command>")
+		b.WriteString("\nRequired: -- <command>; arguments after -- belong to the child.\n")
 	case "issue claim":
-		b.WriteString(", actor via --holder, --actor, DIBS_ACTOR, parent agent, or USER")
+		b.WriteString("\nActor requirement: provide an actor via --holder, --actor, DIBS_ACTOR, parent agent, or USER.\n")
 	}
-	b.WriteString("\nOptional flags: ")
-	var optional []string
-	for _, raw := range strings.Fields(route.flags) {
-		flag := strings.TrimSuffix(raw, "?")
-		if flag == "--lease-token" {
-			continue
-		}
-		if !required[flag] {
-			optional = append(optional, flag)
-		}
-	}
-	if len(optional) == 0 {
-		b.WriteString("none")
-	} else {
-		b.WriteString(strings.Join(optional, ", "))
-	}
-	b.WriteString("\n")
 	if strings.Contains(requiredCommandFlags[key], "--lease-token") {
 		b.WriteString("Lease token: use DIBS_LEASE_TOKEN or DIBS_LEASE_TOKEN_FILE; never put a token in argv. Prefer dibs issue run.\n")
 		b.WriteString(lifecycleHint + "\n")
+	}
+	if key == "project add" {
+		b.WriteString("\nExample: dibs project add --key myapp --name \"My App\"\n")
+		b.WriteString("The key becomes the issue ID prefix, such as myapp-1; the name is for people.\n")
 	}
 	return b.String(), true
 }

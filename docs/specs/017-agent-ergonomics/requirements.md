@@ -8,6 +8,10 @@ discovery must be usable without reading CLI source.
 - The root command without arguments and command groups such as `project`
   display local usage. `--help` and `-help` work at both levels, group help
   lists subcommands, and the common `projects` typo suggests `project`.
+- Unknown commands and flags show a local `--help` path for the nearest known
+  command or group. Leaf help explains the meaning and expected value of every
+  routed flag, marks required flags, and gives a concrete project-add example.
+  Arguments after `issue run --` remain child arguments.
 - Project and repository selectors accept keys/logical names or IDs wherever
   the corresponding CLI/API filter accepts a selector.
 - JSON registration output exposes a top-level `id` consistently; existing

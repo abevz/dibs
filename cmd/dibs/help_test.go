@@ -47,6 +47,26 @@ func TestRootAndGroupHelpWithoutDaemon(t *testing.T) {
 	if err == nil || !strings.Contains(string(output), "Did you mean: dibs project --help?") {
 		t.Fatalf("projects typo: err=%v, output=%q", err, output)
 	}
+	for _, tt := range []struct {
+		args []string
+		hint string
+	}{
+		{[]string{"project", "--h"}, "Use: dibs project --help"},
+		{[]string{"project", "create"}, "Use: dibs project --help"},
+		{[]string{"project", "add", "--h"}, "Use: dibs project add --help"},
+		{[]string{"--h"}, "Use: dibs --help"},
+	} {
+		cmd := exec.Command(bin, tt.args...)
+		cmd.Env = append(os.Environ(), "DIBS_SOCKET="+filepath.Join(t.TempDir(), "absent.sock"))
+		output, err := cmd.CombinedOutput()
+		if err == nil || !strings.Contains(string(output), tt.hint) {
+			t.Errorf("dibs %v: err=%v, missing %q in %q", tt.args, err, tt.hint, output)
+		}
+		if len(tt.args) > 0 && tt.args[len(tt.args)-1] == "--h" &&
+			!strings.Contains(string(output), "unknown flag: --h") {
+			t.Errorf("dibs %v: expected unknown flag, got %q", tt.args, output)
+		}
+	}
 }
 
 func TestEveryCLILeafHasLocalHelp(t *testing.T) {
@@ -57,12 +77,21 @@ func TestEveryCLILeafHasLocalHelp(t *testing.T) {
 			t.Errorf("%s has no leaf help: %q", key, help)
 		}
 		for _, flag := range strings.Fields(route.flags) {
+			bare := strings.TrimSuffix(flag, "?")
+			info, defined := helpForFlag(key, bare)
+			if !defined || info.description == "" || (info.value == "" && !strings.HasSuffix(flag, "?")) ||
+				(info.value != "" && strings.HasSuffix(flag, "?")) {
+				t.Errorf("%s has incomplete help metadata for %s: %+v", key, flag, info)
+			}
 			if flag == "--lease-token" {
 				continue
 			}
 			if !strings.Contains(help, strings.TrimSuffix(flag, "?")) {
 				t.Errorf("%s help omits %s", key, flag)
 			}
+		}
+		if strings.Contains(help, "<value>") || strings.Contains(help, "Required: none") {
+			t.Errorf("%s has generic help: %q", key, help)
 		}
 		for _, flag := range strings.Fields(requiredCommandFlags[key]) {
 			if flag == "--lease-token" {
@@ -71,6 +100,22 @@ func TestEveryCLILeafHasLocalHelp(t *testing.T) {
 			if !strings.Contains(help, "Required:") || !strings.Contains(help, flag) {
 				t.Errorf("%s does not mark %s required", key, flag)
 			}
+		}
+	}
+}
+
+func TestProjectAddHelpExplainsFields(t *testing.T) {
+	help, ok := leafHelp([]string{"project", "add"})
+	if !ok {
+		t.Fatal("project add help missing")
+	}
+	for _, want := range []string{
+		"--key <project-key>", "lowercase project slug", "prefixes issue IDs",
+		"--name <display-name>", "Human-readable project name",
+		`dibs project add --key myapp --name "My App"`,
+	} {
+		if !strings.Contains(help, want) {
+			t.Errorf("project add help missing %q: %s", want, help)
 		}
 	}
 }
@@ -97,6 +142,9 @@ func TestIssueRunChildHelpIsNotCLIHelp(t *testing.T) {
 	}
 	if printLocalHelp([]string{"issue", "run", "afc-145", "--", "go", "test", "-help"}) {
 		t.Fatal("child -help belongs to the child process")
+	}
+	if printLocalHelp([]string{"issue", "run", "afc-145", "--", "go", "test", "--h"}) {
+		t.Fatal("child --h belongs to the child process")
 	}
 }
 
