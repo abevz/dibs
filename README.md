@@ -151,10 +151,21 @@ make test
 CI (`.github/workflows/ci.yml`) runs `vet`, a `gofmt -l` check, `golangci-lint`, `test`, and
 `build` on every pull request and on push to `main`; a PR must be green before merging.
 
-### Run the daemon
+### First use and daemon
+
+Inside a Git repository, `dibs init` registers the project and worktree,
+adds agent instructions, and starts `dibsd` when needed. See the
+[first-use guide](docs/install.md#first-use) for the subsequent create and
+claim commands. A dibs-started daemon can also be controlled explicitly:
 
 ```bash
-# Start in the foreground (for testing):
+dibs daemon start
+dibs daemon stop
+```
+
+For foreground testing:
+
+```bash
 dibsd
 ```
 
@@ -174,7 +185,7 @@ make install-launchd
 The LaunchAgent is staged but not started; follow the explicit switch in
 [operations](docs/operations.md#explicit-service-switch).
 
-After the daemon is running:
+To inspect a running daemon:
 
 ```bash
 dibs health
@@ -191,8 +202,8 @@ binaries, and client/daemon config mismatch.
 
 | Platform | Status |
 |---|---|
-| Linux + systemd user session | Primary supported install path. `make install-service`, `make restart-service`, and `make install-backup` use systemd. |
-| macOS | Supported daemon install path via `make install-launchd`; automated backups are available through `make install-backup` / launchd. |
+| Linux | `dibs init` starts the daemon on first use; systemd user units remain available through `make install-service` and `make restart-service`. |
+| macOS | `dibs init` starts the daemon on first use; launchd units are available through `make install-launchd`. |
 | Other Unix-like OSes | Untested. The daemon relies on Unix sockets and local filesystem paths. |
 
 ### Configure

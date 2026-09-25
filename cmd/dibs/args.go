@@ -24,7 +24,8 @@ type argRoute struct {
 
 var commandRoutes = map[string]argRoute{
 	"health": {"", 0}, "doctor": {"", 0}, "protocol": {"", 0}, "version": {"", 0},
-	"init":        {"--path --dry-run?", 0},
+	"init":         {"--path --dry-run? --project --repo --default-branch", 0},
+	"daemon start": {"", 0}, "daemon stop": {"", 0},
 	"project add": {"--key --name --description", 0}, "project list": {"", 0},
 	"repo add": {"--project --logical-name --canonical-git-dir --default-branch --remotes", 0}, "repo list": {"--project", 0},
 	"worktree register": {"--repo --absolute-path --branch --head-commit --remote-name --remote-branch --main? --ephemeral?", 0},
@@ -84,7 +85,7 @@ func validateCommandArgs(args []string) error {
 	}
 	path := []string{args[0]}
 	switch args[0] {
-	case "project", "repo", "worktree", "artifact-root", "artifact", "export":
+	case "project", "repo", "worktree", "artifact-root", "artifact", "export", "daemon":
 		if len(args) < 2 {
 			return argumentError(args[0] + " subcommand is required")
 		}

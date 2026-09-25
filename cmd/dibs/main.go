@@ -18,6 +18,7 @@ import (
 	"github.com/abevz/dibs/internal/compat"
 	"github.com/abevz/dibs/internal/config"
 	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/firstuse"
 )
 
 var jsonOutput bool
@@ -96,6 +97,11 @@ func main() {
 	c := client.New(cfg.SocketPath)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if filtered[0] != "version" && filtered[0] != "protocol" && filtered[0] != "health" && filtered[0] != "doctor" && filtered[0] != "daemon" && filtered[0] != "init" {
+		if err := firstuse.EnsureDaemon(ctx, cfg, firstuse.FindDaemon()); err != nil {
+			fail(err)
+		}
+	}
 
 	if shouldCheckDaemonRevision(filtered) {
 		if h, err := c.Health(ctx); err == nil {
@@ -114,7 +120,13 @@ func main() {
 	case "protocol":
 		runProtocol()
 	case "init":
-		err = runInit(filtered[1:])
+		err = runInitSetup(ctx, c, cfg, filtered[1:])
+	case "daemon":
+		if filtered[1] == "start" {
+			err = firstuse.EnsureDaemon(ctx, cfg, firstuse.FindDaemon())
+		} else {
+			err = firstuse.StopDaemon(ctx, cfg)
+		}
 	case "project":
 		err = runProject(ctx, c, filtered[1:])
 	case "repo":

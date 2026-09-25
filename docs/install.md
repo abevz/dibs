@@ -44,6 +44,32 @@ service switch or restart is an explicit operator action described in
 [operations](operations.md#explicit-service-switch). Existing installations
 using the former `af-coordinator` paths keep their existing canonical database.
 
+## First use
+
+Run `dibs init` inside a Git repository. It displays the detected project,
+repository, worktree, and branch, starts `dibsd` when needed, registers the
+mapping, and adds the managed agent instructions to the repository's
+`AGENTS.md`. Repeating `dibs init` is safe. Example after installation:
+
+```sh
+cd your-repository
+dibs init
+dibs issue create --project your-repository --scope-kind project --title "First task"
+dibs issue claim your-repository-1 --holder "$USER"
+```
+
+Use the project key shown by `init` in the latter commands. If Git cannot
+unambiguously identify the project or default branch, `init` asks for
+`--project`, `--repo`, or `--default-branch`. For an inspectable preview without
+writing files or starting the daemon, run `dibs init --dry-run`.
+
+`dibs daemon start` and `dibs daemon stop` control a daemon started by dibs.
+For a systemd or launchd managed daemon, stop it with its service manager;
+`daemon stop` refuses to signal a manager-owned process.
+The daemon uses the existing database path, including the legacy path when
+present. Startup errors are shown with the daemon log path. Service-manager
+setups remain available for users who want them.
+
 ## Remove binaries
 
 Stop a running daemon first, using the applicable commands in

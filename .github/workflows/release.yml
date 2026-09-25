@@ -101,6 +101,7 @@ jobs:
             target: darwin_arm64
     runs-on: ${{ matrix.runner }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: dibs-release-bundle
@@ -128,6 +129,7 @@ jobs:
           "$BINDIR/dibs" version
           sh release-bundle/install.sh
           "$BINDIR/dibs" version
+          sh contrib/install/test-first-use.sh "$BINDIR"
           if command -v ruby >/dev/null 2>&1; then
             ruby -c release-bundle/dibs.rb
           fi
