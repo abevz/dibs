@@ -91,9 +91,8 @@ live execution state used by agents.
 
 ## Why this exists
 
-`dibs` is meant to replace the fragile parts of `Beads + shared Dolt`
-when the real workload is concurrent agent coordination rather than human issue
-tracking.
+`dibs` gives local agents a shared record of task ownership and progress while
+they work in separate repositories and worktrees.
 
 The core design choice is simple:
 
@@ -102,6 +101,23 @@ The core design choice is simple:
 - clients talk to the daemon over a local API
 
 ## Quick start
+
+### Preview release on Linux and macOS
+
+Install the published `v0.1.0-rc.1` prerelease inside a Git repository:
+
+```sh
+curl -fsSL https://github.com/abevz/dibs/releases/download/v0.1.0-rc.1/install.sh | sh /dev/stdin
+~/.local/bin/dibs init
+```
+
+The installer verifies the downloaded archive and needs no sudo. `dibs init`
+starts the local daemon and displays the project key to use when creating your
+first task. See [installation and first use](docs/install.md) for the complete
+workflow, PATH setup, script inspection, and removal. GitHub's `latest` URL
+does not select this prerelease.
+
+### Build from source
 
 ### Prerequisites
 
@@ -137,10 +153,8 @@ This builds `dibsd`, `dibs`, and `dibs-mcp` into `~/.local/bin/`, plus
 compatibility command aliases.
 Make sure `~/.local/bin` is on `PATH`.
 
-No GitHub release has been published yet. The release installer is being
-prepared for Linux and macOS; see [installation](docs/install.md) for its
-planned one-line command, version selection, updates, and removal. Until the
-first verified release, build from source using the commands above.
+The source build remains available for contributors and development. For a
+regular preview installation, use the published release command above.
 
 ### Test
 
@@ -293,31 +307,6 @@ Do not commit:
 - logs
 - tokens, secrets, or `.env` files
 - exports or snapshots containing real task data unless intentionally sanitized
-
-## What we borrow from Beads
-
-`dibs` should borrow workflow and UX ideas from Beads, but not its
-shared-Dolt operational model.
-
-Keep from Beads:
-
-- first-class tasks
-- dependency tracking
-- computed `ready` view
-- notes / comments / activity trail
-- short stable task ids
-- query-oriented CLI, not only flat listing
-
-Do not copy from Beads:
-
-- shared Dolt server as hot-path storage
-- auto-sync / auto-push in the write path
-- multi-writer semantics through shell commands over a shared VCS-backed store
-
-So the intended split is:
-
-- Beads ideas for task flow and operator UX
-- `dibs` storage and concurrency model for correctness
 
 ## Architecture
 

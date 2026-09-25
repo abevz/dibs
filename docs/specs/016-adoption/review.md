@@ -36,7 +36,7 @@ are historical and do not override that coordinator closure.
 
 ## Implementation ledger
 
-### afc-128 — release installer implementation (verification pending)
+### afc-128 — release installer implementation and preview verification
 
 - The release workflow packages four OS/architecture archives, a checksum
   manifest, a tag-pinned `install.sh`, and a checksum-pinned Homebrew formula.
@@ -57,7 +57,20 @@ are historical and do not override that coordinator closure.
 - The first preview uses the `v0.1.0-rc.1` prerelease tag. The publish step
   marks hyphenated versions as prereleases and does not designate them as
   GitHub's latest stable release. The versioned installer URL is the entrypoint
-  for this preview; publication is still pending the tag workflow.
+  for this preview.
+- PR #87 merged at `bf5436c`, then the owner-approved annotated
+  `v0.1.0-rc.1` tag published a GitHub prerelease with four archives,
+  `checksums.txt`, `install.sh`, and `dibs.rb`. The tag workflow's native
+  archive checks and public-URL installation/first-use smoke passed on Linux
+  amd64/arm64 and macOS Intel/Apple Silicon. Evidence:
+  [release](https://github.com/abevz/dibs/releases/tag/v0.1.0-rc.1),
+  [workflow](https://github.com/abevz/dibs/actions/runs/36167175469).
+- A separate Linux amd64 smoke used the published URL in a fresh temporary
+  home and Git repository. Install, `dibs init`, create, and claim completed
+  in 2 seconds; the installed binary reported revision `bf5436c`, and its
+  LICENSE matched the official Apache-2.0 text. Evidence is under
+  `/tmp/dibs-v0.1.0-rc.1-2peaac6q/public-smoke/evidence/` (the claim output is
+  private and contains a lease token).
 - Local evidence: shell syntax and installer fixture checks passed, including
   exact tag selection despite an ambient `VERSION=latest`, repeat install,
   preserved user data, and refusal of a tampered archive. Four real archives
@@ -72,14 +85,11 @@ are historical and do not override that coordinator closure.
 - Final staged implementation underwent independent read-only review. A finding
   that manual dispatch on a tag could publish was fixed by requiring a tag push;
   the revised workflow was reviewed again and `actionlint` passed.
-- Still required before marking `afc-128` done or advertising the command:
-  GitHub's native four-platform
-  workflow result; a published asset exercised from its real release URL;
-  and a tested Homebrew tap before advertising that channel. The public
-  v0.1.0 tag remains the owner's publication action. No live service or
-  database was changed by the local verification.
+- The versioned preview installer can now be advertised. A tested Homebrew tap
+  remains required before advertising that separate channel. The scratch
+  verification did not restart a live service or change a live database.
 
-### afc-129 — first use implementation (verification pending)
+### afc-129 — first use implementation and preview verification
 
 - `dibs init` now discovers the current Git repository and worktree, shows the
   mapping, starts the companion `dibsd` when needed, reconciles project/repo/
@@ -110,9 +120,10 @@ are historical and do not override that coordinator closure.
   The first CI rerun exposed an older issue-run mock with no health endpoint;
   the fixture now returns the configured database identity as the real daemon
   does. An uncached `go test -count=1 ./...` passed with that fixture.
-- Still required: independent final review, native macOS/ARM first-use CI,
-  and release-artifact first-use timing before closing `afc-129`. No live
-  daemon or database was restarted.
+- PR #86's final revision received independent review and native first-use CI
+  on all four platforms. The published release repeated native first-use smoke
+  from its public URL; the separate Linux four-command path took 2 seconds.
+  No live daemon or database was restarted.
 
 ### afc-144 — coordinated repository guidance
 

@@ -1,18 +1,15 @@
 # Installing dibs
 
-The first GitHub release has not been published yet. The commands below become
-usable after the release workflow publishes its verified `install.sh`, archives,
-and `checksums.txt` assets. The README continues to show the working source
-build until that publication is complete. For a prerelease such as
-`v0.1.0-rc.1`, use its versioned URL below: GitHub's `latest` URL does not
-select prereleases.
+The `v0.1.0-rc.1` preview is published for Linux amd64/arm64 and macOS
+Intel/Apple Silicon. Use its versioned URL: GitHub's `latest` URL selects
+stable releases and does not select this prerelease.
 
 ## Linux and macOS release installation
 
-The supported one-line entrypoint will be:
+Install the published preview:
 
 ```sh
-curl -fsSL https://github.com/abevz/dibs/releases/latest/download/install.sh | sh /dev/stdin
+curl -fsSL https://github.com/abevz/dibs/releases/download/v0.1.0-rc.1/install.sh | sh /dev/stdin
 ```
 
 The downloaded script carries the release tag that supplied it, and fetches the
@@ -25,7 +22,7 @@ hint when that directory is not available in the current shell.
 To inspect the exact script before running it:
 
 ```sh
-curl -fsSL -o install.sh https://github.com/abevz/dibs/releases/latest/download/install.sh
+curl -fsSL -o install.sh https://github.com/abevz/dibs/releases/download/v0.1.0-rc.1/install.sh
 less install.sh
 sh install.sh
 ```
