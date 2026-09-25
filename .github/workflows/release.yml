@@ -26,6 +26,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test ./...
+      - run: sh contrib/install/test-publish-release.sh
 
   build:
     needs: test
@@ -147,18 +148,10 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ github.ref_name }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: dibs-release-bundle
           path: release-bundle
       - name: Publish GitHub release
-        run: |
-          set -euo pipefail
-          cd release-bundle
-          if gh release view "${VERSION}" >/dev/null 2>&1; then
-            gh release upload "${VERSION}" ./*.tar.gz checksums.txt install.sh dibs.rb --clobber
-          else
-            gh release create "${VERSION}" ./*.tar.gz checksums.txt install.sh dibs.rb \
-              --title "${VERSION}" \
-              --notes "dibs ${VERSION}"
-          fi
+        run: sh contrib/install/publish-release.sh "$VERSION" release-bundle

@@ -3,7 +3,9 @@
 The first GitHub release has not been published yet. The commands below become
 usable after the release workflow publishes its verified `install.sh`, archives,
 and `checksums.txt` assets. The README continues to show the working source
-build until that publication is complete.
+build until that publication is complete. For a prerelease such as
+`v0.1.0-rc.1`, use its versioned URL below: GitHub's `latest` URL does not
+select prereleases.
 
 ## Linux and macOS release installation
 

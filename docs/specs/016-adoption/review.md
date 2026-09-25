@@ -54,6 +54,10 @@ are historical and do not override that coordinator closure.
   in the formula's shared files. The fixture checks repeat installation and
   license delivery; native verification compares the installed copy with the
   archive copy on each platform.
+- The first preview uses the `v0.1.0-rc.1` prerelease tag. The publish step
+  marks hyphenated versions as prereleases and does not designate them as
+  GitHub's latest stable release. The versioned installer URL is the entrypoint
+  for this preview; publication is still pending the tag workflow.
 - Local evidence: shell syntax and installer fixture checks passed, including
   exact tag selection despite an ambient `VERSION=latest`, repeat install,
   preserved user data, and refusal of a tampered archive. Four real archives
