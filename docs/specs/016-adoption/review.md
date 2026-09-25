@@ -71,6 +71,11 @@ are historical and do not override that coordinator closure.
   LICENSE matched the official Apache-2.0 text. Evidence is under
   `/tmp/dibs-v0.1.0-rc.1-2peaac6q/public-smoke/evidence/` (the claim output is
   private and contains a lease token).
+- The first published release initially inherited its merge commit message as
+  notes because the publish checkout fetched no tag objects at depth one.
+  The notes were replaced with the reviewed preview instructions. Future tag
+  publication fetches tag objects and checks for an annotated tag before
+  deriving release notes from it.
 - Local evidence: shell syntax and installer fixture checks passed, including
   exact tag selection despite an ambient `VERSION=latest`, repeat install,
   preserved user data, and refusal of a tampered archive. Four real archives
