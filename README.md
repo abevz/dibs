@@ -449,6 +449,10 @@ migrations/            schema migrations
 - External tracker integrations are planned as optional adapters, not as a new
   source of truth.
 
+## License
+
+dibs is licensed under the [Apache License 2.0](LICENSE).
+
 ## How to release
 
 1. Ensure the `review.md` for the active SDD packet is complete and all related
