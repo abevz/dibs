@@ -23,6 +23,9 @@ case "$state" in
 		;;
 	false)
 		gh release upload "$version" ./*.tar.gz checksums.txt install.sh dibs.rb --clobber
+		if [ "$#" -gt 0 ]; then
+			gh release edit "$version" "$@"
+		fi
 		;;
 	missing)
 	gh release create "$version" ./*.tar.gz checksums.txt install.sh dibs.rb \

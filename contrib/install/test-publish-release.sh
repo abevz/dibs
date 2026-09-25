@@ -43,4 +43,10 @@ grep -qx -- '--draft=false' "$scratch/draft-args"
 grep -qx -- '--prerelease' "$scratch/draft-args"
 grep -qx -- '--latest=false' "$scratch/draft-args"
 
+GH_TEST_STATE=false GH_TEST_ARGS="$scratch/published-args" PATH="$scratch/bin:$PATH" \
+	sh contrib/install/publish-release.sh v0.1.0-rc.1 "$scratch/bundle"
+grep -qx -- 'edit' "$scratch/published-args"
+grep -qx -- '--prerelease' "$scratch/published-args"
+grep -qx -- '--latest=false' "$scratch/published-args"
+
 echo 'release publication fixture checks passed'
