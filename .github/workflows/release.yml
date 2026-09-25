@@ -60,7 +60,8 @@ jobs:
           go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibs" ./cmd/dibs/
           go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibsd" ./cmd/dibsd/
           go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibs-mcp" ./cmd/dibs-mcp/
-          tar -C "dist/${archive}" -czf "dist/${archive}.tar.gz" dibs dibsd dibs-mcp
+          cp LICENSE "dist/${archive}/LICENSE"
+          tar -C "dist/${archive}" -czf "dist/${archive}.tar.gz" dibs dibsd dibs-mcp LICENSE
       - uses: actions/upload-artifact@v4
         with:
           name: dibs-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -126,6 +127,8 @@ jobs:
           test -x "$BINDIR/dibs"
           test -x "$BINDIR/dibsd"
           test -x "$BINDIR/dibs-mcp"
+          tar -xOf "release-bundle/dibs_${TARGET}.tar.gz" LICENSE > "$RUNNER_TEMP/archive-LICENSE"
+          cmp "$RUNNER_TEMP/archive-LICENSE" "$RUNNER_TEMP/share/licenses/dibs/LICENSE"
           "$BINDIR/dibs" version
           sh release-bundle/install.sh
           "$BINDIR/dibs" version

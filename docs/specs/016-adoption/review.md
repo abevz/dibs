@@ -48,6 +48,12 @@ are historical and do not override that coordinator closure.
   binaries without sudo under `~/.local/bin`, prints a PATH hint, and stages
   files before replacing existing binaries. The direct source installer still
   supports `VERSION` for a chosen tag.
+- The Apache-2.0 `LICENSE` is included in every platform archive. The shell
+  installer places it under the installation prefix's `share/licenses/dibs`;
+  the generated Homebrew formula declares the license and installs its text
+  in the formula's shared files. The fixture checks repeat installation and
+  license delivery; native verification compares the installed copy with the
+  archive copy on each platform.
 - Local evidence: shell syntax and installer fixture checks passed, including
   exact tag selection despite an ambient `VERSION=latest`, repeat install,
   preserved user data, and refusal of a tampered archive. Four real archives

@@ -16,7 +16,8 @@ curl -fsSL https://github.com/abevz/dibs/releases/latest/download/install.sh | s
 The downloaded script carries the release tag that supplied it, and fetches the
 archive and checksum manifest for that same tag. It selects Linux amd64/arm64
 or macOS Intel/Apple Silicon, verifies the archive, and installs `dibs`,
-`dibsd`, and `dibs-mcp` in `~/.local/bin` without sudo. The script prints a PATH
+`dibsd`, and `dibs-mcp` in `~/.local/bin` without sudo. It installs the Apache-2.0
+license at `~/.local/share/licenses/dibs/LICENSE`. The script prints a PATH
 hint when that directory is not available in the current shell.
 
 To inspect the exact script before running it:
@@ -77,6 +78,7 @@ Stop a running daemon first, using the applicable commands in
 
 ```sh
 rm "$HOME/.local/bin/dibs" "$HOME/.local/bin/dibsd" "$HOME/.local/bin/dibs-mcp"
+rm "$HOME/.local/share/licenses/dibs/LICENSE"
 ```
 
 The release installer also creates legacy command aliases `afctl`,

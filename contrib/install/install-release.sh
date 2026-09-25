@@ -12,6 +12,7 @@ if [ -z "$repo" ]; then
 fi
 version="${DIBS_RELEASE_VERSION:-${VERSION:-latest}}"
 bindir="${BINDIR:-$HOME/.local/bin}"
+license_dir="$(dirname "$bindir")/share/licenses/dibs"
 
 case "$(uname -s)" in
 	Linux) os="linux" ;;
@@ -75,6 +76,11 @@ trap 'rm -rf "$tmpdir" "$stage_dir"' EXIT
 install -m 755 "$tmpdir/dibs" "$stage_dir/dibs"
 install -m 755 "$tmpdir/dibsd" "$stage_dir/dibsd"
 install -m 755 "$tmpdir/dibs-mcp" "$stage_dir/dibs-mcp"
+mkdir -p "$license_dir"
+license_stage="$(mktemp "$license_dir/.LICENSE.XXXXXXXX")"
+trap 'rm -rf "$tmpdir" "$stage_dir" "$license_stage"' EXIT
+install -m 644 "$tmpdir/LICENSE" "$license_stage"
+mv -f "$license_stage" "$license_dir/LICENSE"
 mv -f "$stage_dir/dibs" "$bindir/dibs"
 mv -f "$stage_dir/dibsd" "$bindir/dibsd"
 mv -f "$stage_dir/dibs-mcp" "$bindir/dibs-mcp"

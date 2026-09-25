@@ -10,11 +10,14 @@ for binary in dibs dibsd dibs-mcp; do
 	printf '#!/bin/sh\necho test-binary\n' > "$scratch/archive/$binary"
 	chmod 755 "$scratch/archive/$binary"
 done
+cp LICENSE "$scratch/archive/LICENSE"
 
 for platform in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
-	tar -C "$scratch/archive" -czf "$bundle/dibs_${platform}.tar.gz" dibs dibsd dibs-mcp
+	tar -C "$scratch/archive" -czf "$bundle/dibs_${platform}.tar.gz" dibs dibsd dibs-mcp LICENSE
 done
 sh contrib/install/package-release.sh v0.1.0-rc.1 "$bundle"
+grep -q 'license "Apache-2.0"' "$bundle/dibs.rb"
+grep -q 'pkgshare.install "LICENSE"' "$bundle/dibs.rb"
 if command -v ruby >/dev/null 2>&1; then
 	ruby -c "$bundle/dibs.rb" >/dev/null
 fi
@@ -25,9 +28,11 @@ HOME="$scratch/home" BINDIR="$scratch/home/.local/bin" \
 test "$("$scratch/home/.local/bin/dibs" version)" = test-binary
 test "$("$scratch/home/.local/bin/dibsd" version)" = test-binary
 test "$("$scratch/home/.local/bin/dibs-mcp" version)" = test-binary
+cmp LICENSE "$scratch/home/.local/share/licenses/dibs/LICENSE"
 HOME="$scratch/home" BINDIR="$scratch/home/.local/bin" \
 	DIBS_RELEASE_BASE_URL="file://$bundle" sh "$bundle/install.sh" > "$scratch/reinstall.log"
 test "$(cat "$scratch/home/.local/share/dibs/keep.txt")" = 'user data'
+cmp LICENSE "$scratch/home/.local/share/licenses/dibs/LICENSE"
 
 # The release asset must resolve its archive to its own tag, even if a newer
 # release appears after the user fetched install.sh.
