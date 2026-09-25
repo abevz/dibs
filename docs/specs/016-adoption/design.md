@@ -92,15 +92,17 @@ DI container, daemon plugin system, or network service is introduced.
 ## Distribution
 
 The primary quickstart install is
-`curl -fsSL <release URL>/install.sh | sh`. `install.sh` is a release asset
-pinned to the selected tag, not fetched from `main`; it reuses the existing
-checksum-verifying `contrib/install/install-release.sh`. It installs to
-`~/.local/bin` without sudo and prints a PATH hint. The newcomer README must
-also show how to download that same asset, inspect it, and run it separately.
-Release verification exercises the actual asset and checksum manifest before
-publication. The next channels are a Homebrew tap, `go install`, and an AUR
-package. Other channels wait for observed demand. The owner pushes the public
-tag.
+`curl -fsSL <release URL>/install.sh | sh /dev/stdin`. The `install.sh` release
+asset embeds the selected tag, not a script fetched from `main`. It reuses the
+checksum-verifying `contrib/install/install-release.sh` and selects the archive
+and manifest from that same release. It installs to `~/.local/bin` without sudo
+and prints a PATH hint. Document download-inspect-run, version selection,
+repeat install, and binary removal without deleting runtime data.
+Release verification exercises the actual asset and checksum manifest on each
+advertised Linux and macOS architecture before publication. The release
+package generates a checksum-pinned Homebrew formula; advertise a tap,
+`go install`, or AUR only after that channel is verified. The owner pushes the
+public tag.
 
 ## Owner decisions recorded from `afc-127` notes (2026-09-23)
 

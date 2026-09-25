@@ -36,6 +36,36 @@ are historical and do not override that coordinator closure.
 
 ## Implementation ledger
 
+### afc-128 — release installer implementation (verification pending)
+
+- The release workflow packages four OS/architecture archives, a checksum
+  manifest, a tag-pinned `install.sh`, and a checksum-pinned Homebrew formula.
+  Pull requests and manual dispatch build and verify without publishing;
+  a tag publishes only after native install checks on Linux amd64/arm64 and
+  macOS Intel/Apple Silicon runners pass.
+- The installer selects the archive and manifest from the tag embedded in the
+  downloaded release asset. It verifies the checksum, installs the three
+  binaries without sudo under `~/.local/bin`, prints a PATH hint, and stages
+  files before replacing existing binaries. The direct source installer still
+  supports `VERSION` for a chosen tag.
+- Local evidence: shell syntax and installer fixture checks passed, including
+  exact tag selection despite an ambient `VERSION=latest`, repeat install,
+  preserved user data, and refusal of a tampered archive. Four real archives
+  built; the packaged Linux amd64 archive installed and launched from a
+  temporary home, and a second install succeeded. `go build ./...` and the
+  complete `go test ./...` passed with the live operator-token environment
+  removed from the test process. The initial unfiltered test run failed only
+  in an environment-sensitive config test and a previously observed API
+  shutdown timeout; both passed in focused reruns. `actionlint` and Ruby
+  formula syntax checks passed. Full local logs are under
+  `/tmp/dibs-afc-128-q78uxn1y/`.
+- Still required before marking `afc-128` done or advertising the command:
+  independent review of the final content; GitHub's native four-platform
+  workflow result; a published asset exercised from its real release URL;
+  and a tested Homebrew tap before advertising that channel. The public
+  v0.1.0 tag remains the owner's publication action. No live service or
+  database was changed by the local verification.
+
 ### afc-144 — coordinated repository guidance
 
 - `cmd/dibs/init-snippet.md` now carries the afc-116 rule: use `dibs issue run`

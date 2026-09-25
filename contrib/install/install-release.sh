@@ -10,7 +10,7 @@ if [ -z "$repo" ]; then
 	echo "DIBS_REPO must not be empty" >&2
 	exit 1
 fi
-version="${VERSION:-latest}"
+version="${DIBS_RELEASE_VERSION:-${VERSION:-latest}}"
 bindir="${BINDIR:-$HOME/.local/bin}"
 
 case "$(uname -s)" in
@@ -41,7 +41,9 @@ else
 fi
 
 asset="dibs_${os}_${arch}.tar.gz"
-if [ "$version" = "latest" ]; then
+if [ -n "${DIBS_RELEASE_BASE_URL:-}" ]; then
+	base_url="${DIBS_RELEASE_BASE_URL%/}"
+elif [ "$version" = "latest" ]; then
 	base_url="https://github.com/$repo/releases/latest/download"
 else
 	base_url="https://github.com/$repo/releases/download/$version"
@@ -53,7 +55,10 @@ trap 'rm -rf "$tmpdir"' EXIT
 download "$base_url/$asset" "$tmpdir/$asset"
 download "$base_url/checksums.txt" "$tmpdir/checksums.txt"
 
-grep "  $asset\$" "$tmpdir/checksums.txt" > "$tmpdir/$asset.sha256"
+if ! grep "  $asset\$" "$tmpdir/checksums.txt" > "$tmpdir/$asset.sha256"; then
+	echo "checksum for $asset is missing from $base_url/checksums.txt" >&2
+	exit 1
+fi
 (
 	cd "$tmpdir"
 	if command -v sha256sum >/dev/null 2>&1; then
@@ -65,11 +70,22 @@ grep "  $asset\$" "$tmpdir/checksums.txt" > "$tmpdir/$asset.sha256"
 
 tar -xzf "$tmpdir/$asset" -C "$tmpdir"
 mkdir -p "$bindir"
-install -m 755 "$tmpdir/dibs" "$bindir/dibs"
-install -m 755 "$tmpdir/dibsd" "$bindir/dibsd"
-install -m 755 "$tmpdir/dibs-mcp" "$bindir/dibs-mcp"
+stage_dir="$(mktemp -d "$bindir/.dibs-install.XXXXXXXX")"
+trap 'rm -rf "$tmpdir" "$stage_dir"' EXIT
+install -m 755 "$tmpdir/dibs" "$stage_dir/dibs"
+install -m 755 "$tmpdir/dibsd" "$stage_dir/dibsd"
+install -m 755 "$tmpdir/dibs-mcp" "$stage_dir/dibs-mcp"
+mv -f "$stage_dir/dibs" "$bindir/dibs"
+mv -f "$stage_dir/dibsd" "$bindir/dibsd"
+mv -f "$stage_dir/dibs-mcp" "$bindir/dibs-mcp"
 ln -sfn dibs "$bindir/afctl"
 ln -sfn dibsd "$bindir/af-coordinatord"
 ln -sfn dibs-mcp "$bindir/afc-mcp"
 
 echo "Installed dibs binaries into $bindir"
+echo "Version: $version"
+case ":$PATH:" in
+	*":$bindir:"*) ;;
+	*) echo "Add $bindir to PATH to run dibs (for example, export PATH=\"$bindir:\$PATH\")." ;;
+esac
+echo "Next: run dibs init inside a Git repository."

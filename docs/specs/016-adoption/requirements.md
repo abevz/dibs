@@ -11,13 +11,17 @@
   of the user path. No demo or seeded issue is required.
 - **R-02 Truthful release.** Published install instructions must resolve to a
   real verified artifact. The primary install is
-  `curl -fsSL <release URL>/install.sh | sh`, where `install.sh` is a pinned
-  release asset that reuses the checksum-verifying
-  `contrib/install/install-release.sh`, installs to `~/.local/bin` without sudo,
-  and prints a PATH hint. The README also shows a download-inspect-run
-  alternative. Exercise the release workflow and installer, then the Homebrew
-  tap, `go install`, and AUR package before advertising each as working. Defer
-  other channels until demand. The owner alone pushes the public v0.1.0 tag.
+  `curl -fsSL <release URL>/install.sh | sh /dev/stdin`. The release asset
+  embeds its own tag and reuses the checksum-verifying
+  `contrib/install/install-release.sh` so a newer release cannot change the
+  binary downloaded after the script was fetched. It installs to
+  `~/.local/bin` without sudo and prints a PATH hint. Document a
+  download-inspect-run alternative, a specific-version path, repeat install,
+  and removal that preserves runtime data. Verify the archives and installer
+  on the advertised Linux and macOS architectures before publication;
+  cross-compilation alone is insufficient. Prepare a Homebrew formula from
+  release checksums, but advertise the tap, `go install`, and AUR only after
+  each channel is tested. The owner alone pushes the public v0.1.0 tag.
 - **R-03 Rename compatibility.** Before the public tag, product and CLI become
   `dibs`, daemon `dibsd`, and intended public repository `abevz/dibs`. New
   `DIBS_*` environment variables are introduced; existing `AF_*` variables
