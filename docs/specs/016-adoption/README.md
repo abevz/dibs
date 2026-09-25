@@ -2,7 +2,23 @@
 
 Your AI agents call dibs on work. Exactly one wins.
 
-Status: draft for owner approval. Planning issue: `afc-127`; epic: `afc-126`.
+Status: packet approved on 2026-09-23; active. Planning issue: `afc-127`;
+epic: `afc-126`. The saved delivery update below is for later implementation.
+
+## Saved delivery plan — 2026-09-25
+
+The [delivery plan](implementation-plan.md) records the latest owner direction:
+Linux/macOS installation and first use come first; positioning uses dibs' own
+workflows; attachments and GitHub integration follow; Jira is a possible future
+adapter/plugin, with no instance available for validation. A usable preview
+does not wait for swarm or a fixed number of testers.
+
+Implementation is deferred to a later session. Read the plan's resume checklist
+before acting on the earlier delivery waves below; reconcile the affected
+requirements/design/tasks and live dependencies before implementing each slice.
+Planning task: `afc-149`.
+
+## Original packet scope
 
 The first external user should be able to install the released CLI, initialize
 coordination inside a Git repository, create an issue, and make a successful
@@ -17,7 +33,13 @@ daemon remains the only supported writer to SQLite; clients use its local Unix
 socket API. Packet [015](../015-coordination-safety/README.md) owns the safety
 contract. The coordinator's live issues own execution status.
 
-## Delivery waves
+## Original delivery waves (2026-09-23; historical)
+
+This table preserves the earlier ordering and dependency conditions. The
+`afc-137` rename and packet 015 safety prerequisites have since completed;
+`afc-128` and `afc-129` are ready at the saved plan's baseline. The later plan
+above records the revised preview order; reconcile affected task contracts
+before implementation rather than treating this historical table as live status.
 
 | Wave | Scope | Gate |
 | --- | --- | --- |
@@ -30,8 +52,9 @@ decisions, `tasks.md` maps the existing child issues to slices, and `review.md`
 records packet and implementation review. No child implementation is included
 in `afc-127`.
 
-## Packet approval
+## Original packet approval
 
-The owner has resolved the recorded product decisions and must approve this
-updated packet before it is treated as an implementation contract. Only the
-owner records packet approval in `review.md`.
+The owner approved the original packet on 2026-09-23 (PR #66); see
+[review.md](review.md). The dated delivery update records subsequent direction
+and the reconciliation needed before affected implementation begins. Saving
+that update does not mark any implementation slice complete.

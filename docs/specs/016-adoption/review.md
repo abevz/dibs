@@ -1,6 +1,28 @@
 # 016 Adoption Review
 
-Status: approved by owner; packet active. afc-137 implementation awaits owner review.
+Status: approved by owner; packet active. Rename `afc-137` was owner-closed on
+2026-09-23 after PR #67 (`4dd9983`). Earlier per-PR pending-review notes below
+are historical and do not override that coordinator closure.
+
+## Saved delivery plan — afc-149 (2026-09-25)
+
+- Added [implementation-plan.md](implementation-plan.md) and linked it from the
+  packet README and roadmap. It records installation-first delivery, the one-line
+  Linux/macOS installer, first use, integrations/watch, attachments, GitHub, and
+  independently releasable extensions and promotion.
+- Recorded the latest owner constraints: standalone positioning without Beads
+  comparisons; no fixed tester-count gate; no Jira instance or committed Jira
+  target; optional adapters/plugins remain a later design discussion.
+- This is a saved plan, not product implementation or a release approval.
+  Existing implementation issue states and publication gates are unchanged.
+  Its resume checklist calls out the older packet contracts and live
+  dependencies that must be reconciled before the affected work starts.
+- Documentation validation and independent review evidence belong to the
+  `afc-149` closure record; no application build or runtime test is required
+  for this documentation-only change.
+- Clarified original packet approval and rename closure after review identified
+  stale top-level status text. The live ready view includes `afc-128` and
+  `afc-129`; their completed rename prerequisite is retained in the task map.
 
 ## Packet authoring (`afc-127`)
 
