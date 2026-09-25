@@ -11,8 +11,66 @@ func isHelpArg(arg string) bool {
 	return arg == "--help" || arg == "-help" || arg == "-h" || arg == "help"
 }
 
-// groupHelp renders namespaces before leaf validation. It uses commandRoutes
-// so group and leaf help stay in sync as commands are added.
+// immediateSubcommands derives group membership from registered routes.
+// The top-level dependency alias uses the canonical issue dependency routes.
+func immediateSubcommands(group string) []string {
+	lookup := group
+	if lookup == "dependency" {
+		lookup = "issue dependency"
+	}
+	prefix := ""
+	if lookup != "" {
+		prefix = lookup + " "
+	}
+	commands := map[string]bool{}
+	for key := range commandRoutes {
+		if suffix, ok := strings.CutPrefix(key, prefix); ok {
+			commands[strings.Fields(suffix)[0]] = true
+		}
+	}
+	if group == "" {
+		for _, alias := range []string{"dependency", "ls", "show"} {
+			commands[alias] = true
+		}
+	}
+	names := make([]string, 0, len(commands))
+	for name := range commands {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func commandPath(group, child string) string {
+	if group == "" {
+		return child
+	}
+	if group == "dependency" {
+		return "issue dependency " + child
+	}
+	return group + " " + child
+}
+
+// rootHelp and groupHelp share the same route-derived tree and descriptions.
+func rootHelp() string {
+	var b strings.Builder
+	b.WriteString("Commands:\n")
+	var appendGroup func(string, int)
+	appendGroup = func(group string, depth int) {
+		for _, name := range immediateSubcommands(group) {
+			key := commandPath(group, name)
+			fmt.Fprintf(&b, "%s%-20s %s\n", strings.Repeat("  ", depth), name, commandDescriptions[key])
+			if len(immediateSubcommands(key)) > 0 {
+				appendGroup(key, depth+1)
+			}
+		}
+	}
+	appendGroup("", 1)
+	b.WriteString("\nRun dibs <command> --help for details.\n")
+	return b.String()
+}
+
+// groupHelp renders namespaces before leaf validation.
 func groupHelp(args []string) (string, bool) {
 	if len(args) == 0 {
 		return "", false
@@ -21,35 +79,18 @@ func groupHelp(args []string) (string, bool) {
 	if isHelpArg(args[len(args)-1]) {
 		path = args[:len(args)-1]
 	}
-	if len(path) == 0 || len(path) > 2 {
+	if len(path) == 0 {
 		return "", false
 	}
 	group := strings.Join(path, " ")
-	switch group {
-	case "project", "repo", "worktree", "artifact-root", "artifact", "export", "issue", "dependency",
-		"issue dependency", "issue note", "issue tag", "issue events":
-	default:
+	names := immediateSubcommands(group)
+	if len(names) == 0 {
 		return "", false
 	}
-	lookup := group
-	if group == "dependency" {
-		lookup = "issue dependency"
-	}
-	commands := map[string]bool{}
-	for key := range commandRoutes {
-		if suffix, ok := strings.CutPrefix(key, lookup+" "); ok {
-			commands[strings.Fields(suffix)[0]] = true
-		}
-	}
-	names := make([]string, 0, len(commands))
-	for name := range commands {
-		names = append(names, name)
-	}
-	sort.Strings(names)
 	var b strings.Builder
 	fmt.Fprintf(&b, "Usage: dibs %s <subcommand>\n\nSubcommands:\n", group)
 	for _, name := range names {
-		fmt.Fprintf(&b, "  %s\n", name)
+		fmt.Fprintf(&b, "  %-20s %s\n", name, commandDescriptions[commandPath(group, name)])
 	}
 	fmt.Fprintf(&b, "\nRun dibs %s <subcommand> --help for flags.\n", group)
 	return b.String(), true
@@ -69,28 +110,25 @@ func leafHelp(args []string) (string, bool) {
 	if len(args) == 0 {
 		return "", false
 	}
-	path := []string{args[0]}
+	key := ""
 	switch args[0] {
-	case "project", "repo", "worktree", "artifact-root", "artifact", "export", "issue", "dependency":
-		if len(args) < 2 {
-			return "", false
-		}
-		path = append(path, args[1])
-		if args[0] == "issue" && (args[1] == "dependency" || args[1] == "note" || args[1] == "tag" || args[1] == "events") {
-			if len(args) < 3 {
-				return "", false
-			}
-			path = append(path, args[2])
-		}
 	case "ls":
-		path = []string{"issue", "list"}
+		key = "issue list"
 	case "show":
-		path = []string{"issue", "get"}
+		key = "issue get"
+	case "dependency":
+		if len(args) >= 2 {
+			key = "issue dependency " + args[1]
+		}
+	default:
+		for end := len(args); end > 0; end-- {
+			candidate := strings.Join(args[:end], " ")
+			if _, ok := commandRoutes[candidate]; ok {
+				key = candidate
+				break
+			}
+		}
 	}
-	if args[0] == "dependency" {
-		path = append([]string{"issue"}, path...)
-	}
-	key := strings.Join(path, " ")
 	route, ok := commandRoutes[key]
 	if !ok {
 		return "", false
@@ -123,7 +161,7 @@ func leafHelp(args []string) (string, bool) {
 	if key == "issue run" {
 		b.WriteString(" -- <command> [args...]")
 	}
-	b.WriteString("\n")
+	fmt.Fprintf(&b, "\n\n%s\n", commandDescriptions[key])
 	var requiredParts []string
 	if route.pos == 1 {
 		requiredParts = append(requiredParts, "<issue-id>")
@@ -167,6 +205,8 @@ func leafHelp(args []string) (string, bool) {
 		b.WriteString("\nRequired: -- <command>; arguments after -- belong to the child.\n")
 	case "issue claim":
 		b.WriteString("\nActor requirement: provide an actor via --holder, --actor, DIBS_ACTOR, parent agent, or USER.\n")
+	case "issue cancel", "issue operator-close", "issue operator-reopen", "issue operator-release":
+		b.WriteString("\nAuthorization: set DIBS_OPERATOR_TOKEN in the environment.\n")
 	}
 	if strings.Contains(requiredCommandFlags[key], "--lease-token") {
 		b.WriteString("Lease token: use DIBS_LEASE_TOKEN or DIBS_LEASE_TOKEN_FILE; never put a token in argv. Prefer dibs issue run.\n")

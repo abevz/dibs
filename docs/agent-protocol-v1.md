@@ -8,6 +8,8 @@ subcommands. `-help` also works for root, group, and leaf help. Unknown
 `projects` suggests `project` without contacting the daemon. Unknown commands
 and flags point to the nearest `--help` path. Leaf help describes each flag's
 value and purpose; `dibs project add --help` includes a registration example.
+Root and group help list commands with short purpose descriptions; nested
+groups such as `dibs issue dependency --help` use the same command catalog.
 Registration commands accept project keys or UUIDs and repository logical
 names or UUIDs; `--json` registration output exposes a top-level `id`.
 `dibs issue list`
