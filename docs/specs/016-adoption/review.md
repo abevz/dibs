@@ -1,6 +1,28 @@
 # 016 Adoption Review
 
-Status: approved by owner; packet active. afc-137 implementation awaits owner review.
+Status: approved by owner; packet active. Rename `afc-137` was owner-closed on
+2026-09-23 after PR #67 (`4dd9983`). Earlier per-PR pending-review notes below
+are historical and do not override that coordinator closure.
+
+## Saved delivery plan — afc-149 (2026-09-25)
+
+- Added [implementation-plan.md](implementation-plan.md) and linked it from the
+  packet README and roadmap. It records installation-first delivery, the one-line
+  Linux/macOS installer, first use, integrations/watch, attachments, GitHub, and
+  independently releasable extensions and promotion.
+- Recorded the latest owner constraints: standalone positioning without Beads
+  comparisons; no fixed tester-count gate; no Jira instance or committed Jira
+  target; optional adapters/plugins remain a later design discussion.
+- This is a saved plan, not product implementation or a release approval.
+  Existing implementation issue states and publication gates are unchanged.
+  Its resume checklist calls out the older packet contracts and live
+  dependencies that must be reconciled before the affected work starts.
+- Documentation validation and independent review evidence belong to the
+  `afc-149` closure record; no application build or runtime test is required
+  for this documentation-only change.
+- Clarified original packet approval and rename closure after review identified
+  stale top-level status text. The live ready view includes `afc-128` and
+  `afc-129`; their completed rename prerequisite is retained in the task map.
 
 ## Packet authoring (`afc-127`)
 
@@ -13,6 +35,42 @@ Status: approved by owner; packet active. afc-137 implementation awaits owner re
 - Acceptance evidence: packet files and one-to-one child map are reviewable.
 
 ## Implementation ledger
+
+### afc-128 — release installer implementation (verification pending)
+
+- The release workflow packages four OS/architecture archives, a checksum
+  manifest, a tag-pinned `install.sh`, and a checksum-pinned Homebrew formula.
+  Pull requests and manual dispatch build and verify without publishing;
+  a tag publishes only after native install checks on Linux amd64/arm64 and
+  macOS Intel/Apple Silicon runners pass.
+- The installer selects the archive and manifest from the tag embedded in the
+  downloaded release asset. It verifies the checksum, installs the three
+  binaries without sudo under `~/.local/bin`, prints a PATH hint, and stages
+  files before replacing existing binaries. The direct source installer still
+  supports `VERSION` for a chosen tag.
+- The Apache-2.0 `LICENSE` is included in every platform archive. The shell
+  installer places it under the installation prefix's `share/licenses/dibs`;
+  the generated Homebrew formula declares the license and installs its text
+  in the formula's shared files. The fixture checks repeat installation and
+  license delivery; native verification compares the installed copy with the
+  archive copy on each platform.
+- Local evidence: shell syntax and installer fixture checks passed, including
+  exact tag selection despite an ambient `VERSION=latest`, repeat install,
+  preserved user data, and refusal of a tampered archive. Four real archives
+  built; the packaged Linux amd64 archive installed and launched from a
+  temporary home, and a second install succeeded. `go build ./...` and the
+  complete `go test ./...` passed with the live operator-token environment
+  removed from the test process. The initial unfiltered test run failed only
+  in an environment-sensitive config test and a previously observed API
+  shutdown timeout; both passed in focused reruns. `actionlint` and Ruby
+  formula syntax checks passed. Full local logs are under
+  `/tmp/dibs-afc-128-q78uxn1y/`.
+- Still required before marking `afc-128` done or advertising the command:
+  independent review of the final content; GitHub's native four-platform
+  workflow result; a published asset exercised from its real release URL;
+  and a tested Homebrew tap before advertising that channel. The public
+  v0.1.0 tag remains the owner's publication action. No live service or
+  database was changed by the local verification.
 
 ### afc-144 — coordinated repository guidance
 

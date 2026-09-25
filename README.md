@@ -137,15 +137,10 @@ This builds `dibsd`, `dibs`, and `dibs-mcp` into `~/.local/bin/`, plus
 compatibility command aliases.
 Make sure `~/.local/bin` is on `PATH`.
 
-To install the latest published GitHub release instead of building from source:
-
-```bash
-sh contrib/install/install-release.sh
-```
-
-Set `VERSION=vX.Y.Z` to install a specific tag. The script downloads the
-matching Linux/macOS archive, verifies it against the published checksum
-manifest, and installs the three binaries into `~/.local/bin` by default.
+No GitHub release has been published yet. The release installer is being
+prepared for Linux and macOS; see [installation](docs/install.md) for its
+planned one-line command, version selection, updates, and removal. Until the
+first verified release, build from source using the commands above.
 
 ### Test
 

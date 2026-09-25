@@ -1,15 +1,29 @@
 # Roadmap
 
-Direction for dibs beyond v1. The operational source of truth for
+Direction for dibs toward v1 and beyond. The operational source of truth for
 this work is the coordinator itself (project `afc`); this document records
 the intent and the reasoning so the issues stay short.
 
-## Current direction: coordination safety before expansion
+## Current direction: installation and first use
+
+The [delivery plan saved on 2026-09-25](specs/016-adoption/implementation-plan.md)
+records the next sequence: Linux/macOS installation (`afc-128`), first-use setup
+(`afc-129`), everyday agent integration and visibility, then attachments and a
+GitHub adapter. Jira is a future adapter/plugin possibility; the owner has no
+Jira instance, and no implementation is committed. Swarm is an optional later
+extension. Implementation starts in a later session.
+
+Packet 015 is complete; its [closure evidence](specs/015-coordination-safety/review.md)
+remains the safety baseline. The sections below preserve earlier roadmap
+decisions. Read the saved plan and its source-precedence/resume checklist before
+starting new work; live issue states still belong to the coordinator.
+
+## Completed target: coordination safety (`afc-102`)
 
 The project is useful as a local execution ledger, but the 2026-08-11 audit
 found inconsistent fencing, daemon/SQLite serialization, and retry semantics.
-Packet `docs/specs/015-coordination-safety/` is the active roadmap target;
-implementation epic `afc-102` owns live progress.
+Packet `docs/specs/015-coordination-safety/` addressed that baseline and was
+completed on 2026-09-24. The delivery order below records that completed track.
 
 Delivery order:
 
@@ -24,7 +38,7 @@ lease generation + atomic ownership predicates
 SQLite remains the canonical store. The target is one trustworthy local daemon,
 not a replicated service.
 
-### Live backlog assessment (2026-08-11)
+### Historical backlog assessment (2026-08-11)
 
 Live status, claims, and closure remain in project `afc`. Packet 015 records the
 problem/evidence/scope/acceptance for `afc-103` through `afc-116`; this table

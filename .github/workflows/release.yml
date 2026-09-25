@@ -4,10 +4,18 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - contrib/install/**
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Version to embed in a dry-run installer (for example, v0.1.0-rc.1)
+        required: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -52,34 +60,103 @@ jobs:
           go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibs" ./cmd/dibs/
           go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibsd" ./cmd/dibsd/
           go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibs-mcp" ./cmd/dibs-mcp/
-          tar -C "dist/${archive}" -czf "dist/${archive}.tar.gz" dibs dibsd dibs-mcp
+          cp LICENSE "dist/${archive}/LICENSE"
+          tar -C "dist/${archive}" -czf "dist/${archive}.tar.gz" dibs dibsd dibs-mcp LICENSE
       - uses: actions/upload-artifact@v4
         with:
           name: dibs-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*.tar.gz
 
-  publish:
-    if: github.ref_type == 'tag'
+  package:
     needs: build
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_version || format('v0.0.0-ci.{0}', github.run_number) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dibs-*
+          path: release-bundle
+          merge-multiple: true
+      - name: Package a version-pinned installer and checksum manifest
+        run: sh contrib/install/package-release.sh "$VERSION" release-bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dibs-release-bundle
+          path: release-bundle/*
+
+  verify:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux_amd64
+          - runner: ubuntu-24.04-arm
+            target: linux_arm64
+          - runner: macos-15-intel
+            target: darwin_amd64
+          - runner: macos-15
+            target: darwin_arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dibs-release-bundle
+          path: release-bundle
+      - name: Install and run the release archive on its native platform
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          case "$(uname -s)/$(uname -m)" in
+            Linux/x86_64) host=linux_amd64 ;;
+            Linux/aarch64) host=linux_arm64 ;;
+            Darwin/x86_64) host=darwin_amd64 ;;
+            Darwin/arm64) host=darwin_arm64 ;;
+            *) echo "unsupported test host" >&2; exit 1 ;;
+          esac
+          test "$host" = "$TARGET"
+          export DIBS_RELEASE_BASE_URL="file://$PWD/release-bundle"
+          export BINDIR="$RUNNER_TEMP/dibs-bin"
+          sh release-bundle/install.sh
+          test -x "$BINDIR/dibs"
+          test -x "$BINDIR/dibsd"
+          test -x "$BINDIR/dibs-mcp"
+          tar -xOf "release-bundle/dibs_${TARGET}.tar.gz" LICENSE > "$RUNNER_TEMP/archive-LICENSE"
+          cmp "$RUNNER_TEMP/archive-LICENSE" "$RUNNER_TEMP/share/licenses/dibs/LICENSE"
+          "$BINDIR/dibs" version
+          sh release-bundle/install.sh
+          "$BINDIR/dibs" version
+          if command -v ruby >/dev/null 2>&1; then
+            ruby -c release-bundle/dibs.rb
+          fi
+
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: release-artifacts
-          merge-multiple: true
+          name: dibs-release-bundle
+          path: release-bundle
       - name: Publish GitHub release
         run: |
           set -euo pipefail
-          cd release-artifacts
-          sha256sum *.tar.gz > checksums.txt
+          cd release-bundle
           if gh release view "${VERSION}" >/dev/null 2>&1; then
-            gh release upload "${VERSION}" *.tar.gz checksums.txt --clobber
+            gh release upload "${VERSION}" ./*.tar.gz checksums.txt install.sh dibs.rb --clobber
           else
-            gh release create "${VERSION}" *.tar.gz checksums.txt \
+            gh release create "${VERSION}" ./*.tar.gz checksums.txt install.sh dibs.rb \
               --title "${VERSION}" \
-              --notes "af-coordinator ${VERSION}"
+              --notes "dibs ${VERSION}"
           fi
-
