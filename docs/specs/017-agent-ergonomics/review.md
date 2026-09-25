@@ -64,3 +64,27 @@ Independent review found one inaccurate `--force` explanation; the final
 revision fixes it for ordinary and operator updates. Focused help tests passed
 again (`/tmp/afc-147-final-focused.log`), and independent read-only review of
 that final code revision found no remaining material issue.
+
+## afc-148 follow-up
+
+The help audit found three public rendering paths: a manually maintained root
+list, route-derived group lists without explanations, and route-derived leaf
+help. The root list omitted several routed issue commands (including `tag`,
+`edit`, and `unlink`). Root, group, and leaf help now share a compiled command
+description catalog in `cmd/dibs/help_commands.go`; root and group membership
+come from the route table, and `dependency`, `ls`, and `show` remain explicit
+aliases. Handler-specific usage strings still provide validation error context;
+all public `--help` routes render through the shared catalog.
+The audit also preserved the root help's explicit `DIBS_OPERATOR_TOKEN`
+requirement for cancel and operator commands in their root, group, and leaf
+descriptions.
+
+Coverage tests check every routed leaf and each parent group; the CLI test
+executes `--help` for every registered route with an absent daemon socket.
+`go test ./cmd/dibs`, `go build ./...`, and the installed-candidate scratch HOME/DB
+check passed (`/tmp/afc-148-cli-test.log`, `/tmp/afc-148-build.log`,
+`/tmp/afc-148-installed-check.log`). Independent review found that the first
+`operator-release` summary omitted its transition to `open`; the final catalog
+states that effect and a focused help test protects it
+(`/tmp/afc-148-final-focused.log`). Independent read-only review of the
+corrected code and test change found no remaining material issue.

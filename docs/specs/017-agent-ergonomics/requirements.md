@@ -8,6 +8,13 @@ discovery must be usable without reading CLI source.
 - The root command without arguments and command groups such as `project`
   display local usage. `--help` and `-help` work at both levels, group help
   lists subcommands, and the common `projects` typo suggests `project`.
+- Group help gives a concise purpose for every listed subcommand, including
+  nested `issue` groups and the top-level `dependency` alias. Descriptions
+  remain accurate when routed subcommands are added.
+- Root and leaf help use the same command-purpose catalog as group help, so
+  every routed command is discoverable and described without contacting the
+  daemon. The catalog lives outside the dispatch code and is compiled into
+  the CLI; all routed paths have coverage tests.
 - Unknown commands and flags show a local `--help` path for the nearest known
   command or group. Leaf help explains the meaning and expected value of every
   routed flag, marks required flags, and gives a concrete project-add example.

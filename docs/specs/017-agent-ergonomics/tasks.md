@@ -9,3 +9,6 @@
 - [x] `afc-147`: nearest local help hints, explained values and flags for all
   leaf routes, project-add example, regression tests, installed scratch check,
   and independent review.
+- [x] `afc-148`: audit root/group/leaf help, render all command purposes from
+  one compiled catalog, enforce route coverage, verify installed local help,
+  and independently review the final change.

@@ -168,66 +168,14 @@ func shortRev(rev string) string {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintf(w, `Usage: dibs [--json] [--actor <name>] <command>
+	fmt.Fprint(w, `Usage: dibs [--json] [--actor <name>] <command>
 
 Global flags:
   --json                Output in JSON format (default: human-readable)
   --actor <name>        Set the acting identity (default: DIBS_ACTOR env)
 
-Commands:
-  health                Check daemon health
-  doctor                Run environment diagnostics
-  protocol              Print the agent protocol contract
-  init                  Initialize or update AGENTS.md with coordinator block
-  project               Manage projects
-    add                 Create a new project
-    list                List all projects
-  repo                  Manage repositories
-    add                 Register a new repository
-    list                List repositories
-  worktree              Manage worktrees
-    register            Register or update a worktree
-    list                List worktrees
-    unregister          Remove a safe-to-delete worktree record
-    prune               Remove stale worktree records for missing paths
-  artifact-root         Manage artifact roots
-    add                 Register an artifact root in a repository
-    list                List artifact roots
-  artifact              Manage artifacts
-    register            Register an artifact file
-    list                List artifacts
-  export                Export coordinator state
-    jsonl               Stream normalized JSONL to stdout
-  stats [filters]       Show read-only project execution statistics
-  issue                 Manage issues
-    create              Create a new issue
-    get                 Get an issue by ID or short_id [--full]
-    list                List issues with optional filters
-    ready               List ready (actionable, unleased) issues
-    claim               Claim an issue (acquire a lease)
-    heartbeat           Extend an existing lease
-    release             Release a claimed lease
-    handoff             Add a required HANDOFF note and release atomically
-    run                 Claim, exec a command with the lease, heartbeat, then close/handoff based on its exit code
-    update              Update issue fields (title, description, priority, assignee, status)
-    close               Close an issue (resolution: done or cancelled) [--branch name] [--pr-url URL] [--commit-sha SHA] [--note "text"]
-    operator-close      Force-close an issue without a lease token (DIBS_OPERATOR_TOKEN + --reason)
-    operator-reopen     Reopen a terminal issue without a lease token (DIBS_OPERATOR_TOKEN + --reason)
-    operator-release    Force-clear a stuck in_progress lease and reopen without closing (DIBS_OPERATOR_TOKEN + --reason)
-    cancel              Cancel an open or claimed issue (DIBS_OPERATOR_TOKEN, resolution=cancelled) [--note "text"]
-    link                Link an artifact to an issue
-    note                Manage notes on an issue
-      add              Add a note to an issue
-      list             List notes on an issue
-    events              Show activity timeline for an issue
-      list             List events for an issue
-    dependency          Manage issue dependencies
-      add               Add a dependency between two issues
-      remove            Remove a dependency between two issues
-  ls [filters]           List issues (shortcut for issue list; use --help for filters)
-  show <issue-id> [--full] Show issue details (shortcut for issue get)
-  version                Print the dibs build revision
 `)
+	fmt.Fprint(w, rootHelp())
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

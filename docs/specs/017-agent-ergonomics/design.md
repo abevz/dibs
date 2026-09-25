@@ -4,6 +4,13 @@ Reuse the CLI route table to render local leaf help before daemon contact.
 Render root and group help before leaf validation; derive group subcommands
 from the same route table. Keep unknown commands as errors with a specific
 suggestion for `projects`.
+For afc-148, derive root and group membership from the route table and attach
+descriptions from a compiled command-purpose catalog outside the dispatch
+code. Use the same descriptions for root, group, and leaf help. Keep the
+dependency, ls, and show aliases explicit. Require catalog and rendered-help
+coverage for every route and nested group, including no-daemon CLI checks.
+Compile the catalog into the binary rather than read a runtime sidecar file,
+so local help has no filesystem or daemon dependency.
 For afc-147, derive the nearest help path from known route/group prefixes and
 render leaf flag explanations from a shared metadata table, with command-specific
 entries where the same flag has different semantics. A coverage test requires
