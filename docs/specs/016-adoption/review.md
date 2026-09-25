@@ -103,6 +103,9 @@ are historical and do not override that coordinator closure.
   database lock was released. The follow-up fails closed on unverifiable
   health and waits for both socket removal and lock release. Focused tests,
   the full Go suite, and the built-binary first-use smoke passed after the fix.
+  The first CI rerun exposed an older issue-run mock with no health endpoint;
+  the fixture now returns the configured database identity as the real daemon
+  does. An uncached `go test -count=1 ./...` passed with that fixture.
 - Still required: independent final review, native macOS/ARM first-use CI,
   and release-artifact first-use timing before closing `afc-129`. No live
   daemon or database was restarted.
