@@ -4,9 +4,9 @@ import "testing"
 
 func TestParseListPage(t *testing.T) {
 	for _, tt := range []struct {
-		raw string
-		max int
-		want int
+		raw   string
+		max   int
+		want  int
 		valid bool
 	}{
 		{"", 1000, 0, true},
