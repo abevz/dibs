@@ -26,6 +26,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test ./...
+      - run: sh contrib/install/test-publish-release.sh
 
   build:
     needs: test
@@ -147,18 +148,61 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ github.ref_name }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: dibs-release-bundle
           path: release-bundle
       - name: Publish GitHub release
+        run: sh contrib/install/publish-release.sh "$VERSION" release-bundle
+
+  public-smoke:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux_amd64
+          - runner: ubuntu-24.04-arm
+            target: linux_arm64
+          - runner: macos-15-intel
+            target: darwin_amd64
+          - runner: macos-15
+            target: darwin_arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install from the published URL and exercise first use
+        shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          cd release-bundle
-          if gh release view "${VERSION}" >/dev/null 2>&1; then
-            gh release upload "${VERSION}" ./*.tar.gz checksums.txt install.sh dibs.rb --clobber
-          else
-            gh release create "${VERSION}" ./*.tar.gz checksums.txt install.sh dibs.rb \
-              --title "${VERSION}" \
-              --notes "dibs ${VERSION}"
-          fi
+          case "$(uname -s)/$(uname -m)" in
+            Linux/x86_64) host=linux_amd64 ;;
+            Linux/aarch64) host=linux_arm64 ;;
+            Darwin/x86_64) host=darwin_amd64 ;;
+            Darwin/arm64) host=darwin_arm64 ;;
+            *) echo "unsupported test host" >&2; exit 1 ;;
+          esac
+          test "$host" = "$TARGET"
+          url="https://github.com/abevz/dibs/releases/download/${VERSION}/install.sh"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsSL "$url" -o "$RUNNER_TEMP/public-install.sh"; then
+              break
+            fi
+            echo "installer download attempt $attempt failed; retrying" >&2
+            sleep 3
+          done
+          test -s "$RUNNER_TEMP/public-install.sh"
+          export HOME="$RUNNER_TEMP/dibs-public-home"
+          export BINDIR="$HOME/.local/bin"
+          mkdir -p "$HOME"
+          sh "$RUNNER_TEMP/public-install.sh"
+          test -x "$BINDIR/dibs"
+          test -s "$HOME/.local/share/licenses/dibs/LICENSE"
+          "$BINDIR/dibs" version
+          sh contrib/install/test-first-use.sh "$BINDIR"
