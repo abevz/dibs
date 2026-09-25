@@ -10,13 +10,26 @@ version=$1
 bundle=$2
 cd "$bundle"
 
-if gh release view "$version" >/dev/null 2>&1; then
-	gh release upload "$version" ./*.tar.gz checksums.txt install.sh dibs.rb --clobber
-else
-	set --
-	case "$version" in
-		*-*) set -- --prerelease --latest=false ;;
-	esac
+set --
+case "$version" in
+	*-*) set -- --prerelease --latest=false ;;
+esac
+
+state=$(gh release view "$version" --json isDraft --jq .isDraft 2>/dev/null) || state=missing
+case "$state" in
+	true)
+		gh release upload "$version" ./*.tar.gz checksums.txt install.sh dibs.rb --clobber
+		gh release edit "$version" --draft=false "$@"
+		;;
+	false)
+		gh release upload "$version" ./*.tar.gz checksums.txt install.sh dibs.rb --clobber
+		;;
+	missing)
 	gh release create "$version" ./*.tar.gz checksums.txt install.sh dibs.rb \
 		--verify-tag --title "$version" --notes-from-tag "$@"
-fi
+		;;
+	*)
+		echo "unexpected release state for $version: $state" >&2
+		exit 1
+		;;
+esac
