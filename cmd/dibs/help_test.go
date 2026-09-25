@@ -1,9 +1,53 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestRootAndGroupHelpWithoutDaemon(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "dibs")
+	if output, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, output)
+	}
+	for _, tt := range []struct {
+		args []string
+		want []string
+	}{
+		{nil, []string{"Usage: dibs", "project"}},
+		{[]string{"--help"}, []string{"Usage: dibs"}},
+		{[]string{"-help"}, []string{"Usage: dibs"}},
+		{[]string{"project"}, []string{"Usage: dibs project <subcommand>", "add", "list"}},
+		{[]string{"project", "--help"}, []string{"Usage: dibs project <subcommand>", "add", "list"}},
+		{[]string{"project", "-help"}, []string{"Usage: dibs project <subcommand>"}},
+		{[]string{"project", "add", "-help"}, []string{"Usage: dibs project add"}},
+		{[]string{"issue", "dependency", "--help"}, []string{"Usage: dibs issue dependency <subcommand>", "add", "remove"}},
+	} {
+		cmd := exec.Command(bin, tt.args...)
+		cmd.Env = append(os.Environ(), "DIBS_SOCKET="+filepath.Join(t.TempDir(), "absent.sock"))
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if err := cmd.Run(); err != nil || stderr.Len() != 0 {
+			t.Fatalf("dibs %v: err=%v, stderr=%q", tt.args, err, stderr.String())
+		}
+		for _, want := range tt.want {
+			if !strings.Contains(stdout.String(), want) {
+				t.Errorf("dibs %v: missing %q in %q", tt.args, want, stdout.String())
+			}
+		}
+	}
+	cmd := exec.Command(bin, "projects", "-help")
+	cmd.Env = append(os.Environ(), "DIBS_SOCKET="+filepath.Join(t.TempDir(), "absent.sock"))
+	output, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "Did you mean: dibs project --help?") {
+		t.Fatalf("projects typo: err=%v, output=%q", err, output)
+	}
+}
 
 func TestEveryCLILeafHasLocalHelp(t *testing.T) {
 	for key, route := range commandRoutes {
@@ -50,6 +94,20 @@ func TestLifecycleHelpUsesTokenEnvironment(t *testing.T) {
 func TestIssueRunChildHelpIsNotCLIHelp(t *testing.T) {
 	if printLocalHelp([]string{"issue", "run", "afc-145", "--", "go", "test", "--help"}) {
 		t.Fatal("child --help belongs to the child process")
+	}
+	if printLocalHelp([]string{"issue", "run", "afc-145", "--", "go", "test", "-help"}) {
+		t.Fatal("child -help belongs to the child process")
+	}
+}
+
+func TestIssueRunChildHelpReachesHandlerValidation(t *testing.T) {
+	for _, childFlag := range []string{"--help", "-help"} {
+		err := runIssueRun(context.Background(), nil, []string{
+			"afc-1", "--close-resolution", "invalid", "--", "child", childFlag,
+		})
+		if err == nil || !strings.Contains(err.Error(), "--close-resolution must be done or cancelled") {
+			t.Errorf("child %s: expected handler validation, got %v", childFlag, err)
+		}
 	}
 }
 

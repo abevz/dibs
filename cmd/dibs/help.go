@@ -3,8 +3,65 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
+
+func isHelpArg(arg string) bool {
+	return arg == "--help" || arg == "-help" || arg == "-h" || arg == "help"
+}
+
+// groupHelp renders namespaces before leaf validation. It uses commandRoutes
+// so group and leaf help stay in sync as commands are added.
+func groupHelp(args []string) (string, bool) {
+	if len(args) == 0 {
+		return "", false
+	}
+	path := args
+	if isHelpArg(args[len(args)-1]) {
+		path = args[:len(args)-1]
+	}
+	if len(path) == 0 || len(path) > 2 {
+		return "", false
+	}
+	group := strings.Join(path, " ")
+	switch group {
+	case "project", "repo", "worktree", "artifact-root", "artifact", "export", "issue", "dependency",
+		"issue dependency", "issue note", "issue tag", "issue events":
+	default:
+		return "", false
+	}
+	lookup := group
+	if group == "dependency" {
+		lookup = "issue dependency"
+	}
+	commands := map[string]bool{}
+	for key := range commandRoutes {
+		if suffix, ok := strings.CutPrefix(key, lookup+" "); ok {
+			commands[strings.Fields(suffix)[0]] = true
+		}
+	}
+	names := make([]string, 0, len(commands))
+	for name := range commands {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	fmt.Fprintf(&b, "Usage: dibs %s <subcommand>\n\nSubcommands:\n", group)
+	for _, name := range names {
+		fmt.Fprintf(&b, "  %s\n", name)
+	}
+	fmt.Fprintf(&b, "\nRun dibs %s <subcommand> --help for flags.\n", group)
+	return b.String(), true
+}
+
+func printGroupHelp(args []string) bool {
+	if help, ok := groupHelp(args); ok {
+		fmt.Fprint(os.Stdout, help)
+		return true
+	}
+	return false
+}
 
 // leafHelp is generated from the same route and required-flag registry used by
 // validation, so newly added flags are visible without a second usage string.
