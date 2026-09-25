@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -40,6 +42,20 @@ func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st s
 		_ = listener.Close()
 		_ = os.Remove(cfg.SocketPath)
 	}()
+	pidPath := cfg.SocketPath + ".pid"
+	if os.Getenv("DIBS_INTERNAL_AUTOSTART") == "1" {
+		pid := strconv.Itoa(os.Getpid())
+		if err := os.WriteFile(pidPath, []byte(pid+"\n"), 0o600); err != nil {
+			return fmt.Errorf("write daemon pid file: %w", err)
+		}
+		defer func() {
+			if data, err := os.ReadFile(pidPath); err == nil && strings.TrimSpace(string(data)) == pid {
+				_ = os.Remove(pidPath)
+			}
+		}()
+	} else if err := os.Remove(pidPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale self-start pid file: %w", err)
+	}
 
 	if err := os.Chmod(cfg.SocketPath, 0o660); err != nil {
 		logger.Warn("failed to chmod socket", "path", cfg.SocketPath, "error", err)

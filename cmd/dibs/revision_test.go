@@ -65,6 +65,7 @@ func TestRevisionSkew(t *testing.T) {
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sockPath := testsocket.PathNamed(t, fmt.Sprintf("s%d", i))
+			dbPath := filepath.Join(t.TempDir(), "dibs.db")
 			os.Remove(sockPath)
 
 			l, err := net.Listen("unix", sockPath)
@@ -75,7 +76,7 @@ func TestRevisionSkew(t *testing.T) {
 
 			mux := http.NewServeMux()
 			mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-				json.NewEncoder(w).Encode(map[string]any{"status": "ok", "revision": tt.daemonRevision})
+				json.NewEncoder(w).Encode(map[string]any{"status": "ok", "revision": tt.daemonRevision, "db_path": dbPath})
 			})
 			// Mock /v1/projects for ls
 			mux.HandleFunc("/v1/projects", func(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +88,7 @@ func TestRevisionSkew(t *testing.T) {
 			// Run in a temp dir: `init` without --path writes AGENTS.md
 			// into the current directory.
 			runCmd.Dir = t.TempDir()
-			runCmd.Env = append(os.Environ(), "AF_COORDINATOR_SOCKET="+sockPath)
+			runCmd.Env = append(os.Environ(), "DIBS_SOCKET="+sockPath, "DIBS_DB="+dbPath)
 			var stderr bytes.Buffer
 			runCmd.Stderr = &stderr
 

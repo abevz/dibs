@@ -79,7 +79,10 @@ var flagHelpText = map[string]flagHelp{
 
 var commandFlagHelpText = map[string]map[string]flagHelp{
 	"init": {
-		"--path": {"path", "AGENTS.md path to create or update (default: ./AGENTS.md)."},
+		"--path":           {"path", "AGENTS.md path to create or update (default: ./AGENTS.md)."},
+		"--project":        {"key", "Use this project key when Git context is ambiguous."},
+		"--repo":           {"name", "Use this repository name when Git context is ambiguous."},
+		"--default-branch": {"name", "Confirm the repository default branch when it cannot be inferred."},
 	},
 	"project add": {
 		"--description": {"text", "Optional explanation of what the project tracks."},

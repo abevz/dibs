@@ -65,12 +65,50 @@ are historical and do not override that coordinator closure.
   shutdown timeout; both passed in focused reruns. `actionlint` and Ruby
   formula syntax checks passed. Full local logs are under
   `/tmp/dibs-afc-128-q78uxn1y/`.
+- Final staged implementation underwent independent read-only review. A finding
+  that manual dispatch on a tag could publish was fixed by requiring a tag push;
+  the revised workflow was reviewed again and `actionlint` passed.
 - Still required before marking `afc-128` done or advertising the command:
-  independent review of the final content; GitHub's native four-platform
+  GitHub's native four-platform
   workflow result; a published asset exercised from its real release URL;
   and a tested Homebrew tap before advertising that channel. The public
   v0.1.0 tag remains the owner's publication action. No live service or
   database was changed by the local verification.
+
+### afc-129 — first use implementation (verification pending)
+
+- `dibs init` now discovers the current Git repository and worktree, shows the
+  mapping, starts the companion `dibsd` when needed, reconciles project/repo/
+  worktree records through the daemon API, and updates the managed AGENTS.md
+  block. Ambiguous project and default-branch cases request explicit flags.
+  A dry run does not start a daemon or mutate records/files.
+- Non-diagnostic CLI commands start the daemon on demand. `dibs daemon
+  start/stop` offers explicit control for a dibs-started process; manager-owned
+  services must be stopped through their manager. The daemon's existing database lock
+  remains the sole-writer arbiter; first-call starters wait for the same
+  healthy socket. Startup failures include the original daemon log reason.
+- Local scratch evidence: `init` twice, create, claim, stop, restart, and
+  retained issue state passed with installed local binaries. Two concurrent
+  `daemon start` calls converged on one socket. An unknown migration failed
+  without serving the API and surfaced `unknown applied migration`. The
+  four-command local sequence took well under two minutes. An existing legacy
+  database was selected after restart, retained its issue, and did not create
+  a second database at the new default path. The native smoke starts the first
+  daemon through `init` and verifies `daemon stop` refuses a foreground-managed
+  process. `go test ./...`, `go build ./...`,
+  `shellcheck`, and `actionlint` passed with the live operator-token variables
+  removed from the test process.
+- PR #86 review found that a reachable socket with unverifiable health could
+  receive first-use writes, and that `daemon stop` could finish before the
+  database lock was released. The follow-up fails closed on unverifiable
+  health and waits for both socket removal and lock release. Focused tests,
+  the full Go suite, and the built-binary first-use smoke passed after the fix.
+  The first CI rerun exposed an older issue-run mock with no health endpoint;
+  the fixture now returns the configured database identity as the real daemon
+  does. An uncached `go test -count=1 ./...` passed with that fixture.
+- Still required: independent final review, native macOS/ARM first-use CI,
+  and release-artifact first-use timing before closing `afc-129`. No live
+  daemon or database was restarted.
 
 ### afc-144 — coordinated repository guidance
 

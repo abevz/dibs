@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/abevz/dibs/internal/config"
 	"github.com/abevz/dibs/internal/testsocket"
 )
 
@@ -77,8 +78,8 @@ func TestIssueRunHelpFlagShortCircuits(t *testing.T) {
 	}
 }
 
-// mockCoordinator is a minimal /v1/issues/{id}/{claim,heartbeat,close,handoff}
-// server used to drive `dibs issue run` end to end through a real subprocess,
+// mockCoordinator is a minimal health and lifecycle API server used to drive
+// `dibs issue run` end to end through a real subprocess,
 // since claim/heartbeat/exec/close all happen inside a single compiled
 // binary invocation -- there's no lighter-weight in-process seam for it.
 type mockCoordinator struct {
@@ -118,6 +119,11 @@ func writeLeaseExpired(w http.ResponseWriter) {
 
 func (m *mockCoordinator) handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status": "ok", "db_path": config.Default().DBPath,
+		})
+	})
 	mux.HandleFunc("POST /v1/issues/{id}/claim", func(w http.ResponseWriter, r *http.Request) {
 		expiry := m.claimExpiry
 		if expiry == "" {
