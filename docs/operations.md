@@ -375,7 +375,7 @@ sufficient). Move the whole repository parent so its registered worktrees keep
 the same relative paths, then run:
 
 ```sh
-dibs repo relocate --repo <repository-id> --new-path /absolute/new/path/main
+dibs repo relocate --repo <repository-id> --new-path /absolute/new/path/main/.git
 dibs repo list --project <project-key>
 dibs worktree list --repo <repository-id>
 git -C /absolute/new/path/main worktree repair /absolute/new/path/main
@@ -384,6 +384,7 @@ git -C /absolute/new/path/main worktree repair /absolute/new/path/main
 `--new-path` names the new location of the **registered canonical path**. For
 registrations created by `dibs init`, that is normally the Git common directory
 (`.git` or `.bare`); older registrations may name the main checkout instead.
+For an older checkout-path registration, use `--new-path /absolute/new/path/main`.
 For a repository with linked worktrees, pass **every moved worktree path** to
 `git worktree repair` as additional arguments. Git stores absolute pointers in
 linked worktrees' `.git` files; these must be repaired before removing the old

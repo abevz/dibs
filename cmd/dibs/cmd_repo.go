@@ -49,7 +49,7 @@ func runRepoRelocate(ctx context.Context, c *client.Client, args []string) error
 		}
 	}
 	if repoID == "" || newPath == "" {
-		return argumentError("Usage: dibs repo relocate --repo <id> --new-path <absolute-checkout-path> [--operation-id <id>]")
+		return argumentError("Usage: dibs repo relocate --repo <id> --new-path <absolute-canonical-git-path> [--operation-id <id>]")
 	}
 	absPath, err := filepath.Abs(newPath)
 	if err != nil {
