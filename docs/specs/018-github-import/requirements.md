@@ -45,6 +45,14 @@
   publish failure never undoes or blocks the local close: the command reports
   the failure and the exact retry command, and JSON output includes the
   publish result.
+- **R-13 Readiness checks.** `dibs doctor` reports a "GitHub CLI" check at
+  warning level (dibs works without GitHub): `gh` is on `PATH` with its
+  version, it is authenticated for `github.com`, and an authenticated
+  `gh api rate_limit` call succeeds, showing remaining requests. Each failed
+  step names its remedy (`install gh`, `gh auth login`, network or token
+  problem). Before posting, `publish` confirms that the source issue is
+  reachable and not locked, and reports `locked` or `not_found` without
+  posting.
 
 ## Safety and documentation
 

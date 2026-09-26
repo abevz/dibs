@@ -12,7 +12,7 @@
 
 ```go
 type Client interface {
-    GetIssue(ctx context.Context, ref IssueRef) (Issue, error)          // title, body, state, html_url, is_pull_request
+    GetIssue(ctx context.Context, ref IssueRef) (Issue, error)          // title, body, state, locked, html_url, is_pull_request
     ListComments(ctx context.Context, ref IssueRef) ([]Comment, error)  // paginated
     CreateComment(ctx context.Context, ref IssueRef, body string) (Comment, error)
 }
@@ -21,6 +21,24 @@ type Client interface {
 Errors are classified as `gh_missing`, `gh_auth`, `not_found` (also returned
 for inaccessible private issues), `rate_limited`, `timeout`, and `github`,
 each with a one-line remedy.
+
+## Readiness checks (R-13)
+
+`dibs doctor` adds a `GitHub CLI` check that runs three steps in order and
+stops at the first failure. Every result is `[ok]` or `[WARN]`, never
+`[FAIL]`:
+
+| Step | Command | Warning and hint |
+| --- | --- | --- |
+| Installed | `gh --version` | `gh not found` — install GitHub CLI to use import and publish |
+| Authenticated | `gh auth status --hostname github.com` | `not logged in` — run `gh auth login` |
+| Working | `gh api rate_limit` | network, proxy, or revoked token — the `gh` error text |
+
+The ok line shows the `gh` version and the remaining core API requests. The
+check uses no repository, because a public repository readable without
+credentials would prove only connectivity. Access to a specific repository
+is checked where it matters: `import` and `publish` for that issue. The check
+goes through the doctor's existing `OSExec` interface, so tests can fake it.
 
 ## Reference parsing
 
@@ -74,7 +92,9 @@ dibs issue run <issue-id> ... --publish -- <command>
 ```
 
 1. Read the issue. Require a terminal status (`done`/`cancelled`) and a
-   `github:` external key (R-07).
+   `github:` external key (R-07). Fetch the source issue. If it is
+   missing or inaccessible, stop with `not_found`. If it is locked, stop with
+   `locked` — only users with write access can comment there (R-13).
 2. Read the latest `issue_closed` event for `resolution`, `branch`,
    `commit_sha`, `pr_url`, and `created_at`. Read the closing note from the
    `note_added` event recorded by the same close.
@@ -118,9 +138,11 @@ short "Work from GitHub Issues" section with the three-command flow.
 
 - Table tests for reference parsing, external key normalization, description
   mapping and truncation, comment rendering, and marker detection.
+- Doctor tests with a fake `OSExec` for each readiness step (missing `gh`,
+  logged out, API failure, success with version and rate limit).
 - Command tests with the fake client and a scratch daemon: new import,
   repeated import, concurrent import (two goroutines, one issue), closed and
   pull-request sources, each `gh` error class, cwd resolution, publish
-  preconditions, repeated publish, reopen and reclose, and `--publish` failure
+  preconditions including locked and inaccessible sources, repeated publish, reopen and reclose, and `--publish` failure
   after a successful close.
 - No test calls the real GitHub API. R-12 covers the real round trip.

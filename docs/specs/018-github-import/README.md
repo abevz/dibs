@@ -22,6 +22,8 @@ where work is described and discussed; dibs decides which agent owns it.
   stable external key; repeating the import returns the same dibs issue.
 - Publish the closed result (resolution, PR/commit/branch, closing note) back
   to the source issue as exactly one comment, safely retryable.
+- `dibs doctor` reports whether `gh` is installed, authenticated, and working;
+  `publish` checks that the source issue is reachable and not locked first.
 - GitHub access goes through the user's `gh` CLI. dibs stores no GitHub
   credentials and the daemon stays offline.
 

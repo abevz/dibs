@@ -19,6 +19,11 @@
 - **No schema change.** Idempotent import uses a lookup by external key plus a
   deterministic create operation ID; exactly-once publish uses a marker in the
   GitHub comment instead of a local ledger.
+- **Readiness without a probe repository.** `dibs doctor` checks `gh`
+  installation, authentication, and a working authenticated API call
+  (`rate_limit`). A public probe repository would prove only connectivity;
+  per-repository access is checked by `import` and `publish` (owner request,
+  2026-09-26).
 - **Accepted gap.** Two simultaneous publishes of the same close can post
   twice. A durable ledger is left to `afc-90`.
 

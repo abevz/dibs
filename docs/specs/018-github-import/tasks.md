@@ -6,9 +6,9 @@ owner merges.
 
 | Slice | Issue | Depends on | Acceptance evidence |
 | --- | --- | --- | --- |
-| Import | `afc-163` | Packet approval | `internal/github` client interface, `gh`-backed implementation, and reference parser; `dibs issue import` per R-01–R-06 and design "Import"; table and command tests with a fake client and scratch daemon, including concurrent import producing one issue; help catalog entry; scratch check with a fake `gh` on `PATH`. |
-| Publish | `afc-164` | `afc-163` | `dibs issue publish` and `--publish` on `issue close`/`issue run` per R-07–R-10 and design "Publish"; tests for preconditions, rendering, marker idempotency, reopen and reclose, and publish failure after a successful close; no secret or local path in rendered comments. |
-| End-to-end and release | `afc-165` | `afc-163`, `afc-164` | README "Work from GitHub Issues" section; agent-protocol trust rule (R-11); owner tags `v0.1.0-rc.4`; the R-12 real round trip on a throwaway issue in an owner-chosen repository, using the published binaries; transcript and comment links recorded in `review.md`. |
+| Import | `afc-163` | Packet approval | `internal/github` client interface, `gh`-backed implementation, and reference parser; `dibs doctor` "GitHub CLI" readiness check per R-13; `dibs issue import` per R-01–R-06 and design "Import"; table and command tests with a fake client and scratch daemon, including concurrent import producing one issue; help catalog entry; scratch check with a fake `gh` on `PATH`. |
+| Publish | `afc-164` | `afc-163` | `dibs issue publish` and `--publish` on `issue close`/`issue run` per R-07–R-10 and design "Publish", including the locked/inaccessible source preflight from R-13; tests for preconditions, rendering, marker idempotency, reopen and reclose, and publish failure after a successful close; no secret or local path in rendered comments. |
+| End-to-end and release | `afc-165` | `afc-163`, `afc-164` | README "Work from GitHub Issues" section; agent-protocol trust rule (R-11); owner tags `v0.1.0-rc.4`; `dibs doctor` shows the GitHub CLI check as ok on the test machine and as a warning with `gh` removed from `PATH`; the R-12 real round trip on a throwaway issue in an owner-chosen repository, using the published binaries; transcript and comment links recorded in `review.md`. |
 
 ## Order
 
