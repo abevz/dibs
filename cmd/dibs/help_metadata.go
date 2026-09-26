@@ -45,6 +45,7 @@ var flagHelpText = map[string]flagHelp{
 	"--lease-token":       {"token", "Read from DIBS_LEASE_TOKEN or DIBS_LEASE_TOKEN_FILE; never pass in argv."},
 	"--limit":             {"number", "Maximum results to return (0–1000)."},
 	"--logical-name":      {"name", "Repository name used to select it within the project."},
+	"--new-path":          {"path", "Absolute new path for the registered canonical Git path (.git, .bare, or a legacy checkout)."},
 	"--main":              {"", "Mark this as the repository's main worktree."},
 	"--name":              {"display-name", "Human-readable project name; spaces are allowed."},
 	"--note":              {"text", "Note recorded with the issue action."},

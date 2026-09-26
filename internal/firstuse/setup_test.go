@@ -73,3 +73,27 @@ func TestDiscover(t *testing.T) {
 		}
 	})
 }
+
+func TestLegacyCheckoutRegistrationMatchesGitCommonDir(t *testing.T) {
+	root := t.TempDir()
+	main := filepath.Join(root, "main")
+	if err := os.Mkdir(main, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitTest(t, main, "init", "-b", "main")
+	info, err := Discover(context.Background(), main, Options{Project: "demo", Repo: "app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameRegisteredGitDir(context.Background(), main, info.GitDir) {
+		t.Fatal("legacy checkout path did not match its Git common directory")
+	}
+	foreign := filepath.Join(root, "foreign")
+	if err := os.Mkdir(foreign, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitTest(t, foreign, "init", "-b", "main")
+	if sameRegisteredGitDir(context.Background(), foreign, info.GitDir) {
+		t.Fatal("foreign repository matched the registered Git directory")
+	}
+}

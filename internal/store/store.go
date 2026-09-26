@@ -28,6 +28,8 @@ type CoordinatorStore interface {
 	GetRepoInProject(ctx context.Context, projectID, idOrName string) (core.Repository, error)
 	ListRepos(ctx context.Context, projectID string) ([]core.Repository, error)
 	ListReposByProjectKey(ctx context.Context, projectKey string) ([]core.Repository, error)
+	RelocateRepo(ctx context.Context, repoID, expectedPath string, req core.RelocateRepoRequest, changes []core.WorktreePathChange) (core.RelocateRepoResult, error)
+	ReplayRepoRelocate(ctx context.Context, repoID string, req core.RelocateRepoRequest) (core.RelocateRepoResult, bool, error)
 
 	UpsertWorktree(ctx context.Context, repoID string, req core.CreateWorktreeRequest) (core.Worktree, bool, error)
 	ListWorktrees(ctx context.Context, repoID string) ([]core.Worktree, error)

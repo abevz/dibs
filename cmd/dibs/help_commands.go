@@ -31,6 +31,7 @@ var commandDescriptions = map[string]string{
 	"project list":            "List registered projects.",
 	"repo add":                "Register a repository in a project.",
 	"repo list":               "List registered repositories.",
+	"repo relocate":           "Move a repository and its registered worktree paths after verifying Git identity.",
 	"worktree register":       "Register or update a worktree.",
 	"worktree list":           "List registered worktrees.",
 	"worktree prune":          "Remove stale records for missing worktree paths.",

@@ -98,3 +98,12 @@
 No web UI, remote transport, daemon plugin system, multiple writable daemon
 instances, replacement storage engine, or automatic PR creation by default.
 This packet does not implement its child issues.
+
+## Repository relocation (afc-141)
+
+- A user can update one registered repository's canonical Git path and its registered worktree paths without changing repository, worktree, or issue IDs.
+- The daemon verifies that the old and new canonical paths resolve to the same Git common object store. The old path must remain accessible during relocation (a temporary symlink is sufficient); an unprovable or different repository is rejected.
+- Every registered worktree must map from the old checkout's parent directory to the new checkout's parent directory and resolve to the same Git worktree. Stale or out-of-tree registrations are rejected for explicit cleanup before retry.
+- Registrations created by `dibs init` use the Git common directory, often `<checkout>/.git`; their main worktree must move with the checkout. Linked worktree Git metadata must be repaired before the old compatibility path is removed.
+- The update is atomic, audited, and safely replayable with an operation ID. Conflicting reuse of that ID is rejected. Path collisions with another registration are rejected.
+- CLI and API return the updated repository and worktree records; MCP can read those results through the existing repository/worktree list tools.
