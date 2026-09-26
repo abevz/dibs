@@ -136,7 +136,13 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		invocationMode = normalized
 	}
 
-	claim, err := c.ClaimIssueWithSessionAndMode(ctx, issueID, holder, ttl, "", invocationMode)
+	// session_id is advisory process metadata for watch, not an ownership key.
+	// The PID belongs to this supervisor, which maintains the lease heartbeat.
+	sessionID := ""
+	if host, hostErr := os.Hostname(); hostErr == nil {
+		sessionID = fmt.Sprintf("dibs-run:v1:%s:%d", host, os.Getpid())
+	}
+	claim, err := c.ClaimIssueWithSessionAndMode(ctx, issueID, holder, ttl, sessionID, invocationMode)
 	if err != nil {
 		return err
 	}

@@ -52,7 +52,14 @@ func Render(snapshot Snapshot, refreshErr error, now time.Time, width, height in
 	}, len(snapshot.Ready))
 	lines = appendSection(lines, fmt.Sprintf("ACTIVE LEASES (%d)", len(snapshot.Active)), sectionRows, width, func(i int) string {
 		issue := snapshot.Active[i]
-		return fmt.Sprintf("%-12s %-18s %8s  %s", issue.ShortID, issue.Holder, remaining(issue.LeaseExpiresAt, now), issue.Title)
+		process := "PID ?"
+		if issue.LeasePID > 0 && issue.LeaseHost != "" {
+			process = fmt.Sprintf("%d@%s", issue.LeasePID, issue.LeaseHost)
+		}
+		if width < 80 {
+			return fmt.Sprintf("%s  %s  %s  %s  %s", issue.ShortID, remaining(issue.LeaseExpiresAt, now), process, issue.Holder, issue.Title)
+		}
+		return fmt.Sprintf("%-12s %-18s %8s  %-20s %s", issue.ShortID, issue.Holder, remaining(issue.LeaseExpiresAt, now), process, issue.Title)
 	}, len(snapshot.Active))
 	lines = appendSection(lines, fmt.Sprintf("BLOCKED (%d)", len(snapshot.Blocked)), sectionRows, width, func(i int) string {
 		issue := snapshot.Blocked[i]
@@ -77,7 +84,7 @@ func Render(snapshot Snapshot, refreshErr error, now time.Time, width, height in
 	for len(lines) < height-1 {
 		lines = append(lines, "")
 	}
-	lines = append(lines, clip("q quit  ·  r refresh  ·  no writes or claims", width))
+	lines = append(lines, clip("q quit  ·  r refresh  ·  PID self-reported  ·  no writes or claims", width))
 	if len(lines) > height {
 		lines = lines[:height]
 	}

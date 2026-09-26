@@ -5176,3 +5176,84 @@ func TestClaimIssueSameHolderCannotRecoverToken(t *testing.T) {
 		t.Fatalf("rejected claim changed active lease: before=%+v after=%+v", leaseBefore, leaseAfter)
 	}
 }
+
+func TestIssueRunProcessMetadataOnlyForActiveTypedSession(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	if _, err := CreateProject(ctx, db, "pidtest", "PID test", ""); err != nil {
+		t.Fatal(err)
+	}
+	makeIssue := func(title string) core.Issue {
+		issue, err := CreateIssue(ctx, db, "pidtest", core.CreateIssueRequest{ScopeKind: "project", Title: title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return issue
+	}
+	local := makeIssue("local")
+	remote := makeIssue("remote")
+	manual := makeIssue("manual")
+	selfReported := makeIssue("self reported")
+	if _, err := ClaimIssueWithSession(ctx, db, local.ID, "agent-a", 60, "dibs-run:v1:host-a:1234"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ClaimIssueWithSession(ctx, db, remote.ID, "agent-b", 60, "dibs-run:v1:host-b:1234"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ClaimIssueWithSession(ctx, db, manual.ID, "agent-c", 60, "ordinary-session"); err != nil {
+		t.Fatal(err)
+	}
+	// The session ID is caller supplied; even a manual claimant can report a
+	// typed PID. The display must describe it as unverified advisory metadata.
+	if _, err := ClaimIssueWithSession(ctx, db, selfReported.ID, "manual-agent", 60, "dibs-run:v1:claimed-host:999"); err != nil {
+		t.Fatal(err)
+	}
+	list, err := ListIssues(ctx, db, core.IssueListParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]core.Issue{}
+	for _, i := range list {
+		byID[i.ID] = i
+	}
+	if byID[local.ID].LeasePID != 1234 || byID[local.ID].LeaseHost != "host-a" {
+		t.Fatalf("local metadata=%+v", byID[local.ID])
+	}
+	if byID[remote.ID].LeasePID != 1234 || byID[remote.ID].LeaseHost != "host-b" {
+		t.Fatalf("remote metadata=%+v", byID[remote.ID])
+	}
+	if byID[manual.ID].LeasePID != 0 || byID[manual.ID].LeaseHost != "" {
+		t.Fatalf("manual metadata=%+v", byID[manual.ID])
+	}
+	if byID[selfReported.ID].LeasePID != 999 || byID[selfReported.ID].LeaseHost != "claimed-host" {
+		t.Fatalf("self reported metadata=%+v", byID[selfReported.ID])
+	}
+	got, _, err := GetIssue(ctx, db, local.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LeasePID != 1234 || got.LeaseHost != "host-a" {
+		t.Fatalf("get metadata=%+v", got)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE leases SET expires_at = ? WHERE issue_id = ?", time.Now().UTC().Add(-time.Second).Format(time.RFC3339), local.ID); err != nil {
+		t.Fatal(err)
+	}
+	list, err = ListIssues(ctx, db, core.IssueListParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, i := range list {
+		if i.ID == local.ID && (i.LeasePID != 0 || i.LeaseHost != "") {
+			t.Fatalf("expired metadata=%+v", i)
+		}
+	}
+}
+
+func TestParseIssueRunSessionIDRejectsOtherFormats(t *testing.T) {
+	for _, value := range []string{"", "1234", "dibs-run:v1:host:0", "dibs-run:v1:host:-1", "dibs-run:v1:host:not-a-pid", "dibs-run:v1:bad host:1", "dibs-run:v2:host:1"} {
+		host, pid := parseIssueRunSessionID(value)
+		if host != "" || pid != 0 {
+			t.Fatalf("%q parsed as %s:%d", value, host, pid)
+		}
+	}
+}

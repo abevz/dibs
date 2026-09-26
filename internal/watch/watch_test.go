@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"strings"
@@ -67,7 +68,7 @@ func (f *sourceFixture) RecentEvents(_ context.Context, limit int) (core.EventPa
 func TestRefreshClassifiesFromDaemonReads(t *testing.T) {
 	now := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
 	ready := core.Issue{ID: "ready", ShortID: "demo-1", ProjectID: "project", Status: "open", Title: "Ready"}
-	active := core.Issue{ID: "active", ShortID: "demo-2", ProjectID: "project", Status: "in_progress", Holder: "agent-a", LeaseExpiresAt: now.Add(90 * time.Second).Format(time.RFC3339)}
+	active := core.Issue{ID: "active", ShortID: "demo-2", ProjectID: "project", Status: "in_progress", Holder: "agent-a", LeasePID: 4567, LeaseHost: "host-a", LeaseExpiresAt: now.Add(90 * time.Second).Format(time.RFC3339)}
 	blocked := core.Issue{ID: "blocked", ShortID: "demo-3", ProjectID: "project", Status: "open", Dependencies: []core.Dependency{{Kind: "blocks", DependsOnID: "other", DependsOnShortID: "other-1"}}}
 	other := core.Issue{ID: "other", ShortID: "other-1", ProjectID: "other-project", Status: "open"}
 	fixture := &sourceFixture{
@@ -88,6 +89,13 @@ func TestRefreshClassifiesFromDaemonReads(t *testing.T) {
 	}
 	if len(snapshot.Active) != 1 || snapshot.Active[0].Holder != "agent-a" {
 		t.Fatalf("active leases = %#v", snapshot.Active)
+	}
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"lease_pid":4567`) || !strings.Contains(string(encoded), `"lease_host":"host-a"`) {
+		t.Fatalf("watch JSON omits process metadata: %s", encoded)
 	}
 	if len(snapshot.Blocked) != 1 || snapshot.Blocked[0].BlockedBy[0] != "other-1" {
 		t.Fatalf("blocked issues = %#v", snapshot.Blocked)
@@ -150,5 +158,30 @@ func TestRenderLabelsStaleDataAndFitsResize(t *testing.T) {
 	compact := Render(snapshot, nil, now, 25, 8)
 	if !strings.Contains(compact, "Enlarge terminal") {
 		t.Fatalf("compact view did not explain resize:\n%s", compact)
+	}
+}
+
+func TestRenderActiveLeaseProcessMetadata(t *testing.T) {
+	now := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
+	active := []core.Issue{
+		{ShortID: "demo-1", Holder: "agent-a", LeasePID: 1234, LeaseHost: "host-a", LeaseExpiresAt: now.Add(time.Minute).Format(time.RFC3339)},
+		{ShortID: "demo-2", Holder: "manual", LeaseExpiresAt: now.Add(time.Minute).Format(time.RFC3339)},
+	}
+	view := Render(Snapshot{Active: active, UpdatedAt: now}, nil, now, 100, 28)
+	if !strings.Contains(view, "1234@host-a") || !strings.Contains(view, "PID ?") || !strings.Contains(view, "PID self-reported") {
+		t.Fatalf("process metadata missing from active leases:\n%s", view)
+	}
+	narrow := Render(Snapshot{Active: active, UpdatedAt: now}, nil, now, 60, 16)
+	seenActive := false
+	for _, line := range strings.Split(narrow, "\n") {
+		if strings.Contains(line, "demo-1") {
+			seenActive = true
+			if !strings.Contains(line, "1m0s") || !strings.Contains(line, "1234@host-a") {
+				t.Fatalf("narrow active row lost TTL or full PID@host: %q", line)
+			}
+		}
+	}
+	if !seenActive {
+		t.Fatalf("narrow board lost active row:\n%s", narrow)
 	}
 }

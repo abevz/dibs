@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -214,7 +215,7 @@ func GetIssue(ctx context.Context, db *sql.DB, id string) (core.Issue, *core.Iss
 		`SELECT i.id, i.short_id, i.project_id, i.repository_id, i.worktree_id, i.scope_kind,
 		        i.issue_type, i.title, i.external_key, i.description, i.acceptance_criteria, i.status, i.priority, i.assignee, i.version,
 		        i.claimed_at, i.closed_at, i.created_at, i.updated_at,
-		        COALESCE(l.holder, ''), COALESCE(l.expires_at, '')
+		        COALESCE(l.holder, ''), COALESCE(l.expires_at, ''), COALESCE(l.session_id, '')
 		 FROM issues i
 		 LEFT JOIN leases l ON l.issue_id = i.id AND l.expires_at > ?
 		 WHERE i.id = ?`, now, id,
@@ -308,7 +309,7 @@ func ListIssues(ctx context.Context, db *sql.DB, params core.IssueListParams) ([
 	query := `SELECT i.id, i.short_id, i.project_id, i.repository_id, i.worktree_id, i.scope_kind,
 	                 i.issue_type, i.title, i.external_key, i.description, i.acceptance_criteria, i.status, i.priority, i.assignee, i.version,
 	                 i.claimed_at, i.closed_at, i.created_at, i.updated_at,
-	                 COALESCE(l.holder, ''), COALESCE(l.expires_at, '')
+	                 COALESCE(l.holder, ''), COALESCE(l.expires_at, ''), COALESCE(l.session_id, '')
 	          FROM issues i
 	          LEFT JOIN leases l ON l.issue_id = i.id AND l.expires_at > ?`
 	if len(where) > 0 {
@@ -403,7 +404,7 @@ func ListReadyIssues(ctx context.Context, db *sql.DB, projectID, repoID string, 
 	query := `SELECT i.id, i.short_id, i.project_id, i.repository_id, i.worktree_id, i.scope_kind,
 	                 i.issue_type, i.title, i.external_key, i.description, i.acceptance_criteria, i.status, i.priority, i.assignee, i.version,
 	                 i.claimed_at, i.closed_at, i.created_at, i.updated_at,
-	                 COALESCE(l.holder, ''), COALESCE(l.expires_at, '')
+	                 COALESCE(l.holder, ''), COALESCE(l.expires_at, ''), COALESCE(l.session_id, '')
 	          FROM issues i
 	          LEFT JOIN leases l ON l.issue_id = i.id AND l.expires_at > ?
 	          WHERE ` + readyIssueEligibilityPredicate + `
@@ -1079,11 +1080,11 @@ func getActiveLease(ctx context.Context, db *sql.DB, issueID string) (*core.Issu
 func scanIssue(s scanner) (core.Issue, error) {
 	var i core.Issue
 	var repoID, worktreeID, claimedAt, closedAt sql.NullString
-	var holder, leaseExpiresAt sql.NullString
+	var holder, leaseExpiresAt, leaseSessionID sql.NullString
 	err := s.Scan(&i.ID, &i.ShortID, &i.ProjectID, &repoID, &worktreeID,
 		&i.ScopeKind, &i.IssueType, &i.Title, &i.ExternalKey, &i.Description, &i.AcceptanceCriteria, &i.Status, &i.Priority,
 		&i.Assignee, &i.Version, &claimedAt, &closedAt,
-		&i.CreatedAt, &i.UpdatedAt, &holder, &leaseExpiresAt)
+		&i.CreatedAt, &i.UpdatedAt, &holder, &leaseExpiresAt, &leaseSessionID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return core.Issue{}, core.NewAPIError(core.ErrNotFound, "issue not found")
@@ -1105,10 +1106,37 @@ func scanIssue(s scanner) (core.Issue, error) {
 	if holder.Valid {
 		i.Holder = holder.String
 	}
+	if leaseSessionID.Valid {
+		i.LeaseHost, i.LeasePID = parseIssueRunSessionID(leaseSessionID.String)
+	}
 	if leaseExpiresAt.Valid {
 		i.LeaseExpiresAt = leaseExpiresAt.String
 	}
 	return i, nil
+}
+
+// parseIssueRunSessionID recognizes the dibs-run session convention. The
+// caller supplies session_id, so parsed process metadata is unverified.
+// Other session IDs (including ordinary manual and older claims) have no PID.
+func parseIssueRunSessionID(sessionID string) (string, int) {
+	const prefix = "dibs-run:v1:"
+	if !strings.HasPrefix(sessionID, prefix) {
+		return "", 0
+	}
+	host, pidText, ok := strings.Cut(sessionID[len(prefix):], ":")
+	if !ok || len(host) == 0 || len(host) > 253 {
+		return "", 0
+	}
+	for _, c := range host {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_') {
+			return "", 0
+		}
+	}
+	pid, err := strconv.Atoi(pidText)
+	if err != nil || pid <= 0 {
+		return "", 0
+	}
+	return host, pid
 }
 
 // UpdateIssue updates an issue's mutable fields with optimistic concurrency.
@@ -1356,7 +1384,7 @@ func issueOutcome(ctx context.Context, tx *sql.Tx, issueID, now string) (core.Is
 		`SELECT i.id, i.short_id, i.project_id, i.repository_id, i.worktree_id, i.scope_kind,
 		        i.issue_type, i.title, i.external_key, i.description, i.acceptance_criteria, i.status, i.priority, i.assignee, i.version,
 		        i.claimed_at, i.closed_at, i.created_at, i.updated_at,
-		        COALESCE(l.holder, ''), COALESCE(l.expires_at, '')
+		        COALESCE(l.holder, ''), COALESCE(l.expires_at, ''), COALESCE(l.session_id, '')
 		 FROM issues i LEFT JOIN leases l ON l.issue_id = i.id AND l.expires_at > ?
 		 WHERE i.id = ?`, now, issueID))
 	if err != nil {
