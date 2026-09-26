@@ -1,16 +1,27 @@
 # 016 Adoption Review
 
-## afc-153 — tag publication recovery and public smoke (in progress)
+## afc-153 — tag publication recovery and public smoke (delivered)
 
 - The owner approved the RC2 tag. Run `36243260831` passed tests, build,
   packaging, and native verification on four platforms, then failed in
   `publish`: `actions/checkout@v4` overwrote the local annotated tag ref with
   its peeled commit. The remote tag remained annotated at `3f09eb4`.
-- The verified run bundle's four archive checksums passed. RC2 was published
+- The verified run bundle's four archive checksums passed. [RC2](https://github.com/abevz/dibs/releases/tag/v0.1.0-rc.2) was published
   manually from those assets using the reviewed release-note file, and the
   Linux amd64 public installer and first-use smoke passed. The release has
-  seven assets and is marked prerelease. Workflow repair, four-platform
-  public-URL smoke, independent review, and CI remain open.
+  seven assets and is marked prerelease.
+- [PR #101](https://github.com/abevz/dibs/pull/101) (`5f38f89`) restores and checks the remote annotated tag after
+  checkout. A local Git fixture reproduces the peeled-tag overwrite and
+  verifies recovery; `shellcheck`, `go build ./...`, and `git diff --check`
+  passed. Independent review found no blocking issues. The PR's ordinary CI
+  and release dry-run passed, including native install checks on all four
+  platforms.
+- A manual dispatch of the repaired workflow, [run `36244101890`](https://github.com/abevz/dibs/actions/runs/36244101890), installed
+  RC2 from its published URL and passed first-use smoke on Linux amd64/arm64
+  and macOS Intel/Apple Silicon. All four `public-smoke` jobs succeeded;
+  `publish` was skipped, so no second release was created. The run used main
+  commit `5f38f89`; the public RC2 tag remains at `3f09eb4`. PR #97 merged
+  the published-release documentation after the URL became live.
 
 ## afc-152 — PID diagnostics for manual claims (delivered)
 
