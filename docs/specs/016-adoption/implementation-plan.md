@@ -178,6 +178,12 @@ temporary network failure.
 
 Checkpoint: a later preview can add attachments and this complete GitHub path.
 
+On 2026-09-26 the owner chose a thin first step before this stage:
+[packet 018](../018-github-import/README.md) imports one issue by URL and
+publishes the closed result as one comment through the user's `gh`, for
+`v0.1.0-rc.4`. This stage's remaining work stays with `afc-89`/`afc-90` and
+reuses 018's external key and publish marker.
+
 ## 6. Explore optional adapters/plugins
 
 There is no committed Jira implementation in this plan and no Jira access to
