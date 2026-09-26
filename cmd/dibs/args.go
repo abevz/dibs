@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/github"
 )
 
 // cliArgumentError is returned before any daemon request for malformed CLI input.
@@ -39,6 +40,7 @@ var commandRoutes = map[string]argRoute{
 	"artifact list":     {"--repo", 0}, "export jsonl": {"", 0},
 	"stats":             {"--project --repo --since --until", 0},
 	"issue create":      {"--project --scope-kind --title --type --repo --worktree --external-key --description --acceptance --priority --tag --allow-duplicate? --operation-id --retry-last?", 0},
+	"issue import":      {"--project --repo --scope-kind --type --priority --acceptance --tag --allow-closed?", 1},
 	"issue create-form": {"--allow-duplicate?", 0},
 	"issue get":         {"--full?", 1}, "issue list": {"--project --status --type --repo --worktree --assignee --external-key --tag --limit --offset --columns", 0},
 	"issue ready":     {"--project --repo --tag --columns", 0},
@@ -157,6 +159,9 @@ func validateCommandArgs(args []string) error {
 		rest = rest[:separator]
 	}
 	if route.pos == 1 && key != "issue get" && (len(rest) == 0 || strings.HasPrefix(rest[0], "-")) {
+		if key == "issue import" {
+			return argumentError("issue import requires a GitHub issue URL or owner/repo#n before flags")
+		}
 		return argumentError(key + " requires an issue ID before flags")
 	}
 	allowed := make(map[string]bool)
@@ -199,6 +204,11 @@ func validateCommandArgs(args []string) error {
 	}
 	if route.pos >= 0 && positionals != route.pos {
 		return argumentError(fmt.Sprintf("%s requires %d positional argument(s), got %d", key, route.pos, positionals))
+	}
+	if key == "issue import" {
+		if _, err := github.ParseIssueRef(rest[0]); err != nil {
+			return argumentError(err.Error())
+		}
 	}
 	for _, flag := range strings.Fields(requiredCommandFlags[key]) {
 		if !seen[flag] {

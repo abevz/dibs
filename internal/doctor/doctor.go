@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -35,11 +36,50 @@ type OSExec interface {
 type realExec struct{}
 
 func (realExec) Command(name string, arg ...string) ([]byte, error) {
-	cmd := exec.Command(name, arg...)
+	var cmd *exec.Cmd
+	if name == "gh" {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd = exec.CommandContext(ctx, name, arg...)
+	} else {
+		cmd = exec.Command(name, arg...)
+	}
 	if runtime.GOOS == "linux" && name == "systemctl" && isSystemctlUserCommand(arg) {
 		cmd.Env = append(os.Environ(), systemdUserEnv(os.LookupEnv, os.Stat, os.Getuid())...)
 	}
 	return cmd.CombinedOutput()
+}
+
+// EvaluateGitHubCLI checks each prerequisite in order. GitHub is optional, so
+// every failure is a warning and local dibs operation remains available.
+func EvaluateGitHubCLI(e OSExec) Result {
+	const name = "GitHub CLI"
+	version, err := e.Command("gh", "--version")
+	if err != nil {
+		return Result{Name: name, Status: "WARN", Message: "gh not found", Hint: "Install GitHub CLI to use import and publish"}
+	}
+	firstLine := strings.TrimSpace(strings.SplitN(string(version), "\n", 2)[0])
+	if firstLine == "" {
+		return Result{Name: name, Status: "WARN", Message: "gh version unavailable", Hint: "Check the GitHub CLI installation"}
+	}
+	if _, err := e.Command("gh", "auth", "status", "--hostname", "github.com"); err != nil {
+		return Result{Name: name, Status: "WARN", Message: "not logged in to github.com", Hint: "Run gh auth login"}
+	}
+	out, err := e.Command("gh", "api", "rate_limit")
+	if err != nil {
+		return Result{Name: name, Status: "WARN", Message: "authenticated GitHub API check failed", Hint: "Check network, proxy, or token; gh api rate_limit: " + strings.Join(strings.Fields(string(out)), " ")}
+	}
+	var rate struct {
+		Resources struct {
+			Core *struct {
+				Remaining int `json:"remaining"`
+			} `json:"core"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(out, &rate); err != nil || rate.Resources.Core == nil {
+		return Result{Name: name, Status: "WARN", Message: "invalid GitHub API response", Hint: "Check gh api rate_limit"}
+	}
+	return Result{Name: name, Status: "ok", Message: fmt.Sprintf("%s; %d core API requests remaining", firstLine, rate.Resources.Core.Remaining)}
 }
 
 func (realExec) LookupEnv(key string) (string, bool) {
@@ -501,6 +541,7 @@ func RunAll(ctx context.Context, c *client.Client, cfg config.Config) []Result {
 	}
 
 	results = append(results, EvaluateDuplicates(e))
+	results = append(results, EvaluateGitHubCLI(e))
 	results = append(results, EvaluateConfigMismatch(h, cfg))
 
 	return results

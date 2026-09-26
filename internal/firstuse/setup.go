@@ -124,7 +124,7 @@ func Register(ctx context.Context, c *client.Client, info GitContext, explicitPr
 		return project, core.Repository{}, core.Worktree{}, err
 	}
 	for _, existing := range allRepos {
-		if !sameRegisteredGitDir(ctx, existing.CanonicalGitDir, info.GitDir) {
+		if !SameRegisteredGitDir(ctx, existing.CanonicalGitDir, info.GitDir) {
 			continue
 		}
 		if existing.ProjectID != project.ID {
@@ -161,7 +161,7 @@ func Register(ctx context.Context, c *client.Client, info GitContext, explicitPr
 	}
 	var repo core.Repository
 	for _, r := range repos {
-		if sameRegisteredGitDir(ctx, r.CanonicalGitDir, info.GitDir) {
+		if SameRegisteredGitDir(ctx, r.CanonicalGitDir, info.GitDir) {
 			repo = r
 			break
 		}
@@ -186,7 +186,7 @@ func Register(ctx context.Context, c *client.Client, info GitContext, explicitPr
 				return project, repo, core.Worktree{}, err
 			}
 			for _, r := range repos {
-				if sameRegisteredGitDir(ctx, r.CanonicalGitDir, info.GitDir) {
+				if SameRegisteredGitDir(ctx, r.CanonicalGitDir, info.GitDir) {
 					repo = r
 					break
 				}
@@ -201,9 +201,10 @@ func Register(ctx context.Context, c *client.Client, info GitContext, explicitPr
 	return project, repo, wt, err
 }
 
-// Legacy registrations may point at a checkout, whereas init records the Git
-// common directory. After relocation both forms must identify one repository.
-func sameRegisteredGitDir(ctx context.Context, registered, common string) bool {
+// SameRegisteredGitDir matches both current common-directory registrations and
+// legacy registrations that point at a checkout. After relocation both forms
+// must identify one repository.
+func SameRegisteredGitDir(ctx context.Context, registered, common string) bool {
 	if filepath.Clean(registered) == filepath.Clean(common) {
 		return true
 	}

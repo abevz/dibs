@@ -3,9 +3,9 @@
 ## Import
 
 - **R-01 Source reference.** `dibs issue import` accepts a GitHub issue URL
-  (`https://github.com/<owner>/<repo>/issues/<n>`, with optional query or
-  fragment) or `<owner>/<repo>#<n>`. Pull request URLs, other hosts, and
-  malformed references are rejected before any network or daemon call.
+  (`https://github.com/<owner>/<repo>/issues/<n>`, with optional trailing slash,
+  query, or fragment) or `<owner>/<repo>#<n>`. Pull request URLs, other hosts,
+  and malformed references are rejected before any network or daemon call.
 - **R-02 Target.** The new dibs issue belongs to the project and repository
   given by `--project`/`--repo`. When `--project` is omitted, the command
   resolves the registered repository for the current Git checkout and uses its

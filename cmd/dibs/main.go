@@ -19,6 +19,7 @@ import (
 	"github.com/abevz/dibs/internal/config"
 	"github.com/abevz/dibs/internal/core"
 	"github.com/abevz/dibs/internal/firstuse"
+	"github.com/abevz/dibs/internal/github"
 )
 
 var jsonOutput bool
@@ -226,6 +227,15 @@ func fail(err error) {
 			fmt.Fprintf(os.Stderr, "error: %v\n", clientErr)
 		}
 		os.Exit(mapExitCode(clientErr.Code))
+	}
+	var githubErr *github.Error
+	if errors.As(err, &githubErr) {
+		if jsonOutput {
+			json.NewEncoder(os.Stderr).Encode(core.APIErrorResponse{Error: core.NewAPIError(githubErr.Code, githubErr.Message())})
+		} else {
+			fmt.Fprintf(os.Stderr, "error: %v\n", githubErr)
+		}
+		os.Exit(1)
 	}
 	// Транспортная/не-API ошибка
 	if jsonOutput {
