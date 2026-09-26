@@ -1,6 +1,6 @@
 # 018 GitHub Import (thin slice)
 
-Status: **proposed — awaiting owner approval.** Authoring task: `afc-162`.
+Status: **approved (2026-09-26)**, implementation pending. Authoring task: `afc-162`.
 Target release: `v0.1.0-rc.4`.
 
 Most people who try dibs already keep their backlog in GitHub Issues. Asking

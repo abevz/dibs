@@ -13,7 +13,7 @@ GitHub adapter. Jira is a future adapter/plugin possibility; the owner has no
 Jira instance, and no implementation is committed. Swarm is an optional later
 extension and does not gate launch.
 
-Next: [packet 018](specs/018-github-import/README.md) (proposed) adds a thin
+Next: [packet 018](specs/018-github-import/README.md) (approved) adds a thin
 GitHub slice for `v0.1.0-rc.4`: import an issue by URL and publish the closed
 result as one comment. The public launch post waits for it; attachments and
 the full tracker workflow stay in the 016 plan.

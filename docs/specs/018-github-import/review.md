@@ -29,7 +29,8 @@
 
 ## Approval
 
-- [ ] Owner approval of this packet (pending).
+- [x] Owner approved this packet on 2026-09-26 (in session, relayed by the
+  agent); implementation of `afc-163`–`afc-165` may start.
 
 ## Evidence
 
