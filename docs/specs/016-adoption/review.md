@@ -1,5 +1,17 @@
 # 016 Adoption Review
 
+## afc-153 — tag publication recovery and public smoke (in progress)
+
+- The owner approved the RC2 tag. Run `36243260831` passed tests, build,
+  packaging, and native verification on four platforms, then failed in
+  `publish`: `actions/checkout@v4` overwrote the local annotated tag ref with
+  its peeled commit. The remote tag remained annotated at `3f09eb4`.
+- The verified run bundle's four archive checksums passed. RC2 was published
+  manually from those assets using the reviewed release-note file, and the
+  Linux amd64 public installer and first-use smoke passed. The release has
+  seven assets and is marked prerelease. Workflow repair, four-platform
+  public-URL smoke, independent review, and CI remain open.
+
 ## afc-152 — PID diagnostics for manual claims (delivered)
 
 - The CLI reports a caller ancestor PID and hostname in a typed claim session

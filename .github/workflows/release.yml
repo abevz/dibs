@@ -13,6 +13,9 @@ on:
       release_version:
         description: Version to embed in a dry-run installer (for example, v0.1.0-rc.1)
         required: true
+      public_smoke_version:
+        description: Already published version to verify from its public URL (no publication)
+        required: false
 
 permissions:
   contents: read
@@ -28,6 +31,7 @@ jobs:
           go-version-file: go.mod
       - run: go test ./...
       - run: sh contrib/install/test-publish-release.sh
+      - run: sh contrib/install/test-restore-annotated-tag.sh
 
   build:
     needs: test
@@ -153,8 +157,8 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - name: Verify annotated release tag for release notes
-        run: test "$(git cat-file -t "refs/tags/$VERSION")" = tag
+      - name: Restore and verify annotated release tag for release notes
+        run: sh contrib/install/restore-annotated-tag.sh "$VERSION" "$GITHUB_SHA"
       - uses: actions/download-artifact@v4
         with:
           name: dibs-release-bundle
@@ -163,7 +167,7 @@ jobs:
         run: sh contrib/install/publish-release.sh "$VERSION" release-bundle
 
   public-smoke:
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: always() && ((github.event_name == 'push' && github.ref_type == 'tag' && needs.publish.result == 'success') || (github.event_name == 'workflow_dispatch' && inputs.public_smoke_version != ''))
     needs: publish
     strategy:
       fail-fast: false
@@ -183,7 +187,7 @@ jobs:
       - name: Install from the published URL and exercise first use
         shell: bash
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.public_smoke_version || github.ref_name }}
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail

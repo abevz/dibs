@@ -116,6 +116,13 @@ package generates a checksum-pinned Homebrew formula; advertise a tap,
 `go install`, or AUR only after that channel is verified. The owner pushes the
 public tag.
 
+For tag-triggered publication, restore the remote annotated tag ref after
+`actions/checkout` and verify that it peels to the event commit before using
+its annotation as release notes. Checkout may otherwise replace the local tag
+ref with the peeled commit. A manual public-smoke dispatch names an already
+published version and runs the same four-platform URL-install job without
+invoking the publish job. This is a recovery path, not a second release.
+
 ## Owner decisions recorded from `afc-127` notes (2026-09-23)
 
 1. **Launch identity:** product/CLI `dibs`, daemon `dibsd`, intended repo
