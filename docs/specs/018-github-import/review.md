@@ -27,6 +27,21 @@
 - **Accepted gap.** Two simultaneous publishes of the same close can post
   twice. A durable ledger is left to `afc-90`.
 
+## Amendment: MCP and protocol (2026-09-26)
+
+- Owner direction: the GitHub workflow must be part of the agent protocol
+  and usable through MCP. MCP moved from out of scope into slice `afc-169`
+  (R-14, R-15), and the real round trip now covers `dibs-mcp` as well.
+- Verified against the code before writing: `dibs-mcp` is a local stdio
+  client (`cmd/dibs-mcp/main.go` wires `internal/client`), so it may call
+  `gh` without giving the daemon network access. Import and publish live in
+  package `main` today, hence the `internal/ghsync` move. The MCP server
+  constraint "thin wrappers over `internal/client`" is amended for these two
+  tools only. `dibs protocol` embeds `docs/agent-protocol-v1.md`, and a test
+  keeps the two identical.
+- MCP `import_issue` requires `project`: a stdio server's working
+  directory is chosen by the client and is not a reliable repository target.
+
 ## Approval
 
 - [x] Owner approved this packet on 2026-09-26 (in session, relayed by the
