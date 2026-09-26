@@ -22,6 +22,10 @@
   cross-compilation alone is insufficient. Prepare a Homebrew formula from
   release checksums, but advertise the tap, `go install`, and AUR only after
   each channel is tested. The owner alone pushes the public v0.1.0 tag.
+  Tag publication must read the remote annotated tag and verify its commit
+  before deriving release notes. A failed publication must allow a separate
+  public-URL installation check on all advertised platforms without moving
+  the already published tag or republishing the release.
 - **R-03 Rename compatibility.** Before the public tag, product and CLI become
   `dibs`, daemon `dibsd`, and intended public repository `abevz/dibs`. New
   `DIBS_*` environment variables are introduced; existing `AF_*` variables
