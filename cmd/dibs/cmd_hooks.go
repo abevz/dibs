@@ -31,8 +31,24 @@ func runHooks(ctx context.Context, c *client.Client, args []string) error {
 }
 
 func hookComplete(args []string) error {
-	if len(args) != 0 {
-		return usageErr("Usage: dibs hooks complete", "no arguments expected")
+	usage := "Usage: dibs hooks complete [--pr-url <url>] [--commit-sha <sha>] [--branch <name>] [--note <text>]"
+	var marker completionMarker
+	if len(args)%2 != 0 {
+		return usageErr(usage, "each flag needs a value")
+	}
+	for i := 0; i < len(args); i += 2 {
+		switch args[i] {
+		case "--pr-url":
+			marker.PRURL = args[i+1]
+		case "--commit-sha":
+			marker.CommitSHA = args[i+1]
+		case "--branch":
+			marker.Branch = args[i+1]
+		case "--note":
+			marker.Note = args[i+1]
+		default:
+			return usageErr(usage, "unknown flag: "+args[i])
+		}
 	}
 	path := os.Getenv("DIBS_COMPLETION_FILE")
 	if path == "" || os.Getenv("DIBS_LEASE_TOKEN") == "" || os.Getenv("DIBS_ISSUE_ID") == "" {
@@ -42,7 +58,16 @@ func hookComplete(args []string) error {
 	if err != nil {
 		return fmt.Errorf("create completion marker: %w", err)
 	}
-	if _, err = f.WriteString("done\n"); err != nil {
+	content := []byte("done\n")
+	if len(args) != 0 {
+		content, err = json.Marshal(marker)
+		if err != nil {
+			f.Close()
+			return err
+		}
+		content = append(content, '\n')
+	}
+	if _, err = f.Write(content); err != nil {
 		f.Close()
 		return err
 	}

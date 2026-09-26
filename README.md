@@ -84,6 +84,11 @@ project hook with `dibs hooks install --agent claude` or
 calls `dibs hooks complete` after meeting the task's acceptance criteria.
 See the [agent integration guide](contrib/hooks/README.md).
 
+GitHub import and result publication in a source build require GitHub CLI
+2.48.0 or newer and `gh auth login`. `dibs doctor` checks the installed
+version, authentication, and API access. `dibs issue publish` posts the
+closing note and branch publicly to the source issue.
+
 ## Current scope
 
 The published preview supports local issue creation, dependencies, ready

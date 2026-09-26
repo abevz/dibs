@@ -30,24 +30,35 @@
 ## Publish
 
 - **R-07 Explicit command.** `dibs issue publish <issue-id>` posts the result
-  of a closed dibs issue that has a GitHub external key as one comment on the
-  source issue. Open or in-progress issues and issues without a GitHub key are
-  rejected without a network call.
+  of a dibs issue closed by `issue close` or `issue run` that has a GitHub
+  external key as one comment on the source issue. Open or in-progress issues,
+  issues without a GitHub key are rejected without a GitHub network call.
+  Operator-closed issues are rejected without posting a comment.
 - **R-08 Content.** The comment states the dibs short ID, resolution, closing
   note, and the PR URL, commit, and branch recorded at close when present. It
-  contains no lease tokens, operator tokens, local paths, or host names.
+  adds no lease or operator tokens, attempt/session IDs, lease host/PID, or
+  local DB, socket, or worktree paths. The closing note and branch are text
+  deliberately supplied by the closer and are published as written. If either
+  contains the exact current value of `DIBS_LEASE_TOKEN`,
+  `DIBS_OPERATOR_TOKEN`, or `AF_OPERATOR_TOKEN`, publication is rejected.
+  Close/run also reject their exact active lease token when it came from a
+  token file or claim response.
 - **R-09 Exactly once.** The comment carries a hidden marker tied to the dibs
   issue and its close. Repeating the publish for the same close posts nothing
   and reports the existing comment. Reopening and closing again allows one new
   comment for the new close.
 - **R-10 Close integration.** `dibs issue close` and `dibs issue run` accept
-  `--publish`. Publication happens only after the local close succeeds. A
-  publish failure never undoes or blocks the local close: the command reports
+  `--publish`. A missing GitHub external key is rejected before close or claim.
+  Otherwise, publication happens only after the local close succeeds. A
+  publication failure never undoes the local close: the command reports
   the failure and the exact retry command, and JSON output includes the
-  publish result.
+  publish result. `dibs hooks complete` may write PR URL, commit SHA, branch,
+  and note metadata to its JSON completion marker; nonempty values override
+  launch flags on a successful `issue run` close. No flags preserve the old
+  completion marker and behavior.
 - **R-13 Readiness checks.** `dibs doctor` reports a "GitHub CLI" check at
   warning level (dibs works without GitHub): `gh` is on `PATH` with its
-  version, it is authenticated for `github.com`, and an authenticated
+  version (at least 2.48.0 for `gh api --slurp`), it is authenticated for `github.com`, and an authenticated
   `gh api rate_limit` call succeeds, showing remaining requests. Each failed
   step names its remedy (`install gh`, `gh auth login`, network or token
   problem). Before posting, `publish` confirms that the source issue is

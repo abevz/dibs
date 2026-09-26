@@ -16,7 +16,7 @@ import (
 
 // ─── Issue ───────────────────────────────────────────────────────────────────
 
-const issueUsage = "Usage: dibs issue <create|create-form|import|get|list|ready|claim|heartbeat|release|handoff|run|edit|update|close|operator-close|operator-reopen|operator-release|cancel|link|unlink|dependency|note|tag|events>"
+const issueUsage = "Usage: dibs issue <create|create-form|import|publish|get|list|ready|claim|heartbeat|release|handoff|run|edit|update|close|operator-close|operator-reopen|operator-release|cancel|link|unlink|dependency|note|tag|events>"
 
 // hasHelpFlag reports whether args requests help before a -- separator.
 // Arguments after the separator belong to a child command, not dibs.
@@ -85,6 +85,8 @@ func runIssue(ctx context.Context, c *client.Client, args []string) error {
 		return runIssueCreateForm(ctx, c, args[1:])
 	case "import":
 		return runIssueImport(ctx, c, args[1:])
+	case "publish":
+		return runIssuePublish(ctx, c, args[1:])
 	case "get":
 		return runIssueGet(ctx, c, args[1:])
 	case "list":
@@ -1098,7 +1100,7 @@ func runIssueUpdate(ctx context.Context, c *client.Client, args []string) error 
 	return nil
 }
 
-const issueCloseUsage = "Usage: dibs issue close <issue-id> --resolution done|cancelled --expected-version N --lease-generation <generation> [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note \"what was done\"] [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint
+const issueCloseUsage = "Usage: dibs issue close <issue-id> --resolution done|cancelled --expected-version N --lease-generation <generation> [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note \"what was done\"] [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>] [--publish] [--lease-token <token>]\n" + lifecycleHint
 
 func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -1111,10 +1113,13 @@ func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 
 	issueID := args[0]
 	var req core.CloseIssueRequest
+	publish := false
 	req.ExpectedVersion = -1
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
+		case "--publish":
+			publish = true
 		case "--resolution":
 			if i+1 < len(args) {
 				req.Resolution = args[i+1]
@@ -1198,12 +1203,29 @@ func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 		req.InvocationMode = normalized
 	}
 
+	if publish {
+		if err := requireGitHubExternalKey(ctx, c, issueID); err != nil {
+			return err
+		}
+	}
 	result, err := c.CloseIssue(ctx, issueID, req)
 	if err != nil {
 		fail(err)
 	}
+	var publication *publishResult
+	if publish {
+		outcome := publishAfterClose(ctx, c, issueID, req.LeaseToken)
+		publication = &outcome
+	}
 	if jsonOutput {
-		json.NewEncoder(os.Stdout).Encode(result)
+		if publication != nil {
+			json.NewEncoder(os.Stdout).Encode(struct {
+				core.CloseIssueResult
+				Publish *publishResult `json:"publish"`
+			}{result, publication})
+		} else {
+			json.NewEncoder(os.Stdout).Encode(result)
+		}
 		return nil
 	}
 	fmt.Println("Issue closed.")
@@ -1218,6 +1240,9 @@ func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 	}
 	if result.ExternalKey != "" {
 		fmt.Printf("External:    %s\n", result.ExternalKey)
+	}
+	if publication != nil {
+		printPublishResult(*publication, issueID)
 	}
 	return nil
 }

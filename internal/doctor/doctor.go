@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,6 +63,9 @@ func EvaluateGitHubCLI(e OSExec) Result {
 	if firstLine == "" {
 		return Result{Name: name, Status: "WARN", Message: "gh version unavailable", Hint: "Check the GitHub CLI installation"}
 	}
+	if !githubCLIVersionSupported(firstLine) {
+		return Result{Name: name, Status: "WARN", Message: firstLine + " is too old for gh api --slurp", Hint: "Install GitHub CLI 2.48.0 or newer to use import and publish"}
+	}
 	if _, err := e.Command("gh", "auth", "status", "--hostname", "github.com"); err != nil {
 		return Result{Name: name, Status: "WARN", Message: "not logged in to github.com", Hint: "Run gh auth login"}
 	}
@@ -80,6 +84,24 @@ func EvaluateGitHubCLI(e OSExec) Result {
 		return Result{Name: name, Status: "WARN", Message: "invalid GitHub API response", Hint: "Check gh api rate_limit"}
 	}
 	return Result{Name: name, Status: "ok", Message: fmt.Sprintf("%s; %d core API requests remaining", firstLine, rate.Resources.Core.Remaining)}
+}
+
+func githubCLIVersionSupported(line string) bool {
+	fields := strings.Fields(line)
+	if len(fields) < 3 || fields[0] != "gh" || fields[1] != "version" {
+		return false
+	}
+	parts := strings.SplitN(fields[2], ".", 3)
+	if len(parts) != 3 {
+		return false
+	}
+	major, errMajor := strconv.Atoi(parts[0])
+	minor, errMinor := strconv.Atoi(parts[1])
+	patch, errPatch := strconv.Atoi(parts[2])
+	if errMajor != nil || errMinor != nil || errPatch != nil || major < 0 || minor < 0 || patch < 0 {
+		return false
+	}
+	return major > 2 || (major == 2 && minor >= 48)
 }
 
 func (realExec) LookupEnv(key string) (string, bool) {

@@ -30,11 +30,13 @@ stops at the first failure. Every result is `[ok]` or `[WARN]`, never
 
 | Step | Command | Warning and hint |
 | --- | --- | --- |
-| Installed | `gh --version` | `gh not found` — install GitHub CLI to use import and publish |
+| Installed | `gh --version` | `gh not found` or version older than 2.48.0 — install or upgrade GitHub CLI to use import and publish |
 | Authenticated | `gh auth status --hostname github.com` | `not logged in` — run `gh auth login` |
 | Working | `gh api rate_limit` | network, proxy, or revoked token — the `gh` error text |
 
 The ok line shows the `gh` version and the remaining core API requests. The
+minimum is 2.48.0, which added `gh api --slurp` for paginated comments
+([release notes](https://github.com/cli/cli/releases/tag/v2.48.0)). The
 check uses no repository, because a public repository readable without
 credentials would prove only connectivity. Access to a specific repository
 is checked where it matters: `import` and `publish` for that issue. The check
@@ -99,12 +101,22 @@ dibs issue run <issue-id> ... --publish -- <command>
 1. Read the issue. Require a terminal status (`done`/`cancelled`) and a
    `github:` external key (R-07). Fetch the source issue. If it is
    missing or inaccessible, stop with `not_found`. If it is locked, stop with
-   `locked` — only users with write access can comment there (R-13).
-2. Read the latest `issue_closed` event for `resolution`, `branch`,
-   `commit_sha`, `pr_url`, and `created_at`. Read the closing note from the
-   `note_added` event recorded by the same close.
-3. Build the marker `<!-- dibs:publish issue=<uuid> closed_at=<created_at> -->`.
-   List the source issue's comments. If one contains the marker, report it
+   `locked` even if the caller has write access (R-13).
+2. Read the latest close event. This slice supports `issue_closed` from
+   `issue close` and `issue run`; if the latest close is
+   `issue_operator_closed`, stop rather than publish an older close. Read the
+   `issue_closed` event for `resolution`, `branch`,
+   `commit_sha`, `pr_url`, and `created_at`. A closing note exists only if the
+   immediately preceding event has `sequence = issue_closed.sequence - 1`,
+   type `note_added`, and the same actor and `created_at`. Read the last note
+   from the notes API with that author and timestamp. With second-level
+   timestamps, a different note by the same author in the same second remains
+   ambiguous; this is accepted for this slice. A reliable link such as
+   `note_id` in the close event payload is follow-up work for `afc-90`.
+3. Build the marker `<!-- dibs:publish issue=<uuid> close_event=<event id> -->`.
+   Use `comments_url` from the fetched GitHub issue for both list and POST,
+   so a repository transfer or rename does not misroute the comment. If an
+   existing comment contains the marker, report it
    and stop (R-09).
 4. Post the comment:
 
@@ -116,16 +128,31 @@ dibs issue run <issue-id> ... --publish -- <command>
 
    > closing note
 
-   <!-- dibs:publish issue=<uuid> closed_at=<created_at> -->
+   <!-- dibs:publish issue=<uuid> close_event=<event id> -->
    ```
 
    Absent fields are omitted. The note is quoted as-is and limited to 2,000
-   characters.
-5. `--publish` on `close` and `run` calls the same function after a successful
-   close. On failure the command still exits with the close's status, prints
+   runes, appending `…` at the rune boundary when truncated. Each line has
+   a `> ` prefix. Markdown and @mentions are not escaped. The note and branch
+   are deliberately public text from the
+   closer. Before posting, reject either if it contains the exact nonempty
+   current value of `DIBS_LEASE_TOKEN`, `DIBS_OPERATOR_TOKEN`, or
+   `AF_OPERATOR_TOKEN`. Close/run also check their exact active lease token
+   when it came from a token file or the claim response; no heuristic path or
+   host-name filtering is applied.
+5. `--publish` on `close` and `run` checks the GitHub external key before
+   close or claim, respectively. A missing key stops the operation. After a
+   successful close, both call the same publication function. `issue run`
+   accepts optional PR URL, commit SHA, branch and note from
+   `dibs hooks complete` via JSON in `DIBS_COMPLETION_FILE`; nonempty marker
+   values override launch flags. With no hook flags the legacy `done\n`
+   marker and behavior remain. Only the CLI changes.
+6. On publication failure after close, the command still exits with the close's status and prints
    `publish failed: <reason>; retry: dibs issue publish <short-id>`, and adds
-   `publish: {ok, error, comment_url}` to JSON (R-10). `issue run` without
-   `--publish` and a handoff never publish.
+   `publish: {ok, already, comment_url, error: {code, message}}` to JSON
+   (R-10). Explicit `issue publish --json` returns these fields plus `issue`
+   and exits nonzero on failure. `issue run` without `--publish`, HANDOFF,
+   and lease expiry never publish. Resolution `cancelled` publishes normally.
 
 The remaining race is two simultaneous publishers for the same close, which
 could post twice between the list and create calls. Publish is an explicit

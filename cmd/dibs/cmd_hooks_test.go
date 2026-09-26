@@ -104,6 +104,46 @@ func TestIssueRunRequiresExplicitCompletion(t *testing.T) {
 	}
 }
 
+func TestHooksCompleteMetadataOverridesRunFlags(t *testing.T) {
+	bin := buildAfctlForRunTest(t)
+	mock := &mockCoordinator{claimVersion: 3}
+	sock := startMockCoordinator(t, mock)
+	cmd := exec.Command(bin, "issue", "run", "afc-2", "--actor", "tester", "--ttl", "60", "--require-complete", "--pr-url", "https://github.com/o/r/pull/old", "--branch", "old", "--note", "old", "--", bin, "hooks", "complete", "--pr-url", "https://github.com/o/r/pull/new", "--branch", "new", "--note", "new")
+	cmd.Env = append(os.Environ(), "AF_COORDINATOR_SOCKET="+sock)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run failed: %v %s", err, out)
+	}
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if len(mock.closeReqs) != 1 {
+		t.Fatalf("close requests = %d", len(mock.closeReqs))
+	}
+	for key, want := range map[string]string{"pr_url": "https://github.com/o/r/pull/new", "branch": "new", "note": "new"} {
+		if got := mock.closeReqs[0][key]; got != want {
+			t.Fatalf("%s = %v, want %q", key, got, want)
+		}
+	}
+}
+
+func TestCompletionMarkerLegacyAndJSON(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want completionMarker
+	}{
+		{"done\n", completionMarker{}},
+		{`{"pr_url":"https://github.com/o/r/pull/2","branch":"work"}` + "\n", completionMarker{PRURL: "https://github.com/o/r/pull/2", Branch: "work"}},
+	} {
+		got, err := parseCompletionMarker([]byte(tc.raw))
+		if err != nil || got != tc.want {
+			t.Fatalf("parse %q = %+v, %v", tc.raw, got, err)
+		}
+	}
+	if _, err := parseCompletionMarker([]byte("no")); err == nil {
+		t.Fatal("accepted invalid completion")
+	}
+}
+
 func TestInstallPreservesWrappedSessionStartCommand(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hooks.json")
 	wrapped := "cleanup.sh && '/old/dibs' hooks session-start --agent codex"
