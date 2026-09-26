@@ -104,9 +104,10 @@ are historical and do not override that coordinator closure.
 - A separate Linux amd64 Go 1.27.1 check installed all three commands with
   `go install ...@v0.1.0-rc.1` into a temporary `GOBIN`; `go version -m`
   reported the tagged module. That command prints `revision unknown` because
-  it does not supply the release workflow's revision linker flag, so
-  it is not promoted as a newcomer installation path here. AUR also remains
-  unadvertised. The scratch verification did not restart a live service or
+  it does not supply the release workflow's revision linker flag. The guide
+  documents it as a Go-user path with the Linux-only evidence stated, while
+  the tested release installer and Homebrew remain the newcomer paths. AUR
+  remains unadvertised. The scratch verification did not restart a live service or
   change a live database.
 
 ### afc-129 — first use implementation and preview verification
