@@ -1,5 +1,30 @@
 # 016 Adoption Review
 
+## afc-167 — rc.3 publication and demo on released binaries (delivered)
+
+- The owner approved `v0.1.0-rc.3`. The annotated tag on `7fac3a8` ran
+  [release run `36252755823`](https://github.com/abevz/dibs/actions/runs/36252755823):
+  tests, four native archive verifications (including the new
+  `dibs version` = tag check), publication, and public-URL smoke on Linux
+  amd64/arm64 and macOS Intel/Apple Silicon all passed.
+- A separate public-URL install on Linux amd64 printed
+  `dibs v0.1.0-rc.3 (7fac3a8)`. It rejected a 160-byte socket path with the
+  108-byte limit and a `DIBS_SOCKET` hint. It reported a claim conflict as
+  `smoke-1 is already leased by alice until … (PID …@arch)` with matching
+  `error.details` in JSON and no token. `dibs doctor` reported matching CLI
+  and daemon versions.
+- `go install …@v0.1.0-rc.3` for all three commands succeeded with Go 1.27.1
+  on Linux amd64 and reports `dibs dev (unknown)`, as documented.
+- The README race demo was re-recorded with `DIBS_BIN_DIR` set to the
+  published rc.3 binaries. A process check during recording showed only the
+  release `dibsd`. The losing agent prints dibs's own `lease_held` message.
+  `record.sh` passes `DIBS_BIN_DIR` through a tape `Env` line, because vhs
+  does not forward the caller's environment and ignores `Set` lines after
+  other commands. This covers the demo part of `afc-134`; the post remains
+  with the owner.
+- Open gap: the Homebrew tap formula is still at `0.1.0-rc.1`; rc.2 and rc.3
+  were not pushed to `abevz/homebrew-dibs`.
+
 ## Launch without swarm — owner decision (2026-09-26)
 
 - The owner decided that launch (`afc-134`) and the adoption epic

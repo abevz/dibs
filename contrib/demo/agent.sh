@@ -27,8 +27,12 @@ while :; do
 	case $? in
 	0) printf '  %s✓ %s done, closed%s\n' "$green" "$id" "$off" ;;
 	3)
-		holder=$(dibs --json issue get "$id" | jq -r '.issue.holder // "another agent"')
-		printf '  %s✗ %s already leased by %s%s → next\n' "$red" "$id" "$holder" "$off"
+		# Show dibs's own lease_held message without the UTC expiry (the
+		# board shows the remaining time) so it fits the pane:
+		# "demo-1 is already leased by codex (PID 123@host)".
+		msg=$(sed -n 's/^error: lease_held: //p' "$DEMO_DIR/$name.log" |
+			sed -E 's/ until [^ ]+//')
+		printf '  %s✗ %s%s\n' "$red" "${msg:-$id is already leased}" "$off"
 		;;
 	*)
 		printf '  %s↩ %s tests failed → HANDOFF, requeued%s\n' "$yellow" "$id" "$off"
