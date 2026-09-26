@@ -41,6 +41,8 @@
   keeps the two identical.
 - MCP `import_issue` requires `project`: a stdio server's working
   directory is chosen by the client and is not a reliable repository target.
+- Owner approved this amendment on 2026-09-26 (in session, relayed by the
+  agent); `afc-169` may start after `afc-164` merges.
 
 ## Approval
 
