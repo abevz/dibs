@@ -25,7 +25,9 @@ where work is described and discussed; dibs decides which agent owns it.
 - `dibs doctor` reports whether `gh` is installed, authenticated, and working;
   `publish` checks that the source issue is reachable and not locked first.
 - Agents use the same workflow through the agent protocol and MCP tools
-  (`import_issue`, `publish_issue`, and `publish` on `close_issue`).
+  (`import_issue`, `publish_issue`, and `publish` on `close_issue`). The
+  Claude Code and Codex SessionStart hook shows each imported issue's source
+  and how to report the PR, and the integration guide shows the full cycle.
 - GitHub access goes through the user's `gh` CLI. dibs stores no GitHub
   credentials and the daemon stays offline.
 
