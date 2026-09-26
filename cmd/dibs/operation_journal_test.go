@@ -43,7 +43,10 @@ func TestClaimJournalPersistsSessionAndRestoresLegacyRecord(t *testing.T) {
 	if _, _, err := journalOperationID("claim", "demo-1", oldID); err != nil {
 		t.Fatal(err)
 	}
-	path, previous, err := journalClaimOperation("demo-1", newID, session)
+	path, previous, err := journalClaimOperation("demo-1", core.ClaimRequest{
+		OperationID: newID, Holder: "test-agent", TTLSeconds: 120,
+		SessionID: session, InvocationMode: "scheduled",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,14 +56,14 @@ func TestClaimJournalPersistsSessionAndRestoresLegacyRecord(t *testing.T) {
 	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("journal permissions: info=%v err=%v", info, err)
 	}
-	gotID, gotSession, _, err := readJournaledClaimOperation("demo-1")
-	if err != nil || gotID != newID || gotSession != session {
-		t.Fatalf("journal = (%q, %q), err=%v", gotID, gotSession, err)
+	got, _, err := readJournaledClaimOperation("demo-1")
+	if err != nil || got.OperationID != newID || got.SessionID != session || got.Holder != "test-agent" || got.TTLSeconds != 120 || got.InvocationMode != "scheduled" {
+		t.Fatalf("journal = (%+v), err=%v", got, err)
 	}
 	restoreJournaledOperationID(path, previous)
-	gotID, gotSession, _, err = readJournaledClaimOperation("demo-1")
-	if err != nil || gotID != oldID || gotSession != "" {
-		t.Fatalf("restored legacy journal = (%q, %q), err=%v", gotID, gotSession, err)
+	got, _, err = readJournaledClaimOperation("demo-1")
+	if err != nil || got.OperationID != oldID || got.SessionID != "" {
+		t.Fatalf("restored legacy journal = (%+v), err=%v", got, err)
 	}
 }
 
@@ -112,6 +115,65 @@ func TestManualClaimCLISendsTypedSession(t *testing.T) {
 				t.Fatal("claim request not received")
 			}
 		})
+	}
+}
+
+func TestClaimCLIReplaysJournaledRequestAcrossProcesses(t *testing.T) {
+	if os.Getenv("DIBS_TEST_CLAIM_REPLAY_CHILD") == "1" {
+		args := []string{"demo-1"}
+		switch os.Getenv("DIBS_TEST_CLAIM_REPLAY_MODE") {
+		case "first":
+			args = append(args, "--holder", "original-holder", "--ttl", "120", "--invocation-mode", "scheduled")
+		case "retry":
+			args = append(args, "--retry-last")
+		case "explicit":
+			args = append(args, "--operation-id", os.Getenv("DIBS_TEST_CLAIM_REPLAY_ID"))
+		}
+		if err := runIssueClaim(context.Background(), client.New(os.Getenv("DIBS_TEST_CLAIM_REPLAY_SOCKET")), args); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	home := t.TempDir()
+	socket := filepath.Join(testSocketDir(t), "claim-replay.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	received := make(chan core.ClaimRequest, 3)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req core.ClaimRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Error(err)
+		}
+		received <- req
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"lease_token":"test-only","lease_generation":1,"attempt_id":"attempt","expires_at":"2026-09-26T13:00:00Z","version":2}`))
+	}))
+	server.Listener.Close()
+	server.Listener = listener
+	server.Start()
+	defer server.Close()
+	first := core.ClaimRequest{}
+	for _, mode := range []string{"first", "retry", "explicit"} {
+		command := exec.Command(os.Args[0], "-test.run=^TestClaimCLIReplaysJournaledRequestAcrossProcesses$")
+		command.Env = append(os.Environ(), "HOME="+home, "DIBS_ACTOR=changed-default", "DIBS_TEST_CLAIM_REPLAY_CHILD=1", "DIBS_TEST_CLAIM_REPLAY_SOCKET="+socket, "DIBS_TEST_CLAIM_REPLAY_MODE="+mode, "DIBS_TEST_CLAIM_REPLAY_ID="+first.OperationID)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("%s child error=%v output=%q", mode, err, output)
+		}
+		select {
+		case req := <-received:
+			if mode == "first" {
+				first = req
+				if first.OperationID == "" || first.SessionID == "" {
+					t.Fatalf("first request missing replay fields: %+v", first)
+				}
+			} else if req != first {
+				t.Fatalf("%s request differs from first: got %+v, want %+v", mode, req, first)
+			}
+		default:
+			t.Fatalf("%s request not received", mode)
+		}
 	}
 }
 

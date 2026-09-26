@@ -8,18 +8,21 @@ import (
 	"strings"
 
 	"github.com/abevz/dibs/internal/config"
+	"github.com/abevz/dibs/internal/core"
 	"github.com/google/uuid"
 )
 
 type claimJournalRecord struct {
-	OperationID string `json:"operation_id"`
-	SessionID   string `json:"session_id"`
+	OperationID    string `json:"operation_id"`
+	Holder         string `json:"holder,omitempty"`
+	TTLSeconds     int    `json:"ttl_seconds,omitempty"`
+	SessionID      string `json:"session_id"`
+	InvocationMode string `json:"invocation_mode,omitempty"`
 }
 
-// journalClaimOperation records both replay-defining values before the claim
-// is sent. The caller PID can change between invocations, so --retry-last must
-// reuse the original session ID as well as its operation ID.
-func journalClaimOperation(target, operationID, sessionID string) (string, string, error) {
+// journalClaimOperation records the complete replay fingerprint before send.
+// Caller PID, actor, and other defaults can change between invocations.
+func journalClaimOperation(target string, req core.ClaimRequest) (string, string, error) {
 	dir, err := expandOperationJournalDir()
 	if err != nil {
 		return "", "", err
@@ -32,7 +35,10 @@ func journalClaimOperation(target, operationID, sessionID string) (string, strin
 	if err != nil && !os.IsNotExist(err) {
 		return "", "", fmt.Errorf("read operation journal: %w", err)
 	}
-	payload, err := json.Marshal(claimJournalRecord{OperationID: operationID, SessionID: sessionID})
+	payload, err := json.Marshal(claimJournalRecord{
+		OperationID: req.OperationID, Holder: req.Holder, TTLSeconds: req.TTLSeconds,
+		SessionID: req.SessionID, InvocationMode: req.InvocationMode,
+	})
 	if err != nil {
 		return "", "", err
 	}
@@ -42,28 +48,31 @@ func journalClaimOperation(target, operationID, sessionID string) (string, strin
 	return path, strings.TrimSpace(string(previous)), nil
 }
 
-func readJournaledClaimOperation(target string) (string, string, string, error) {
+func readJournaledClaimOperation(target string) (claimJournalRecord, string, error) {
 	dir, err := expandOperationJournalDir()
 	if err != nil {
-		return "", "", "", err
+		return claimJournalRecord{}, "", err
 	}
 	path := filepath.Join(dir, fmt.Sprintf("claim-%s.op", sanitizeJournalName(target)))
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return "", "", path, nil
+		return claimJournalRecord{}, path, nil
 	}
 	if err != nil {
-		return "", "", path, fmt.Errorf("read operation journal: %w", err)
+		return claimJournalRecord{}, path, fmt.Errorf("read operation journal: %w", err)
 	}
 	value := strings.TrimSpace(string(data))
 	if !strings.HasPrefix(value, "{") {
-		return value, "", path, nil // legacy ID-only journal
+		return claimJournalRecord{OperationID: value}, path, nil // legacy ID-only journal
 	}
 	var record claimJournalRecord
 	if err := json.Unmarshal([]byte(value), &record); err != nil || record.OperationID == "" {
-		return "", "", path, fmt.Errorf("invalid claim operation journal: %s", path)
+		return claimJournalRecord{}, path, fmt.Errorf("invalid claim operation journal: %s", path)
 	}
-	return record.OperationID, record.SessionID, path, nil
+	if record.Holder == "" || record.TTLSeconds <= 0 {
+		return claimJournalRecord{}, path, fmt.Errorf("incomplete claim operation journal: %s", path)
+	}
+	return record, path, nil
 }
 
 // operationJournalDir is where dibs records an operation_id before sending
