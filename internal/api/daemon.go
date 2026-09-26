@@ -73,6 +73,7 @@ func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st s
 			DBPath:                  cfg.DBPath,
 			SocketPath:              cfg.SocketPath,
 			Time:                    time.Now().UTC(),
+			Version:                 build.Version,
 			Revision:                build.Revision,
 			OperatorTokenConfigured: &operatorTokenConfigured,
 		}
