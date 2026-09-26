@@ -1,6 +1,6 @@
 # 016 Adoption Review
 
-## afc-152 — PID diagnostics for manual claims (review pending)
+## afc-152 — PID diagnostics for manual claims (delivered)
 
 - The CLI reports a caller ancestor PID and hostname in a typed claim session
   when no explicit `--session-id` was supplied. Watch text and JSON use the
@@ -22,10 +22,13 @@
   passed before the separate-journal fix; evidence:
   `/tmp/dibs-afc152-go-test-final.log`. After that fix, focused replay tests
   and the full `cmd/dibs` package passed; evidence:
-  `/tmp/dibs-afc152-cmd-final.log`. Renewed independent review and PR CI are
-  pending.
+  `/tmp/dibs-afc152-cmd-final.log`. Independent final review found no blocking
+  issues; PR #99 CI passed and merged at `bd075fa`. The live CLI and daemon
+  report that revision. Existing claims, including the current `afc-141`
+  lease, retain their old session IDs, so their PID remains unknown until a
+  new claim.
 
-## afc-141 — repository relocation (implementation pending merge)
+## afc-141 — repository relocation (delivered)
 
 - `dibs repo relocate` and `POST /v1/repos/{repo_id}/relocate` verify the old
   and new Git common store and every mapped worktree, then update registered
@@ -43,14 +46,20 @@
   on the new path; the IDs stayed stable. Scratch `dibs doctor` passed with an
   isolated PATH. Evidence: `/tmp/dibs-afc141-go-test-final.log` and
   `/tmp/dibs-afc141-smoke.T71HKf/`.
-- Live registration relocation and compatibility-symlink removal remain for
-  after merge and installed-daemon verification. Initial independent review
-  found the `.git` mapping, linked-worktree repair, replay ordering, and Git
-  environment gaps; this revision addresses them. A full race run had an
-  existing API shutdown timeout in `TestDaemonSafetyFieldsAndMutationLogs`;
-  that test passed in a focused race rerun. Evidence:
-  `/tmp/dibs-afc141-race.log` and `/tmp/dibs-afc141-race-focused.log`.
-  Final independent review and CI are pending for this revision.
+- PR #98 passed CI, passed final independent review, and merged at `15663ad`.
+  The live repository `7ba59ee6-19a5-4ccb-9540-9aed52e56a00` and worktree
+  `3bef1ad3-5571-41d1-8d4b-c2830bd77484` now point to
+  `/home/abevz/github/dibs/main`. A fresh integrity-checked backup preceded
+  the mutation: `/home/abevz/backups/af-coordinator/af-coordinator-20260926-1427.db`.
+  With the old-path symlink temporarily absent, `git rev-parse`, `dibs init
+  --project afc --repo af-coordinator`, and `dibs doctor` all passed; logs:
+  `/tmp/dibs-live-init-no-symlink.log` and
+  `/tmp/dibs-live-doctor-no-symlink.log`. The symlink was restored afterward
+  because saved Herdr, Claude, and Codex sessions still reference that path;
+  dibs no longer depends on it. An earlier full race run had an API shutdown
+  timeout in `TestDaemonSafetyFieldsAndMutationLogs`; that test passed in a
+  focused race rerun. Evidence: `/tmp/dibs-afc141-race.log` and
+  `/tmp/dibs-afc141-race-focused.log`.
 
 Status: approved by owner; packet active. Rename `afc-137` was owner-closed on
 2026-09-23 after PR #67 (`4dd9983`). Earlier per-PR pending-review notes below
