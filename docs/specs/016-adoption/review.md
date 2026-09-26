@@ -53,8 +53,8 @@
   the mutation: `/home/abevz/backups/af-coordinator/af-coordinator-20260926-1427.db`.
   With the old-path symlink temporarily absent, `git rev-parse`, `dibs init
   --project afc --repo af-coordinator`, and `dibs doctor` all passed; logs:
-  `/tmp/dibs-live-init-no-symlink.log` and
-  `/tmp/dibs-live-doctor-no-symlink.log`. The symlink was restored afterward
+  `/tmp/dibs-live-no-symlink-evidence.log` records the absent path and all
+  three command results. The symlink was restored afterward
   because saved Herdr, Claude, and Codex sessions still reference that path;
   dibs no longer depends on it. An earlier full race run had an API shutdown
   timeout in `TestDaemonSafetyFieldsAndMutationLogs`; that test passed in a
