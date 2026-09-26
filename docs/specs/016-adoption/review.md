@@ -1,5 +1,21 @@
 # 016 Adoption Review
 
+## afc-152 — PID diagnostics for manual claims (review pending)
+
+- The CLI reports a caller ancestor PID and hostname in a typed claim session
+  when no explicit `--session-id` was supplied. Watch text and JSON use the
+  existing self-reported lease fields; manual claims have no process-liveness
+  guarantee. Older and untyped sessions remain unknown.
+- Claim operation journals now retain both the operation ID and session ID,
+  preserving idempotent `--retry-last` requests across processes. Legacy
+  ID-only journals remain readable and a definite rejection restores the
+  previous record.
+- Focused tests cover automatic and explicit session IDs, the CLI request,
+  typed store parsing, and journal replay/legacy restoration. `go build ./...`,
+  `git diff --check`, and `go test ./...` passed with inherited operator token
+  variables removed. Evidence: `/tmp/dibs-afc152-go-test-clean-env.log`.
+  Independent final review and PR CI are pending.
+
 ## afc-141 — repository relocation (implementation pending merge)
 
 - `dibs repo relocate` and `POST /v1/repos/{repo_id}/relocate` verify the old

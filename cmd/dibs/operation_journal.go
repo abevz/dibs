@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,61 @@ import (
 	"github.com/abevz/dibs/internal/config"
 	"github.com/google/uuid"
 )
+
+type claimJournalRecord struct {
+	OperationID string `json:"operation_id"`
+	SessionID   string `json:"session_id"`
+}
+
+// journalClaimOperation records both replay-defining values before the claim
+// is sent. The caller PID can change between invocations, so --retry-last must
+// reuse the original session ID as well as its operation ID.
+func journalClaimOperation(target, operationID, sessionID string) (string, string, error) {
+	dir, err := expandOperationJournalDir()
+	if err != nil {
+		return "", "", err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", "", fmt.Errorf("create operation journal: %w", err)
+	}
+	path := filepath.Join(dir, fmt.Sprintf("claim-%s.op", sanitizeJournalName(target)))
+	previous, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return "", "", fmt.Errorf("read operation journal: %w", err)
+	}
+	payload, err := json.Marshal(claimJournalRecord{OperationID: operationID, SessionID: sessionID})
+	if err != nil {
+		return "", "", err
+	}
+	if err := writeJournalFile(path, string(payload)); err != nil {
+		return "", "", err
+	}
+	return path, strings.TrimSpace(string(previous)), nil
+}
+
+func readJournaledClaimOperation(target string) (string, string, string, error) {
+	dir, err := expandOperationJournalDir()
+	if err != nil {
+		return "", "", "", err
+	}
+	path := filepath.Join(dir, fmt.Sprintf("claim-%s.op", sanitizeJournalName(target)))
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return "", "", path, nil
+	}
+	if err != nil {
+		return "", "", path, fmt.Errorf("read operation journal: %w", err)
+	}
+	value := strings.TrimSpace(string(data))
+	if !strings.HasPrefix(value, "{") {
+		return value, "", path, nil // legacy ID-only journal
+	}
+	var record claimJournalRecord
+	if err := json.Unmarshal([]byte(value), &record); err != nil || record.OperationID == "" {
+		return "", "", path, fmt.Errorf("invalid claim operation journal: %s", path)
+	}
+	return record.OperationID, record.SessionID, path, nil
+}
 
 // operationJournalDir is where dibs records an operation_id before sending
 // the mutation it identifies.

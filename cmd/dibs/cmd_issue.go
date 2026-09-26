@@ -625,6 +625,10 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 		}
 		invocationMode = normalized
 	}
+	if !retryLast && sessionID == "" {
+		host, _ := os.Hostname()
+		sessionID = manualClaimSessionID("", host, claimCallerPID())
+	}
 
 	// Resolve the idempotency key before sending. --retry-last reuses the key
 	// journaled by the previous attempt, which is what makes a lost response
@@ -634,7 +638,7 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 		if operationID != "" {
 			return usageErr(issueClaimUsage, "--retry-last and --operation-id are mutually exclusive")
 		}
-		journaled, path, jerr := readJournaledOperationID("claim", issueID)
+		journaled, savedSessionID, path, jerr := readJournaledClaimOperation(issueID)
 		if jerr != nil {
 			return fmt.Errorf("%s", jerr)
 		}
@@ -643,6 +647,12 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 		}
 		operationID = journaled
 		journalPath = path
+		if savedSessionID != "" {
+			if sessionID != "" && sessionID != savedSessionID {
+				return usageErr(issueClaimUsage, "--session-id differs from the journaled claim")
+			}
+			sessionID = savedSessionID
+		}
 	}
 	if operationID == "" {
 		operationID = newOperationID()
@@ -650,7 +660,7 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 	previousOperationID := ""
 	journaled := false
 	if journalPath == "" {
-		path, previous, jerr := journalOperationID("claim", issueID, operationID)
+		path, previous, jerr := journalClaimOperation(issueID, operationID, sessionID)
 		if jerr != nil {
 			return fmt.Errorf("%s", jerr)
 		}
@@ -698,6 +708,34 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 	fmt.Printf("Expires At:  %s\n", resp.ExpiresAt)
 	fmt.Printf("Version:     %d  (use this for --expected-version on close/handoff, not a value read from `issue get`)\n", resp.Version)
 	return nil
+}
+
+func manualClaimSessionID(explicit, host string, pid int) string {
+	if explicit != "" {
+		return explicit
+	}
+	if len(host) == 0 || len(host) > 253 || pid <= 1 {
+		return ""
+	}
+	for _, c := range host {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_') {
+			return ""
+		}
+	}
+	return fmt.Sprintf("dibs-claim:v1:%s:%d", host, pid)
+}
+
+func claimCallerPID() int {
+	if agent := getParentAgent(); agent != "" {
+		if split := strings.LastIndexByte(agent, '-'); split >= 0 {
+			if pid, err := strconv.Atoi(agent[split+1:]); err == nil && pid > 1 {
+				return pid
+			}
+		}
+	}
+	// /proc is unavailable on macOS. The immediate parent is still a useful
+	// diagnostic, though it may exit while the manual lease remains active.
+	return os.Getppid()
 }
 
 const issueHeartbeatUsage = "Usage: dibs issue heartbeat <issue-id> --lease-generation <generation> [--ttl <seconds>] [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint

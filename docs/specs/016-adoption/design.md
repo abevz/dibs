@@ -39,6 +39,13 @@ slice. Existing Charmbracelet dependencies may be reused. Keep display state
 out of the authoritative database and never call mutation endpoints while
 refreshing. A disconnected view labels its data stale.
 
+The CLI's manual `issue claim` writes a typed `dibs-claim:v1:<host>:<pid>`
+session ID when the caller did not supply `--session-id`. The PID names a
+caller ancestor at claim time, not a live lease supervisor. `watch` parses
+this alongside `dibs-run:v1` and treats both as self-reported. Claim retries
+persist the session ID with the operation ID so an idempotent replay sends the
+same request even from another process; old ID-only journals remain readable.
+
 Hooks are thin client-side integrations over `issue run`. SessionStart presents
 ready items and does not claim. The selected issue enters the normal
 claim/heartbeat/cancel/close-or-handoff path. The one-shot agent command uses

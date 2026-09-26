@@ -1107,7 +1107,7 @@ func scanIssue(s scanner) (core.Issue, error) {
 		i.Holder = holder.String
 	}
 	if leaseSessionID.Valid {
-		i.LeaseHost, i.LeasePID = parseIssueRunSessionID(leaseSessionID.String)
+		i.LeaseHost, i.LeasePID = parseLeaseProcessSessionID(leaseSessionID.String)
 	}
 	if leaseExpiresAt.Valid {
 		i.LeaseExpiresAt = leaseExpiresAt.String
@@ -1115,12 +1115,16 @@ func scanIssue(s scanner) (core.Issue, error) {
 	return i, nil
 }
 
-// parseIssueRunSessionID recognizes the dibs-run session convention. The
-// caller supplies session_id, so parsed process metadata is unverified.
-// Other session IDs (including ordinary manual and older claims) have no PID.
-func parseIssueRunSessionID(sessionID string) (string, int) {
-	const prefix = "dibs-run:v1:"
-	if !strings.HasPrefix(sessionID, prefix) {
+// parseLeaseProcessSessionID recognizes dibs-run (supervisor) and dibs-claim
+// (caller ancestor) conventions. Both are self-reported diagnostics, never
+// ownership evidence. Arbitrary and older session IDs have no process data.
+func parseLeaseProcessSessionID(sessionID string) (string, int) {
+	const runPrefix = "dibs-run:v1:"
+	const claimPrefix = "dibs-claim:v1:"
+	prefix := runPrefix
+	if strings.HasPrefix(sessionID, claimPrefix) {
+		prefix = claimPrefix
+	} else if !strings.HasPrefix(sessionID, runPrefix) {
 		return "", 0
 	}
 	host, pidText, ok := strings.Cut(sessionID[len(prefix):], ":")
