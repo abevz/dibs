@@ -105,5 +105,20 @@ Stop a running daemon before upgrading or uninstalling, then start it again
 after an upgrade. For a manager-owned daemon, use its service manager as
 described in [operations](operations.md#explicit-service-switch).
 
-`go install` and AUR instructions will be added after those channels are
-verified for their advertised environments.
+## Install with Go
+
+For Go users, this version-pinned source install was checked on Linux amd64
+with Go 1.27.1:
+
+```sh
+go install github.com/abevz/dibs/cmd/dibs@v0.1.0-rc.1 \
+  github.com/abevz/dibs/cmd/dibsd@v0.1.0-rc.1 \
+  github.com/abevz/dibs/cmd/dibs-mcp@v0.1.0-rc.1
+```
+
+The binaries go to `GOBIN`, or to `$(go env GOPATH)/bin` when `GOBIN` is unset.
+Put that directory on `PATH` before running `dibs init`. This build reports
+`revision unknown` because the command does not inject the revision used by
+the release workflow. Use the release installer or Homebrew for the tested
+binary distribution on all four supported platforms. AUR instructions remain
+pending verification.
