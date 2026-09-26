@@ -10,9 +10,13 @@ import (
 
 // writeError writes a JSON error response matching the API v1 error envelope.
 func writeError(w http.ResponseWriter, status int, code, msg string) {
-	w.Header().Set("X-Dibs-Error-Code", code)
+	writeAPIError(w, status, core.NewAPIError(code, msg))
+}
+
+func writeAPIError(w http.ResponseWriter, status int, apiErr core.APIError) {
+	w.Header().Set("X-Dibs-Error-Code", apiErr.Code)
 	writeJSON(w, status, core.APIErrorResponse{
-		Error: core.NewAPIError(code, msg),
+		Error: apiErr,
 	})
 }
 

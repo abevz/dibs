@@ -20,8 +20,9 @@ import (
 
 // ClientError is a structured error returned when the daemon responds with an API error envelope.
 type ClientError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string                 `json:"code"`
+	Message string                 `json:"message"`
+	Details *core.LeaseHeldDetails `json:"details,omitempty"`
 }
 
 func (e *ClientError) Error() string {
@@ -690,7 +691,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, targ
 	if resp.StatusCode >= 400 {
 		var errResp core.APIErrorResponse
 		if decodeErr := json.NewDecoder(resp.Body).Decode(&errResp); decodeErr == nil && errResp.Error.Code != "" {
-			return &ClientError{Code: errResp.Error.Code, Message: errResp.Error.Message}
+			return &ClientError{Code: errResp.Error.Code, Message: errResp.Error.Message, Details: errResp.Error.Details}
 		}
 		return fmt.Errorf("unexpected status: %s", resp.Status)
 	}

@@ -220,7 +220,7 @@ func fail(err error) {
 	var clientErr *client.ClientError
 	if errors.As(err, &clientErr) {
 		if jsonOutput {
-			resp := core.APIErrorResponse{Error: core.NewAPIError(clientErr.Code, clientErr.Message)}
+			resp := core.APIErrorResponse{Error: core.APIError{Code: clientErr.Code, Message: clientErr.Message, Details: clientErr.Details}}
 			json.NewEncoder(os.Stderr).Encode(resp)
 		} else {
 			fmt.Fprintf(os.Stderr, "error: %v\n", clientErr)

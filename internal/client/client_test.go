@@ -81,7 +81,7 @@ func TestDoJSON_APIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(`{"error":{"code":"lease_held","message":"already claimed"}}`))
+		_, _ = w.Write([]byte(`{"error":{"code":"lease_held","message":"demo-1 is already leased by codex","details":{"short_id":"demo-1","holder":"codex","lease_expires_at":"2026-09-26T16:00:00Z","lease_pid":1234,"lease_host":"arch"}}}`))
 	}))
 	defer server.Close()
 
@@ -97,8 +97,8 @@ func TestDoJSON_APIError(t *testing.T) {
 	if clientErr.Code != "lease_held" {
 		t.Errorf("Code = %q, want %q", clientErr.Code, "lease_held")
 	}
-	if clientErr.Message != "already claimed" {
-		t.Errorf("Message = %q, want %q", clientErr.Message, "already claimed")
+	if clientErr.Message != "demo-1 is already leased by codex" || clientErr.Details == nil || clientErr.Details.ShortID != "demo-1" || clientErr.Details.LeasePID != 1234 {
+		t.Errorf("ClientError = %+v, want preserved lease details", clientErr)
 	}
 }
 
