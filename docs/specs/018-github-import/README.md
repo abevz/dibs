@@ -24,6 +24,8 @@ where work is described and discussed; dibs decides which agent owns it.
   to the source issue as exactly one comment, safely retryable.
 - `dibs doctor` reports whether `gh` is installed, authenticated, and working;
   `publish` checks that the source issue is reachable and not locked first.
+- Agents use the same workflow through the agent protocol and MCP tools
+  (`import_issue`, `publish_issue`, and `publish` on `close_issue`).
 - GitHub access goes through the user's `gh` CLI. dibs stores no GitHub
   credentials and the daemon stays offline.
 
@@ -40,7 +42,7 @@ This slice deliberately stops short of the full external-tracker workflow in
 - closing or relabeling the GitHub issue (a PR with `Fixes #N` already does
   that);
 - a durable publication queue; a failed publish is retried explicitly;
-- GitHub Enterprise hosts, pull requests as sources, MCP tools, other trackers.
+- GitHub Enterprise hosts, pull requests as sources, other trackers.
 
 `afc-89`/`afc-90` stay open for the full workflow and should reuse this
 packet's external key format and publish marker.
@@ -49,5 +51,5 @@ packet's external key format and publish marker.
 
 - [requirements.md](requirements.md) — behavior and acceptance.
 - [design.md](design.md) — command shapes, data mapping, idempotency, failures.
-- [tasks.md](tasks.md) — slices `afc-163`–`afc-165` and release steps.
+- [tasks.md](tasks.md) — slices `afc-163`–`afc-165`, `afc-169`, and release steps.
 - [review.md](review.md) — decisions and evidence.

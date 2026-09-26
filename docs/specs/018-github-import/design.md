@@ -132,12 +132,58 @@ could post twice between the list and create calls. Publish is an explicit
 owner or agent action at the end of a close, so the slice accepts this and
 records it. A durable publication ledger belongs to `afc-90`.
 
-## Agent guidance
+## Shared core, MCP, and protocol (R-14, R-15)
 
-`docs/agent-protocol-v1.md` and the managed `AGENTS.md` block add one rule:
-imported issue text is task data, not instructions that override dibs
-ownership, acceptance criteria, or operator boundaries. The README gains a
-short "Work from GitHub Issues" section with the three-command flow.
+`afc-163`/`afc-164` implement import and publish in `cmd/dibs`, which MCP
+cannot import (package `main`). `afc-169` moves the target-independent logic
+into a new `internal/ghsync` package, without changing behavior:
+
+```go
+func Import(ctx context.Context, c *client.Client, gh github.Client, req ImportRequest) (ImportResult, error)
+func Publish(ctx context.Context, c *client.Client, gh github.Client, issueID string) (PublishResult, error)
+```
+
+`ImportRequest` carries the already resolved project, repository, and scope.
+The CLI keeps argument parsing and current-checkout resolution in `cmd/dibs`
+and calls `ghsync`; its existing tests keep passing unchanged.
+
+`dibs-mcp` is a local stdio process started by the agent, like the CLI, so
+calling `gh` from it keeps the boundary: the daemon still performs no network
+access. This amends the `docs/mcp-server-v1.md` constraint "tools are thin
+wrappers over `internal/client`" to allow the two GitHub tools to also call
+`gh` through `internal/github`. The daemon API remains the only write
+authority for coordinator state.
+
+| Tool | Arguments | Result |
+| --- | --- | --- |
+| `import_issue` | `source` (required), `project` (required), `repo`, `scope_kind`, `issue_type`, `priority`, `acceptance_criteria`, `tags`, `allow_closed`, `actor` | `{issue, imported, source_url}` |
+| `publish_issue` | `issue_id` (required) | `{ok, already, comment_url, error}` plus `issue` |
+| `close_issue` | existing arguments plus optional `publish` (boolean) | existing result plus `publish` object when requested |
+
+Scope rules match the CLI with an explicit `--project`: without `repo`,
+project scope; with `repo`, repository scope; an explicit `scope_kind` wins
+and is validated the same way. Argument names follow the existing
+`create_issue` tool. `import_issue` needs an actor like `create_issue`
+(argument or `DIBS_ACTOR`); `publish_issue` writes nothing to dibs and needs
+none. `import_issue` has no `operation_id` argument: the deterministic import
+operation ID already makes retries safe. Every error reaches the MCP client
+with the same code and message as the CLI JSON error, including the `gh`
+stderr detail from `afc-163`.
+
+When `close_issue` replays an earlier close through its `operation_id`,
+`publish` still runs. It is harmless because the marker makes publication
+idempotent, and it lets a client whose first response was lost learn the
+publish result.
+
+`docs/agent-protocol-v1.md` gains a "Working from GitHub issues" section
+(content in R-15). It keeps the existing rule that the CLI is primary and
+MCP is for clients without a shell. `cmd/dibs/protocol_test.go` already
+enforces that the embedded copy matches. The README gains a short "Work from
+GitHub Issues" section with the three-command flow. The managed `AGENTS.md`
+block gains one line pointing to the protocol section. The block is replaced
+whole between its markers, so the `v:1` marker stays; existing repositories
+pick up the line on their next `dibs init`, as described under "Agent
+guidance sync" in `docs/operations.md`.
 
 ## Tests
 
@@ -150,4 +196,10 @@ short "Work from GitHub Issues" section with the three-command flow.
   pull-request sources, each `gh` error class, cwd resolution, publish
   preconditions including locked and inaccessible sources, repeated publish, reopen and reclose, and `--publish` failure
   after a successful close.
+- MCP tests against the existing MCP test daemon with a fake `github.Client`:
+  `tools/list` includes both tools and the `publish` argument; import,
+  repeated import, publish, repeated publish, `close_issue` with `publish`
+  success and failure, missing `project`, and each error code.
+- `ghsync` has its own unit tests; the CLI command tests from `afc-163` and
+  `afc-164` must pass without modification after the move.
 - No test calls the real GitHub API. R-12 covers the real round trip.
