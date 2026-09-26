@@ -66,7 +66,13 @@ func readJournaledClaimOperation(target string) (claimJournalRecord, string, err
 		return claimJournalRecord{OperationID: value}, path, nil // legacy ID-only journal
 	}
 	var record claimJournalRecord
-	if err := json.Unmarshal([]byte(value), &record); err != nil || record.OperationID == "" {
+	if err := json.Unmarshal([]byte(value), &record); err != nil {
+		if core.ValidateOperationID(value) == nil {
+			return claimJournalRecord{OperationID: value}, path, nil
+		}
+		return claimJournalRecord{}, path, fmt.Errorf("invalid claim operation journal: %s", path)
+	}
+	if record.OperationID == "" {
 		return claimJournalRecord{}, path, fmt.Errorf("invalid claim operation journal: %s", path)
 	}
 	if record.Holder == "" || record.TTLSeconds <= 0 {

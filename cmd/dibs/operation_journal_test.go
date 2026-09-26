@@ -67,6 +67,18 @@ func TestClaimJournalPersistsSessionAndRestoresLegacyRecord(t *testing.T) {
 	}
 }
 
+func TestClaimJournalReadsLegacyIDBeginningWithBrace(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	const legacyID = "{legacy-operation-12345"
+	if _, _, err := journalOperationID("claim", "demo-1", legacyID); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := readJournaledClaimOperation("demo-1")
+	if err != nil || got.OperationID != legacyID {
+		t.Fatalf("legacy journal = %+v, err=%v", got, err)
+	}
+}
+
 func TestManualClaimCLISendsTypedSession(t *testing.T) {
 	if os.Getenv("DIBS_TEST_CLAIM_CHILD") == "1" {
 		args := []string{"demo-1"}
