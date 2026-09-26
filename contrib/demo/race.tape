@@ -12,7 +12,7 @@ Require go
 
 Set Shell bash
 Set FontSize 15
-Set Width 1100
+Set Width 1240
 Set Height 720
 Set Padding 12
 Set TypingSpeed 0

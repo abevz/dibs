@@ -1,6 +1,6 @@
 # Installing dibs
 
-The `v0.1.0-rc.2` preview is published for Linux amd64/arm64 and macOS
+The `v0.1.0-rc.3` preview is published for Linux amd64/arm64 and macOS
 Intel/Apple Silicon. Use its versioned URL: GitHub's `latest` URL selects
 stable releases and does not select this prerelease.
 
@@ -9,7 +9,7 @@ stable releases and does not select this prerelease.
 Install the published preview:
 
 ```sh
-curl -fsSL https://github.com/abevz/dibs/releases/download/v0.1.0-rc.2/install.sh | sh /dev/stdin
+curl -fsSL https://github.com/abevz/dibs/releases/download/v0.1.0-rc.3/install.sh | sh /dev/stdin
 ```
 
 The downloaded script carries the release tag that supplied it, and fetches the
@@ -22,7 +22,7 @@ hint when that directory is not available in the current shell.
 To inspect the exact script before running it:
 
 ```sh
-curl -fsSL -o install.sh https://github.com/abevz/dibs/releases/download/v0.1.0-rc.2/install.sh
+curl -fsSL -o install.sh https://github.com/abevz/dibs/releases/download/v0.1.0-rc.3/install.sh
 less install.sh
 sh install.sh
 ```
@@ -107,19 +107,18 @@ described in [operations](operations.md#explicit-service-switch).
 
 ## Install with Go
 
-For Go users, this earlier version-pinned source install was checked on Linux
-amd64 with Go 1.27.1. The rc.2 source install will be checked after its tag is
-published:
+For Go users, this version-pinned source install was checked on Linux amd64
+with Go 1.27.1:
 
 ```sh
-go install github.com/abevz/dibs/cmd/dibs@v0.1.0-rc.1 \
-  github.com/abevz/dibs/cmd/dibsd@v0.1.0-rc.1 \
-  github.com/abevz/dibs/cmd/dibs-mcp@v0.1.0-rc.1
+go install github.com/abevz/dibs/cmd/dibs@v0.1.0-rc.3 \
+  github.com/abevz/dibs/cmd/dibsd@v0.1.0-rc.3 \
+  github.com/abevz/dibs/cmd/dibs-mcp@v0.1.0-rc.3
 ```
 
 The binaries go to `GOBIN`, or to `$(go env GOPATH)/bin` when `GOBIN` is unset.
 Put that directory on `PATH` before running `dibs init`. This build reports
-`revision unknown` because the command does not inject the revision used by
-the release workflow. Use the release installer or Homebrew for the tested
+`dibs dev (unknown)` because `go install` does not inject the version and
+revision that the release workflow embeds. Use the release installer or Homebrew for the tested
 binary distribution on all four supported platforms. AUR instructions remain
 pending verification.

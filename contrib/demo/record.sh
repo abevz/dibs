@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Record the README demo: run race.tape with vhs, then assemble the GIF.
 # Run from anywhere; requires vhs (with ttyd), ffmpeg, tmux, jq, git, and Go.
+# Set DIBS_BIN_DIR to record with prebuilt (for example published) binaries.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -11,9 +12,18 @@ tmp="$root/.demo-tmp"
 cd "$root"
 rm -rf "$frames" "$tmp"
 mkdir -p "$tmp"
+# vhs does not pass the caller's environment to the recorded shell, so a
+# DIBS_BIN_DIR (for example published release binaries) goes in as a tape Env.
+tape=contrib/demo/race.tape
+if [ -n "${DIBS_BIN_DIR:-}" ]; then
+	tape="$tmp/race.tape"
+	# vhs ignores Set lines after any other command, so Env goes after them.
+	awk -v dir="$DIBS_BIN_DIR" '!done && /^Hide$/ { print "Env DIBS_BIN_DIR \"" dir "\""; done = 1 } { print }' \
+		contrib/demo/race.tape >"$tape"
+fi
 # vhs moves its frame directory out of TMPDIR with a rename, which fails
 # silently across filesystems (for example tmpfs /tmp), so keep it local.
-TMPDIR="$tmp" vhs contrib/demo/race.tape
+TMPDIR="$tmp" vhs "$tape"
 
 # vhs stores terminal text and cursor as separate layers at 50 fps. Merge
 # them, pad like a terminal window, drop to 10 fps, and use one palette
