@@ -1,5 +1,30 @@
 # 016 Adoption Review
 
+## afc-152 — PID diagnostics for manual claims (review pending)
+
+- The CLI reports a caller ancestor PID and hostname in a typed claim session
+  when no explicit `--session-id` was supplied. Watch text and JSON use the
+  existing self-reported lease fields; manual claims have no process-liveness
+  guarantee. Older and untyped sessions remain unknown.
+- Claim operation journals now retain the full request fingerprint (operation
+  ID, holder, TTL, invocation mode, and session ID). Bare `--retry-last` and
+  reuse of a matching explicit `--operation-id` replay that request across
+  processes. The new `.json` journal takes precedence over the old `.op`
+  journal; old IDs remain readable even if their text looks like JSON. A
+  definite rejection removes the new record or restores its predecessor.
+- Focused tests cover automatic and explicit session IDs, the CLI request,
+  typed store parsing, full-request replay in separate processes, and legacy
+  journal restoration, including a JSON-shaped legacy ID. An installed-binary
+  scratch check showed `16215@arch`
+  in watch text and matching `lease_pid`/`lease_host` in JSON; evidence:
+  `/tmp/dibs-afc152-smoke.uIn5Op/`. After the replay fix, `go test ./...`,
+  `go build ./...`, `go vet ./...`, and `git diff --check` passed. The full suite
+  passed before the separate-journal fix; evidence:
+  `/tmp/dibs-afc152-go-test-final.log`. After that fix, focused replay tests
+  and the full `cmd/dibs` package passed; evidence:
+  `/tmp/dibs-afc152-cmd-final.log`. Renewed independent review and PR CI are
+  pending.
+
 ## afc-141 — repository relocation (implementation pending merge)
 
 - `dibs repo relocate` and `POST /v1/repos/{repo_id}/relocate` verify the old

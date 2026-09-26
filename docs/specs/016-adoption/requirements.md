@@ -40,10 +40,12 @@
   remaining TTL, blocked work, and recent events. It reads only through daemon
   APIs and performs no state mutations or direct SQLite reads. It remains
   useful during disconnection and terminal resize without claiming work.
-  For `issue run` leases, it displays the self-reported supervisor PID and host
-  as advisory diagnostics; ordinary manual and older leases have unknown
-  process data. Any client can report a typed session ID, so these fields are
-  unverified and never substitute for token and generation ownership.
+  For `issue run` leases, it displays the self-reported supervisor PID and host.
+  New CLI `issue claim` leases report a caller ancestor PID and host when
+  available; an explicit session ID takes precedence. Older claims and clients
+  without typed process metadata remain unknown. These fields are advisory:
+  the claim command can exit and any client can report a typed session ID.
+  They never substitute for token and generation ownership.
 - **R-06 Newcomer documentation.** The top of the public README explains
   duplicate-work pain, shows a truthful GIF, then the verified four-command
   path and tagline: "Your AI agents call dibs on work. Exactly one wins."

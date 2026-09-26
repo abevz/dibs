@@ -1,14 +1,90 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/abevz/dibs/internal/config"
+	"github.com/abevz/dibs/internal/core"
 	"github.com/google/uuid"
 )
+
+type claimJournalRecord struct {
+	OperationID    string `json:"operation_id"`
+	Holder         string `json:"holder,omitempty"`
+	TTLSeconds     int    `json:"ttl_seconds,omitempty"`
+	SessionID      string `json:"session_id"`
+	InvocationMode string `json:"invocation_mode,omitempty"`
+}
+
+// journalClaimOperation records the complete replay fingerprint before send.
+// Caller PID, actor, and other defaults can change between invocations.
+func journalClaimOperation(target string, req core.ClaimRequest) (string, string, error) {
+	dir, err := expandOperationJournalDir()
+	if err != nil {
+		return "", "", err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", "", fmt.Errorf("create operation journal: %w", err)
+	}
+	path := claimRequestJournalPath(dir, target)
+	previous, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return "", "", fmt.Errorf("read operation journal: %w", err)
+	}
+	payload, err := json.Marshal(claimJournalRecord{
+		OperationID: req.OperationID, Holder: req.Holder, TTLSeconds: req.TTLSeconds,
+		SessionID: req.SessionID, InvocationMode: req.InvocationMode,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	if err := writeJournalFile(path, string(payload)); err != nil {
+		return "", "", err
+	}
+	return path, strings.TrimSpace(string(previous)), nil
+}
+
+func readJournaledClaimOperation(target string) (claimJournalRecord, string, error) {
+	dir, err := expandOperationJournalDir()
+	if err != nil {
+		return claimJournalRecord{}, "", err
+	}
+	path := claimRequestJournalPath(dir, target)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		legacyPath := filepath.Join(dir, fmt.Sprintf("claim-%s.op", sanitizeJournalName(target)))
+		legacyData, legacyErr := os.ReadFile(legacyPath)
+		if os.IsNotExist(legacyErr) {
+			return claimJournalRecord{}, path, nil
+		}
+		if legacyErr != nil {
+			return claimJournalRecord{}, legacyPath, fmt.Errorf("read operation journal: %w", legacyErr)
+		}
+		return claimJournalRecord{OperationID: strings.TrimSpace(string(legacyData))}, legacyPath, nil
+	}
+	if err != nil {
+		return claimJournalRecord{}, path, fmt.Errorf("read operation journal: %w", err)
+	}
+	var record claimJournalRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return claimJournalRecord{}, path, fmt.Errorf("invalid claim operation journal: %s", path)
+	}
+	if record.OperationID == "" {
+		return claimJournalRecord{}, path, fmt.Errorf("invalid claim operation journal: %s", path)
+	}
+	if record.Holder == "" || record.TTLSeconds <= 0 {
+		return claimJournalRecord{}, path, fmt.Errorf("incomplete claim operation journal: %s", path)
+	}
+	return record, path, nil
+}
+
+func claimRequestJournalPath(dir, target string) string {
+	return filepath.Join(dir, fmt.Sprintf("claim-%s.json", sanitizeJournalName(target)))
+}
 
 // operationJournalDir is where dibs records an operation_id before sending
 // the mutation it identifies.

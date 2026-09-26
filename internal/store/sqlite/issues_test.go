@@ -5205,7 +5205,7 @@ func TestIssueRunProcessMetadataOnlyForActiveTypedSession(t *testing.T) {
 	}
 	// The session ID is caller supplied; even a manual claimant can report a
 	// typed PID. The display must describe it as unverified advisory metadata.
-	if _, err := ClaimIssueWithSession(ctx, db, selfReported.ID, "manual-agent", 60, "dibs-run:v1:claimed-host:999"); err != nil {
+	if _, err := ClaimIssueWithSession(ctx, db, selfReported.ID, "manual-agent", 60, "dibs-claim:v1:claimed-host:999"); err != nil {
 		t.Fatal(err)
 	}
 	list, err := ListIssues(ctx, db, core.IssueListParams{})
@@ -5249,9 +5249,9 @@ func TestIssueRunProcessMetadataOnlyForActiveTypedSession(t *testing.T) {
 	}
 }
 
-func TestParseIssueRunSessionIDRejectsOtherFormats(t *testing.T) {
-	for _, value := range []string{"", "1234", "dibs-run:v1:host:0", "dibs-run:v1:host:-1", "dibs-run:v1:host:not-a-pid", "dibs-run:v1:bad host:1", "dibs-run:v2:host:1"} {
-		host, pid := parseIssueRunSessionID(value)
+func TestParseLeaseProcessSessionIDRejectsOtherFormats(t *testing.T) {
+	for _, value := range []string{"", "1234", "dibs-run:v1:host:0", "dibs-claim:v1:host:-1", "dibs-run:v1:host:not-a-pid", "dibs-claim:v1:bad host:1", "dibs-run:v2:host:1", "dibs-claim:v2:host:1"} {
+		host, pid := parseLeaseProcessSessionID(value)
 		if host != "" || pid != 0 {
 			t.Fatalf("%q parsed as %s:%d", value, host, pid)
 		}

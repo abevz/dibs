@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,179 @@ import (
 	"github.com/abevz/dibs/internal/client"
 	"github.com/abevz/dibs/internal/core"
 )
+
+func TestManualClaimSessionID(t *testing.T) {
+	for _, tc := range []struct {
+		name, explicit, host string
+		pid                  int
+		want                 string
+	}{
+		{"automatic", "", "my-host", 4321, "dibs-claim:v1:my-host:4321"},
+		{"explicit", "custom-session", "my-host", 4321, "custom-session"},
+		{"no PID", "", "my-host", 0, ""},
+		{"invalid host", "", "bad:host", 4321, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := manualClaimSessionID(tc.explicit, tc.host, tc.pid); got != tc.want {
+				t.Fatalf("session ID = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestClaimJournalPersistsSessionAndRestoresLegacyRecord(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	const oldID = "op-old-1111-2222-3333-444455556666"
+	const newID = "op-new-1111-2222-3333-444455556666"
+	const session = "dibs-claim:v1:test-host:4321"
+	if _, _, err := journalOperationID("claim", "demo-1", oldID); err != nil {
+		t.Fatal(err)
+	}
+	path, previous, err := journalClaimOperation("demo-1", core.ClaimRequest{
+		OperationID: newID, Holder: "test-agent", TTLSeconds: 120,
+		SessionID: session, InvocationMode: "scheduled",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if previous != "" {
+		t.Fatalf("previous new-format journal = %q, want empty", previous)
+	}
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("journal permissions: info=%v err=%v", info, err)
+	}
+	got, _, err := readJournaledClaimOperation("demo-1")
+	if err != nil || got.OperationID != newID || got.SessionID != session || got.Holder != "test-agent" || got.TTLSeconds != 120 || got.InvocationMode != "scheduled" {
+		t.Fatalf("journal = (%+v), err=%v", got, err)
+	}
+	restoreJournaledOperationID(path, previous)
+	got, _, err = readJournaledClaimOperation("demo-1")
+	if err != nil || got.OperationID != oldID || got.SessionID != "" {
+		t.Fatalf("restored legacy journal = (%+v), err=%v", got, err)
+	}
+}
+
+func TestClaimJournalReadsJSONShapedLegacyID(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	const legacyID = `{"operation_id":"12345678","holder":"x","ttl_seconds":1}`
+	if _, _, err := journalOperationID("claim", "demo-1", legacyID); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := readJournaledClaimOperation("demo-1")
+	if err != nil || got.OperationID != legacyID {
+		t.Fatalf("legacy journal = %+v, err=%v", got, err)
+	}
+}
+
+func TestManualClaimCLISendsTypedSession(t *testing.T) {
+	if os.Getenv("DIBS_TEST_CLAIM_CHILD") == "1" {
+		args := []string{"demo-1"}
+		if explicit := os.Getenv("DIBS_TEST_CLAIM_EXPLICIT"); explicit != "" {
+			args = append(args, "--session-id", explicit)
+		}
+		_ = runIssueClaim(context.Background(), client.New(os.Getenv("DIBS_TEST_CLAIM_SOCKET")), args)
+		return
+	}
+	for _, explicit := range []string{"", "custom-session"} {
+		t.Run(explicit, func(t *testing.T) {
+			home := t.TempDir()
+			socket := filepath.Join(testSocketDir(t), "claim-session.sock")
+			listener, err := net.Listen("unix", socket)
+			if err != nil {
+				t.Fatal(err)
+			}
+			received := make(chan core.ClaimRequest, 1)
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var req core.ClaimRequest
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					t.Error(err)
+				}
+				received <- req
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":"validation_failed","message":"test rejection"}}`))
+			}))
+			server.Listener.Close()
+			server.Listener = listener
+			server.Start()
+			defer server.Close()
+			command := exec.Command(os.Args[0], "-test.run=^TestManualClaimCLISendsTypedSession$")
+			command.Env = append(os.Environ(), "HOME="+home, "DIBS_ACTOR=tester", "DIBS_TEST_CLAIM_CHILD=1", "DIBS_TEST_CLAIM_SOCKET="+socket, "DIBS_TEST_CLAIM_EXPLICIT="+explicit)
+			if output, err := command.CombinedOutput(); err == nil || !strings.Contains(string(output), "test rejection") {
+				t.Fatalf("child err=%v output=%q", err, output)
+			}
+			select {
+			case req := <-received:
+				if explicit != "" && req.SessionID != explicit {
+					t.Fatalf("explicit session = %q", req.SessionID)
+				}
+				if explicit == "" && !strings.HasPrefix(req.SessionID, "dibs-claim:v1:") {
+					t.Fatalf("automatic session = %q", req.SessionID)
+				}
+			default:
+				t.Fatal("claim request not received")
+			}
+		})
+	}
+}
+
+func TestClaimCLIReplaysJournaledRequestAcrossProcesses(t *testing.T) {
+	if os.Getenv("DIBS_TEST_CLAIM_REPLAY_CHILD") == "1" {
+		args := []string{"demo-1"}
+		switch os.Getenv("DIBS_TEST_CLAIM_REPLAY_MODE") {
+		case "first":
+			args = append(args, "--holder", "original-holder", "--ttl", "120", "--invocation-mode", "scheduled")
+		case "retry":
+			args = append(args, "--retry-last")
+		case "explicit":
+			args = append(args, "--operation-id", os.Getenv("DIBS_TEST_CLAIM_REPLAY_ID"))
+		}
+		if err := runIssueClaim(context.Background(), client.New(os.Getenv("DIBS_TEST_CLAIM_REPLAY_SOCKET")), args); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	home := t.TempDir()
+	socket := filepath.Join(testSocketDir(t), "claim-replay.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	received := make(chan core.ClaimRequest, 3)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req core.ClaimRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Error(err)
+		}
+		received <- req
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"lease_token":"test-only","lease_generation":1,"attempt_id":"attempt","expires_at":"2026-09-26T13:00:00Z","version":2}`))
+	}))
+	server.Listener.Close()
+	server.Listener = listener
+	server.Start()
+	defer server.Close()
+	first := core.ClaimRequest{}
+	for _, mode := range []string{"first", "retry", "explicit"} {
+		command := exec.Command(os.Args[0], "-test.run=^TestClaimCLIReplaysJournaledRequestAcrossProcesses$")
+		command.Env = append(os.Environ(), "HOME="+home, "DIBS_ACTOR=changed-default", "DIBS_TEST_CLAIM_REPLAY_CHILD=1", "DIBS_TEST_CLAIM_REPLAY_SOCKET="+socket, "DIBS_TEST_CLAIM_REPLAY_MODE="+mode, "DIBS_TEST_CLAIM_REPLAY_ID="+first.OperationID)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("%s child error=%v output=%q", mode, err, output)
+		}
+		select {
+		case req := <-received:
+			if mode == "first" {
+				first = req
+				if first.OperationID == "" || first.SessionID == "" {
+					t.Fatalf("first request missing replay fields: %+v", first)
+				}
+			} else if req != first {
+				t.Fatalf("%s request differs from first: got %+v, want %+v", mode, req, first)
+			}
+		default:
+			t.Fatalf("%s request not received", mode)
+		}
+	}
+}
 
 func TestCreateCLIPreservesJournalAfterServerInternalError(t *testing.T) {
 	if os.Getenv("DIBS_TEST_CREATE_CHILD") == "1" {

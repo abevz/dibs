@@ -580,27 +580,32 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 	invocationMode := ""
 	operationID := ""
 	retryLast := false
+	holderSet, ttlSet, sessionSet, modeSet := false, false, false, false
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--holder", "--actor":
 			if i+1 < len(args) {
 				holder = args[i+1]
+				holderSet = true
 				i++
 			}
 		case "--ttl":
 			if i+1 < len(args) {
 				fmt.Sscanf(args[i+1], "%d", &ttl)
+				ttlSet = true
 				i++
 			}
 		case "--session-id":
 			if i+1 < len(args) {
 				sessionID = args[i+1]
+				sessionSet = true
 				i++
 			}
 		case "--invocation-mode":
 			if i+1 < len(args) {
 				invocationMode = args[i+1]
+				modeSet = true
 				i++
 			}
 		case "--operation-id":
@@ -613,11 +618,6 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 		}
 	}
 
-	var err error
-	holder, err = resolveActor(holder)
-	if err != nil {
-		return usageErr(issueClaimUsage, err.Error())
-	}
 	if invocationMode != "" {
 		normalized, nerr := core.NormalizeInvocationMode(invocationMode)
 		if nerr != nil {
@@ -625,32 +625,63 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 		}
 		invocationMode = normalized
 	}
-
 	// Resolve the idempotency key before sending. --retry-last reuses the key
 	// journaled by the previous attempt, which is what makes a lost response
 	// recoverable; anything else is a new logical operation and gets a new key.
 	journalPath := ""
+	var saved claimJournalRecord
+	if retryLast || operationID != "" {
+		var path string
+		var jerr error
+		saved, path, jerr = readJournaledClaimOperation(issueID)
+		if jerr != nil {
+			return jerr
+		}
+		journalPath = path
+	}
 	if retryLast {
 		if operationID != "" {
 			return usageErr(issueClaimUsage, "--retry-last and --operation-id are mutually exclusive")
 		}
-		journaled, path, jerr := readJournaledOperationID("claim", issueID)
-		if jerr != nil {
-			return fmt.Errorf("%s", jerr)
+		if saved.OperationID == "" {
+			return fmt.Errorf("no journaled claim operation for %s (expected %s)", issueID, journalPath)
 		}
-		if journaled == "" {
-			return fmt.Errorf("no journaled claim operation for %s (expected %s)", issueID, path)
+		operationID = saved.OperationID
+	}
+	replaySaved := saved.OperationID != "" && saved.OperationID == operationID
+	if replaySaved && saved.Holder != "" {
+		if holderSet && holder != saved.Holder || ttlSet && ttl != saved.TTLSeconds || sessionSet && sessionID != saved.SessionID {
+			return usageErr(issueClaimUsage, "claim flags differ from the journaled operation")
 		}
-		operationID = journaled
-		journalPath = path
+		if modeSet {
+			requested, _ := core.NormalizeInvocationMode(invocationMode)
+			stored, _ := core.NormalizeInvocationMode(saved.InvocationMode)
+			if requested != stored {
+				return usageErr(issueClaimUsage, "--invocation-mode differs from the journaled claim")
+			}
+		}
+		holder, ttl, sessionID, invocationMode = saved.Holder, saved.TTLSeconds, saved.SessionID, saved.InvocationMode
+	} else {
+		var err error
+		holder, err = resolveActor(holder)
+		if err != nil {
+			return usageErr(issueClaimUsage, err.Error())
+		}
+		if !replaySaved && sessionID == "" {
+			host, _ := os.Hostname()
+			sessionID = manualClaimSessionID("", host, claimCallerPID())
+		}
 	}
 	if operationID == "" {
 		operationID = newOperationID()
 	}
 	previousOperationID := ""
 	journaled := false
-	if journalPath == "" {
-		path, previous, jerr := journalOperationID("claim", issueID, operationID)
+	if !replaySaved {
+		path, previous, jerr := journalClaimOperation(issueID, core.ClaimRequest{
+			Holder: holder, TTLSeconds: ttl, SessionID: sessionID,
+			InvocationMode: invocationMode, OperationID: operationID,
+		})
 		if jerr != nil {
 			return fmt.Errorf("%s", jerr)
 		}
@@ -698,6 +729,34 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 	fmt.Printf("Expires At:  %s\n", resp.ExpiresAt)
 	fmt.Printf("Version:     %d  (use this for --expected-version on close/handoff, not a value read from `issue get`)\n", resp.Version)
 	return nil
+}
+
+func manualClaimSessionID(explicit, host string, pid int) string {
+	if explicit != "" {
+		return explicit
+	}
+	if len(host) == 0 || len(host) > 253 || pid <= 1 {
+		return ""
+	}
+	for _, c := range host {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_') {
+			return ""
+		}
+	}
+	return fmt.Sprintf("dibs-claim:v1:%s:%d", host, pid)
+}
+
+func claimCallerPID() int {
+	if agent := getParentAgent(); agent != "" {
+		if split := strings.LastIndexByte(agent, '-'); split >= 0 {
+			if pid, err := strconv.Atoi(agent[split+1:]); err == nil && pid > 1 {
+				return pid
+			}
+		}
+	}
+	// /proc is unavailable on macOS. The immediate parent is still a useful
+	// diagnostic, though it may exit while the manual lease remains active.
+	return os.Getppid()
 }
 
 const issueHeartbeatUsage = "Usage: dibs issue heartbeat <issue-id> --lease-generation <generation> [--ttl <seconds>] [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint

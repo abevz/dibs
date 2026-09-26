@@ -117,8 +117,9 @@ type Issue struct {
 	Holder             string `json:"holder,omitempty"`
 	LeaseExpiresAt     string `json:"lease_expires_at,omitempty"`
 	// LeasePID is client-reported process metadata. issue run reports its local
-	// supervisor; other clients can report the same typed session ID. It is
-	// advisory, scoped to LeaseHost, and never proves ownership.
+	// supervisor; manual issue claim may report a caller ancestor. Other
+	// clients can report the same typed session IDs. It is advisory, scoped to
+	// LeaseHost, and never proves ownership or process liveness.
 	LeasePID     int          `json:"lease_pid,omitempty"`
 	LeaseHost    string       `json:"lease_host,omitempty"`
 	ClosedAt     string       `json:"closed_at,omitempty"`
