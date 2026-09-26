@@ -44,9 +44,10 @@
   duplicate-work pain, shows a truthful GIF, then the verified four-command
   path and tagline: "Your AI agents call dibs on work. Exactly one wins."
   Show the release-pinned primary install and a download-inspect-run
-  alternative. Compare Beads, Claude Code tasks, and GitHub Issues fairly,
-  with architecture and SDD history in `docs/`. Claims must match the
-  released binaries and tested behavior.
+  alternative. Explain dibs through its own workflow, without comparing it
+  with Beads. Keep architecture and SDD history in `docs/`. Claims must match
+  the released binaries and tested behavior, and a development-only GIF must
+  be labeled as such until its feature is released.
 - **R-07 Hooks.** Claude Code and Codex integration shows ready work at session
   start; the agent or user chooses by default. Auto-claiming the top item is
   available only through an explicit flag. Execution uses `issue run` ownership,

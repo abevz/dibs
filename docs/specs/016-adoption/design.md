@@ -135,3 +135,11 @@ public tag.
 
 The public repository rename and topics are owner-side publication actions,
 not actions in `afc-127`.
+
+## Later owner direction for newcomer wording
+
+The saved [delivery plan](implementation-plan.md) records the owner's later
+decision to explain dibs through its own use cases without a Beads comparison.
+This supersedes the comparison clause in the original packet approval for the
+README and launch copy. The development `watch` demo must also identify its
+build until a published release includes it.
