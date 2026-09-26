@@ -230,6 +230,26 @@ are historical and do not override that coordinator closure.
   `go mod tidy -diff` and `git diff --check` were clean. Independent review
   and CI evidence are recorded on the implementation PR.
 
+### afc-131 — newcomer README
+
+- Rewrote the opening around duplicate task work, the exact public tagline,
+  a real two-frame `dibs watch` GIF, and the four-command preview quickstart.
+  The caption states that watch is on development `main` and is not included
+  in published `v0.1.0-rc.1`. The inspect-before-run path and installation
+  guide remain linked from the first screen.
+- The GIF uses `watch --project demo --once` output from an isolated daemon and
+  database with three demo issues, one blocker, and an actual claim. Only blank
+  terminal rows were removed before rendering the two text frames as an
+  animated GIF; issue IDs, lease holder, TTL, and events were not fabricated.
+- Reconciled R-06, the task map, and design notes with the owner's later
+  no-Beads-comparison decision recorded in `implementation-plan.md`.
+  Architecture and SDD explanations now live behind links to existing docs.
+- Replayed `init`, create, and claim in a fresh temporary Git repository named
+  `myapp` with an isolated daemon: init inferred key `myapp`, create returned
+  `myapp-1`, and claim succeeded. The published release installation and native
+  Linux/macOS checks remain the `afc-128` evidence above. Documentation/link
+  validation and independent review are recorded with the implementation PR.
+
 ## Discovered bugs
 
 ### afc-138 — MCP stdio framing (owner review pending)
