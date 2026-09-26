@@ -247,6 +247,8 @@ evidence of a defect.
 This dated plan records the latest product direction. Existing packet 016
 requirements/design/tasks still contain older comparisons, distribution gates,
 and a swarm-dependent launch; their safety constraints remain applicable.
+On 2026-09-26 the owner removed swarm from launch gating: R-09, the task
+table, and the `afc-134` dependencies now use the `afc-158` race demo.
 Before implementing an affected slice, reconcile those artifacts with this
 plan, including the preview gate and standalone positioning. Prepare separate
 SDD packets for attachments and external adapters. Do not infer that a saved

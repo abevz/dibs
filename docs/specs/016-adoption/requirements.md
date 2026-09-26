@@ -77,10 +77,14 @@
   harness and verify at least three harnesses end to end. The owner intends
   to check the generic contract against claude, codex, agy, opencode,
   deepseek harness, and codewhale, plus others.
-- **R-09 Demonstration and launch.** A recorded `-n 3` run on a demo
-  repository completes distinct ready issues without duplicate claim and
-  shows failure isolation. The owner approves the final packet, writes and
-  publishes the launch post, and approves the public tag.
+- **R-09 Demonstration and launch.** A reproducible recording shows several
+  agents draining one ready queue on a demo repository: a contested claim has
+  exactly one owner, the agents complete distinct issues, and a failed attempt
+  returns its issue to the queue through `HANDOFF`. Before launch it is re-run
+  against the published release binaries. The owner approves the final
+  packet, writes and publishes the launch post, and approves the public tag.
+  The `-n 3` swarm demonstration with failure isolation belongs to the swarm
+  release (R-08) and does not gate launch (owner decision, 2026-09-26).
 
 ## Safety and release gates
 

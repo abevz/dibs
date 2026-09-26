@@ -45,7 +45,7 @@ before implementation rather than treating this historical table as live status.
 | --- | --- | --- |
 | A | `afc-137` `dibs`/`dibsd` rename; `afc-128` release path; `afc-129` init and first-use daemon start; `afc-130` read-only watch; `afc-131` newcomer README | Can proceed alongside `afc-102`; `afc-137` blocks `afc-128` and `afc-129`. Public tag and README claims wait for verified release and clean-machine path. |
 | B | `afc-132` Claude Code/Codex hooks; `afc-133` swarm with isolated worktrees | Wait for `afc-102` and `afc-120`–`afc-122` to be complete and verified. |
-| C | `afc-134` demo GIF and launch post | After B demonstration; owner writes and publishes final text. |
+| C | `afc-158` README race demo; `afc-134` launch post | After hooks (`afc-132`) and the race demo re-run against released binaries; swarm (`afc-133`) is not a prerequisite. Owner writes and publishes final text. |
 
 `requirements.md` states acceptance, `design.md` records boundaries and owner
 decisions, `tasks.md` maps the existing child issues to slices, and `review.md`
