@@ -1,9 +1,0 @@
-{
-  "hooks": {
-    "preToolUse": {
-      "tools": ["Edit", "Write", "Bash"],
-      "command": "${workspaceFolder}/contrib/hooks/codex/check-lease.sh",
-      "mode": "warn"
-    }
-  }
-}
