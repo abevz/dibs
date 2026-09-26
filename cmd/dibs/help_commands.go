@@ -45,6 +45,7 @@ var commandDescriptions = map[string]string{
 	"issue claim":             "Acquire a lease to work on an issue.",
 	"issue close":             "Close a leased issue as done or cancelled.",
 	"issue create":            "Create an issue.",
+	"issue import":            "Import one GitHub issue into the current project.",
 	"issue create-form":       "Create an issue with an interactive form.",
 	"issue dependency":        "Manage dependencies between issues.",
 	"issue edit":              "Edit issue fields (alias of update).",

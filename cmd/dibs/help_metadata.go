@@ -15,6 +15,7 @@ var flagHelpText = map[string]flagHelp{
 	"--acceptance":        {"text", "Conditions that must be met to finish the issue."},
 	"--actor":             {"name", "Identity recorded as the acting agent or user."},
 	"--allow-duplicate":   {"", "Allow another issue with the same external key."},
+	"--allow-closed":      {"", "Allow importing a closed GitHub issue."},
 	"--artifact":          {"id-or-path", "Existing artifact ID or repository-relative path."},
 	"--artifact-root":     {"id", "Registered artifact-root ID."},
 	"--assignee":          {"name", "Agent or user assigned to the issue."},
@@ -115,6 +116,11 @@ var commandFlagHelpText = map[string]map[string]flagHelp{
 	},
 	"issue close": {
 		"--expected-version": {"number", "Current issue version required to avoid overwriting another update."},
+	},
+	"issue import": {
+		"--project":    {"key", "Target project; omitted uses the registered current Git repository."},
+		"--repo":       {"name", "Registered target repository within the project."},
+		"--scope-kind": {"project|repository", "Scope of the imported issue."},
 	},
 	"issue list": {
 		"--tag": {"namespace/value[,..]", "Return issues carrying every listed tag; repeat for more filters."},

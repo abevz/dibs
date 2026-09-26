@@ -140,7 +140,11 @@ func leafHelp(args []string) (string, bool) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Usage: dibs %s", key)
 	if route.pos == 1 {
-		b.WriteString(" <issue-id>")
+		if key == "issue import" {
+			b.WriteString(" <url|owner/repo#n>")
+		} else {
+			b.WriteString(" <issue-id>")
+		}
 	}
 	for _, raw := range strings.Fields(route.flags) {
 		flag := strings.TrimSuffix(raw, "?")
@@ -164,7 +168,11 @@ func leafHelp(args []string) (string, bool) {
 	fmt.Fprintf(&b, "\n\n%s\n", commandDescriptions[key])
 	var requiredParts []string
 	if route.pos == 1 {
-		requiredParts = append(requiredParts, "<issue-id>")
+		if key == "issue import" {
+			requiredParts = append(requiredParts, "<url|owner/repo#n>")
+		} else {
+			requiredParts = append(requiredParts, "<issue-id>")
+		}
 	}
 	for _, flag := range strings.Fields(requiredCommandFlags[key]) {
 		if flag != "--lease-token" {
@@ -175,7 +183,11 @@ func leafHelp(args []string) (string, bool) {
 		b.WriteString("\nRequired: " + strings.Join(requiredParts, ", ") + "\n")
 	}
 	if route.pos == 1 {
-		b.WriteString("\nArgument:\n  <issue-id>  Issue ID or short ID (for example, afc-147).\n")
+		if key == "issue import" {
+			b.WriteString("\nArgument:\n  <url|owner/repo#n>  GitHub issue URL or shorthand.\n")
+		} else {
+			b.WriteString("\nArgument:\n  <issue-id>  Issue ID or short ID (for example, afc-147).\n")
+		}
 	}
 	if route.flags != "" {
 		b.WriteString("\nFlags:\n")

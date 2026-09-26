@@ -10,6 +10,9 @@ owner merges.
 | Publish | `afc-164` | `afc-163` | `dibs issue publish` and `--publish` on `issue close`/`issue run` per R-07–R-10 and design "Publish", including the locked/inaccessible source preflight from R-13; tests for preconditions, rendering, marker idempotency, reopen and reclose, and publish failure after a successful close; no secret or local path in rendered comments. |
 | End-to-end and release | `afc-165` | `afc-163`, `afc-164` | README "Work from GitHub Issues" section; agent-protocol trust rule (R-11); owner tags `v0.1.0-rc.4`; `dibs doctor` shows the GitHub CLI check as ok on the test machine and as a warning with `gh` removed from `PATH`; the R-12 real round trip on a throwaway issue in an owner-chosen repository, using the published binaries; transcript and comment links recorded in `review.md`. |
 
+`afc-163`: implementation and verification complete in its worktree; awaiting
+independent review and owner merge. `afc-164` remains blocked until that merge.
+
 ## Order
 
 1. Owner approves this packet (records it in `review.md` and on `afc-162`).

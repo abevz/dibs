@@ -59,13 +59,15 @@ dibs issue import <url|owner/repo#n> [--project <key>] [--repo <name>]
 1. Parse the reference (R-01). Resolve the target (R-02): without `--project`,
    run `git rev-parse --git-common-dir` in the current directory and match it
    against registered repositories; use that repository and its project with
-   repository scope.
+   repository scope. With an explicit `--project`, infer project scope when
+   `--repo` is absent and repository scope when `--repo` is present.
 2. Look up `external_key` in the target project with the existing issue-list
    filter, any status. A match returns the existing issue (`imported: false`).
 3. Fetch the issue through `gh`. Reject pull requests and, unless
    `--allow-closed`, closed issues (R-06).
-4. Create the issue with the mapped fields (R-03, R-04). The operation ID is a
-   UUIDv5 of `project_id + external_key`, so concurrent imports of the same
+4. Create the issue with the mapped fields (R-03, R-04). The operation ID is
+   `uuid.NewSHA1(uuid.NameSpaceURL, []byte("dibs:issue-import:" + project_id + ":" + external_key))`,
+   so concurrent imports of the same
    source replay one create through the existing operation journal.
    Concurrency can only produce a fingerprint conflict when the body changed
    between the two fetches. In that case, repeat the lookup from step 2 and
@@ -77,6 +79,7 @@ dibs issue import <url|owner/repo#n> [--project <key>] [--repo <name>]
 The description is `Source: <html_url>\n\n<body>`. If it exceeds the server's
 description limit, the body is truncated at a rune boundary with a
 `… (truncated, see source)` marker. The source URL is never truncated.
+The current server has no description limit, so the body is stored verbatim.
 
 No schema change or unique index is added. The lookup plus the deterministic
 operation ID cover retries and concurrent imports from dibs. Hand-made

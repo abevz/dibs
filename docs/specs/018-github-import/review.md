@@ -34,4 +34,21 @@
 
 ## Evidence
 
-None yet; slices `afc-163`–`afc-165` record theirs here.
+### afc-163 (implementation in review)
+
+- Owner clarifications: with explicit `--project`, scope follows presence of
+  `--repo`; descriptions remain complete because the server has no limit;
+  UUIDv5 uses `uuid.NameSpaceURL` and the name
+  `dibs:issue-import:<project_id>:<external_key>`.
+- Added a CLI-only GitHub client, source parser, import command, and optional
+  doctor check. Daemon, API, store, and migrations are unchanged.
+- Focused tests: `go test ./cmd/dibs -run 'TestIssueImport|TestImportOperationID|TestMapExitCodeErr'`
+  and `go test ./internal/github ./internal/doctor` passed. Full verification:
+  `go build ./...` and `go test ./...` passed.
+- Scratch daemon with temporary HOME, DIBS_DB, and short DIBS_SOCKET plus fake
+  `gh`: new and repeated import, two concurrent imports (one dibs issue),
+  closed source rejection and `--allow-closed`, PR rejection, current-checkout
+  target resolution, doctor success and all three warning points, and GitHub
+  error-class JSON output passed. No test called the real GitHub API.
+- Real GitHub round trip, publish, README/protocol updates, tag, and release
+  remain in `afc-164`/`afc-165` or owner work as described in tasks.md.

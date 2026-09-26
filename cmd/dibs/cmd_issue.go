@@ -16,7 +16,7 @@ import (
 
 // ─── Issue ───────────────────────────────────────────────────────────────────
 
-const issueUsage = "Usage: dibs issue <create|create-form|get|list|ready|claim|heartbeat|release|handoff|run|edit|update|close|operator-close|operator-reopen|operator-release|cancel|link|unlink|dependency|note|tag|events>"
+const issueUsage = "Usage: dibs issue <create|create-form|import|get|list|ready|claim|heartbeat|release|handoff|run|edit|update|close|operator-close|operator-reopen|operator-release|cancel|link|unlink|dependency|note|tag|events>"
 
 // hasHelpFlag reports whether args requests help before a -- separator.
 // Arguments after the separator belong to a child command, not dibs.
@@ -83,6 +83,8 @@ func runIssue(ctx context.Context, c *client.Client, args []string) error {
 		return runIssueCreate(ctx, c, args[1:])
 	case "create-form":
 		return runIssueCreateForm(ctx, c, args[1:])
+	case "import":
+		return runIssueImport(ctx, c, args[1:])
 	case "get":
 		return runIssueGet(ctx, c, args[1:])
 	case "list":
