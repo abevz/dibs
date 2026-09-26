@@ -117,6 +117,9 @@ first task. See [installation and first use](docs/install.md) for the complete
 workflow, PATH setup, script inspection, and removal. GitHub's `latest` URL
 does not select this prerelease.
 
+If you already use Homebrew, install the same preview with
+`brew install abevz/dibs/dibs`.
+
 ### Build from source
 
 ### Prerequisites

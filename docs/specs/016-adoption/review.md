@@ -91,8 +91,23 @@ are historical and do not override that coordinator closure.
   that manual dispatch on a tag could publish was fixed by requiring a tag push;
   the revised workflow was reviewed again and `actionlint` passed.
 - The versioned preview installer can now be advertised. A tested Homebrew tap
-  remains required before advertising that separate channel. The scratch
-  verification did not restart a live service or change a live database.
+  was published at [abevz/homebrew-dibs](https://github.com/abevz/homebrew-dibs).
+  Its initial formula is byte-for-byte the `dibs.rb` asset from
+  `v0.1.0-rc.1` (SHA-256 `2fd8e9da28f6495150a635f7cc46a106da3a513858f3e12e36b0965ab48a940b`).
+  [Tap PR #1](https://github.com/abevz/homebrew-dibs/pull/1) fixed a CI-only
+  self-copy after Homebrew's setup action mapped the checkout into the tap.
+  The corrected PR and [merged-main run](https://github.com/abevz/homebrew-dibs/actions/runs/36230532596)
+  installed and tested `abevz/dibs/dibs` on Linux amd64/arm64 and macOS
+  Intel/Apple Silicon. Each job checked all three installed binaries and the
+  license. The tap formula and workflow underwent independent read-only review;
+  `actionlint` and Ruby syntax checks passed.
+- A separate Linux amd64 Go 1.27.1 check installed all three commands with
+  `go install ...@v0.1.0-rc.1` into a temporary `GOBIN`; `go version -m`
+  reported the tagged module. That command prints `revision unknown` because
+  it does not supply the release workflow's revision linker flag, so
+  it is not promoted as a newcomer installation path here. AUR also remains
+  unadvertised. The scratch verification did not restart a live service or
+  change a live database.
 
 ### afc-129 — first use implementation and preview verification
 
