@@ -67,7 +67,9 @@ The preview provides `dibs watch --project <key>` for a live,
 read-only view of ready work, active lease holders and remaining time,
 blockers, and recent events. Use `--once` for a text snapshot or `--json` for
 a machine-readable one. It does not claim tasks. Active `issue run` leases show
-their self-reported supervisor PID and host for diagnostics.
+their self-reported supervisor PID and host. New manual `issue claim` leases
+show a caller ancestor PID and host when available; that process can exit while
+the lease remains active. These values are diagnostics, not lease ownership.
 
 Claude Code and Codex can show ready work when a session starts. Install the
 project hook with `dibs hooks install --agent claude` or
