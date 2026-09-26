@@ -350,6 +350,17 @@ With `--json`, the issue object exposes the same derived state as optional
 relationship list. To query children of `aion-500` from JSON output:
 `dibs issue list --json | jq -r '.[] | select(.dependencies[]? | .kind == "parent" and (.depends_on_short_id == "aion-500" or .depends_on_id == "aion-500"))'`
 
+## Live watch
+
+`dibs watch --project <key>` opens a read-only terminal board with ready issues,
+active lease holders and remaining time, blocked issues, and recent activity.
+Press `r` to refresh or `q` to quit. It refreshes every two seconds and marks
+the last complete view stale if the daemon becomes unavailable. Use
+`dibs watch --project <key> --once` for a text snapshot or add `--json` for a
+machine-readable snapshot. Watch reads the daemon API and does not claim work.
+The installed `dibs` and running `dibsd` must both include the watch endpoint;
+restart an older daemon explicitly after upgrading it.
+
 ## Agent guidance sync
 
 `dibs protocol` is the canonical detailed agent workflow. `dibs init`

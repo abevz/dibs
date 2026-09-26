@@ -25,6 +25,7 @@ type argRoute struct {
 var commandRoutes = map[string]argRoute{
 	"health": {"", 0}, "doctor": {"", 0}, "protocol": {"", 0}, "version": {"", 0},
 	"init":         {"--path --dry-run? --project --repo --default-branch", 0},
+	"watch":        {"--project --once?", 0},
 	"daemon start": {"", 0}, "daemon stop": {"", 0},
 	"project add": {"--key --name --description", 0}, "project list": {"", 0},
 	"repo add": {"--project --logical-name --canonical-git-dir --default-branch --remotes", 0}, "repo list": {"--project", 0},

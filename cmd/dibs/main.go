@@ -97,7 +97,7 @@ func main() {
 	c := client.New(cfg.SocketPath)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if filtered[0] != "version" && filtered[0] != "protocol" && filtered[0] != "health" && filtered[0] != "doctor" && filtered[0] != "daemon" && filtered[0] != "init" {
+	if filtered[0] != "version" && filtered[0] != "protocol" && filtered[0] != "health" && filtered[0] != "doctor" && filtered[0] != "daemon" && filtered[0] != "init" && filtered[0] != "watch" {
 		if err := firstuse.EnsureDaemon(ctx, cfg, firstuse.FindDaemon()); err != nil {
 			fail(err)
 		}
@@ -141,6 +141,8 @@ func main() {
 		err = runExport(ctx, c, filtered[1:])
 	case "stats":
 		err = runStats(ctx, c, filtered[1:])
+	case "watch":
+		err = runWatch(ctx, c, filtered[1:])
 	case "issue":
 		err = runIssue(ctx, c, filtered[1:])
 	case "dependency":
@@ -161,7 +163,7 @@ func main() {
 }
 
 func shouldCheckDaemonRevision(args []string) bool {
-	if len(args) == 0 || args[0] == "init" || args[0] == "protocol" || args[0] == "version" {
+	if len(args) == 0 || args[0] == "init" || args[0] == "protocol" || args[0] == "version" || args[0] == "watch" {
 		return false
 	}
 	for _, arg := range args {

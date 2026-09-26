@@ -17,6 +17,8 @@ func TestCommandArgumentsFailClosed(t *testing.T) {
 	}{
 		{"health positional", []string{"health", "extra"}},
 		{"doctor flag", []string{"doctor", "--typo"}},
+		{"watch unknown flag", []string{"watch", "--typo"}},
+		{"watch missing project", []string{"watch", "--project"}},
 		{"protocol positional", []string{"protocol", "extra"}},
 		{"init missing value", []string{"init", "--path"}},
 		{"project unknown", []string{"project", "add", "--key", "p", "--name", "P", "--typo"}},
@@ -70,7 +72,7 @@ func TestCommandArgumentsFailClosed(t *testing.T) {
 
 func TestDocumentedCommandArgumentsRemainAccepted(t *testing.T) {
 	tests := [][]string{
-		{"health"}, {"doctor"}, {"protocol"}, {"version"},
+		{"health"}, {"doctor"}, {"protocol"}, {"version"}, {"watch", "--project", "afc", "--once"},
 		{"init", "--dry-run", "--path", "AGENTS.md"},
 		{"project", "add", "--key", "p", "--name", "P"},
 		{"repo", "add", "--project", "p", "--logical-name", "r", "--canonical-git-dir", "/tmp/r"},

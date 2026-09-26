@@ -212,6 +212,24 @@ are historical and do not override that coordinator closure.
   no material issue, and PR #67 CI passed on follow-up implementation HEAD
   `7584c01`. Owner review remains pending.
 
+### afc-130 — live read-only watch
+
+- Added `dibs watch` with project scope, a one-shot text/JSON snapshot, and an
+  interactive board that refreshes every two seconds. It shows ready issues,
+  active holders and lease time remaining, active blockers, and recent events.
+  A disconnected daemon leaves the last complete snapshot visible as stale;
+  terminal resize redraws the board without any claim or mutation.
+- The board reads only daemon APIs. `GET /v1/events/recent` seeds the newest
+  events and returns a cursor for subsequent `GET /v1/events` updates, so a
+  fresh watch does not mislabel old history as recent activity. The CLI does
+  not start a stopped daemon when entering watch.
+- Focused store, API, client, CLI, and rendering tests passed. An isolated
+  daemon/database smoke showed a new issue in `READY` and `RECENT EVENTS` from
+  `watch --once`; an interactive terminal opened, refreshed, and quit with `q`.
+  `go test ./...` passed with ambient operator-token variables removed;
+  `go mod tidy -diff` and `git diff --check` were clean. Independent review
+  and CI evidence are recorded on the implementation PR.
+
 ## Discovered bugs
 
 ### afc-138 — MCP stdio framing (owner review pending)

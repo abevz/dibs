@@ -225,3 +225,7 @@ func (s *Store) ListEvents(ctx context.Context, issueID string) ([]core.Event, e
 func (s *Store) ListGlobalEvents(ctx context.Context, since string, limit int) (core.EventPage, error) {
 	return ListGlobalEvents(ctx, s.db, since, limit)
 }
+
+func (s *Store) ListRecentEvents(ctx context.Context, limit int) (core.EventPage, error) {
+	return ListRecentEvents(ctx, s.db, limit)
+}

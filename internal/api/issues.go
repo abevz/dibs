@@ -1105,3 +1105,24 @@ func handleWatchEvents(st store.CoordinatorStore, logger *slog.Logger) http.Hand
 		}
 	}
 }
+
+func handleRecentEvents(st store.CoordinatorStore, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit := 100
+		if raw := r.URL.Query().Get("limit"); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed <= 0 {
+				writeError(w, http.StatusBadRequest, core.ErrValidationFailed, "limit must be a positive integer")
+				return
+			}
+			limit = min(parsed, 500)
+		}
+		page, err := st.ListRecentEvents(r.Context(), limit)
+		if err != nil {
+			logger.Error("failed to list recent events", "error", err)
+			writeInternalError(w, err, "failed to list recent events")
+			return
+		}
+		writeJSON(w, http.StatusOK, page)
+	}
+}

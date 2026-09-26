@@ -50,6 +50,7 @@ func registerRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.Logger) {
 	mux.HandleFunc("GET /v1/worktrees", handleListWorktrees(st, logger))
 	mux.HandleFunc("DELETE /v1/worktrees/{worktree_id}", handleDeleteWorktree(st, logger))
 	mux.HandleFunc("GET /v1/events", handleWatchEvents(st, logger))
+	mux.HandleFunc("GET /v1/events/recent", handleRecentEvents(st, logger))
 
 	// Artifact roots
 	mux.HandleFunc("POST /v1/artifact-roots", handleCreateArtifactRoot(st, logger))
@@ -2378,6 +2379,38 @@ func TestWatchEvents(t *testing.T) {
 	}
 	if followUp.NextSince != result.NextSince {
 		t.Fatalf("expected next_since to stay at %q, got %q", result.NextSince, followUp.NextSince)
+	}
+}
+
+func TestRecentEventsReturnsNewestAndCursor(t *testing.T) {
+	server, db := newTestServer(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, id := range []string{"first", "second", "third"} {
+		if _, err := db.Exec(`INSERT INTO events (id, actor, event_type, payload_json, created_at) VALUES (?, 'test', 'test.event', '{}', ?)`, id, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resp, err := http.Get(server.URL + "/v1/events/recent?limit=2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("recent status = %d", resp.StatusCode)
+	}
+	page := decodeJSON[core.EventPage](t, resp)
+	if len(page.Events) != 2 || page.Events[0].ID != "second" || page.Events[1].ID != "third" || page.NextSince == "" {
+		t.Fatalf("recent page = %#v", page)
+	}
+	if _, err := db.Exec(`INSERT INTO events (id, actor, event_type, payload_json, created_at) VALUES ('fourth', 'test', 'test.event', '{}', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	resp, err = http.Get(server.URL + "/v1/events?since=" + page.NextSince)
+	if err != nil {
+		t.Fatal(err)
+	}
+	followup := decodeJSON[core.EventPage](t, resp)
+	if len(followup.Events) != 1 || followup.Events[0].ID != "fourth" {
+		t.Fatalf("followup = %#v", followup)
 	}
 }
 

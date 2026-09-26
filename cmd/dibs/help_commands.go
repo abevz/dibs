@@ -8,6 +8,7 @@ var commandDescriptions = map[string]string{
 	"protocol":                "Print the agent protocol contract.",
 	"version":                 "Print the dibs build revision.",
 	"init":                    "Register the current Git repository and worktree, then install agent instructions.",
+	"watch":                   "Show ready work, active leases, blockers, and recent events in a read-only live board.",
 	"daemon":                  "Start or stop the local daemon.",
 	"daemon start":            "Start dibsd and wait for a healthy socket.",
 	"daemon stop":             "Stop the local dibsd process for the configured database.",
