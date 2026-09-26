@@ -44,6 +44,23 @@
 - Owner approved this amendment on 2026-09-26 (in session, relayed by the
   agent); `afc-169` may start after `afc-164` merges.
 
+## Amendment: Claude Code and Codex integration (2026-09-26)
+
+- Owner direction: the workflow must be visible where Claude Code and Codex
+  meet dibs, not only in the protocol and MCP. R-16 extends `afc-169` to the
+  SessionStart context and `contrib/hooks/README.md`. R-12 now requires real
+  `claude -p` and `codex exec` sessions and one MCP import from Codex.
+- Checked against the code: `hookSessionStart` in `cmd/dibs/cmd_hooks.go`
+  prints `- <short_id>: <title>` for up to ten ready issues. `core.Issue`
+  already carries `external_key`. The context text comes from issue titles,
+  which for imported issues are GitHub content; the hook therefore renders
+  titles on one line and states the trust rule.
+- `issue run --publish` posts from the parent process, so agent sandboxes
+  that block network access do not affect publication. Whether Codex applies
+  its sandbox to MCP servers is not established; afc-165 verifies it.
+- Owner approved this amendment on 2026-09-26 (in session, relayed by the
+  agent).
+
 ## Approval
 
 - [x] Owner approved this packet on 2026-09-26 (in session, relayed by the
