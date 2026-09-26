@@ -86,8 +86,24 @@ only when they still point to the dibs binaries. The database, backups,
 configuration, and logs stay on disk so removal of the programs does not
 discard work.
 
-## Other channels
+## Homebrew
 
-The release workflow prepares a versioned Homebrew formula using the same
-archive checksums. A tap, `go install`, and AUR instructions will be advertised
-after each channel is installed and checked on its target environment.
+If Homebrew is already installed, the same preview is available from the
+[dibs tap](https://github.com/abevz/homebrew-dibs):
+
+```sh
+brew install abevz/dibs/dibs
+```
+
+This installs `dibs`, `dibsd`, and `dibs-mcp` on Linux amd64/arm64 and macOS
+Intel/Apple Silicon. Run `dibs init` in a Git repository afterward. To receive
+a newer version when the tap is updated, run `brew update` followed by
+`brew upgrade abevz/dibs/dibs`. `brew uninstall abevz/dibs/dibs` removes the
+programs while retaining the database and configuration. If you have also
+used the shell installer, `command -v dibs` shows which binary your shell runs.
+Stop a running daemon before upgrading or uninstalling, then start it again
+after an upgrade. For a manager-owned daemon, use its service manager as
+described in [operations](operations.md#explicit-service-switch).
+
+`go install` and AUR instructions will be added after those channels are
+verified for their advertised environments.
