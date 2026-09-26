@@ -125,9 +125,12 @@ func TestVersionCommandReportsBuildRevision(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
+		want string
 	}{
-		{name: "version command", args: []string{"version"}},
-		{name: "version flag", args: []string{"--version"}},
+		{name: "version command", args: []string{"version"}, want: "dibs dev (test-re)\n"},
+		{name: "version flag", args: []string{"--version"}, want: "dibs dev (test-re)\n"},
+		{name: "JSON version command", args: []string{"--json", "version"}, want: "{\"version\":\"dev\",\"revision\":\"test-revision-xyz\"}\n"},
+		{name: "JSON version flag", args: []string{"--json", "--version"}, want: "{\"version\":\"dev\",\"revision\":\"test-revision-xyz\"}\n"},
 	}
 
 	for _, tt := range tests {
@@ -143,12 +146,31 @@ func TestVersionCommandReportsBuildRevision(t *testing.T) {
 			if err := runCmd.Run(); err != nil {
 				t.Fatalf("dibs %v failed: %v\nstderr: %s", tt.args, err, stderr.String())
 			}
-			if !strings.Contains(stdout.String(), localRevision) {
-				t.Errorf("stdout = %q, want it to contain revision %q", stdout.String(), localRevision)
-			}
-			if strings.Contains(stdout.String(), "unknown") {
-				t.Errorf("stdout = %q, want the embedded revision, not the unknown default", stdout.String())
+			if stdout.String() != tt.want {
+				t.Errorf("stdout = %q, want %q", stdout.String(), tt.want)
 			}
 		})
+	}
+}
+
+func TestVersionCommandReportsReleaseTag(t *testing.T) {
+	binPath := filepath.Join(t.TempDir(), "dibs")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-ldflags",
+		"-X github.com/abevz/dibs/internal/build.Version=v0.1.0-rc.3 -X github.com/abevz/dibs/internal/build.Revision=abcdef0123456789",
+		"-o", binPath, ".")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build release binary: %v\n%s", err, out)
+	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"version"}, "dibs v0.1.0-rc.3 (abcdef0)\n"},
+		{[]string{"--json", "version"}, "{\"version\":\"v0.1.0-rc.3\",\"revision\":\"abcdef0123456789\"}\n"},
+	} {
+		out, err := exec.Command(binPath, tc.args...).CombinedOutput()
+		if err != nil || string(out) != tc.want {
+			t.Fatalf("dibs %v: output %q, error %v; want %q", tc.args, out, err, tc.want)
+		}
 	}
 }

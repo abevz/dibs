@@ -6,7 +6,7 @@ var commandDescriptions = map[string]string{
 	"health":                  "Check daemon health.",
 	"doctor":                  "Run environment diagnostics.",
 	"protocol":                "Print the agent protocol contract.",
-	"version":                 "Print the dibs build revision.",
+	"version":                 "Print the dibs version and build revision.",
 	"init":                    "Register the current Git repository and worktree, then install agent instructions.",
 	"watch":                   "Show ready work, active leases, blockers, and recent events in a read-only live board.",
 	"hooks":                   "Integrate Claude Code or Codex with the issue lifecycle.",
