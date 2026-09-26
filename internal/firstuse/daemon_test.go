@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -15,6 +16,18 @@ import (
 	"github.com/abevz/dibs/internal/config"
 	"github.com/abevz/dibs/internal/core"
 )
+
+func TestEnsureDaemonRejectsLongSocketBeforeStarting(t *testing.T) {
+	path := "/" + strings.Repeat("x", len(syscall.RawSockaddrUnix{}.Path))
+	cfg := config.Config{SocketPath: path, DBPath: filepath.Join(t.TempDir(), "db")}
+	err := EnsureDaemon(context.Background(), cfg, "/bin/false")
+	if err == nil || !strings.Contains(err.Error(), "DIBS_SOCKET") {
+		t.Fatalf("EnsureDaemon error = %v, want path-length hint", err)
+	}
+	if _, statErr := os.Stat(path + ".startup.log"); !os.IsNotExist(statErr) {
+		t.Fatalf("startup log created before validation: %v", statErr)
+	}
+}
 
 func TestEnsureDaemonUsesHealthyMatchingSocket(t *testing.T) {
 	dir := t.TempDir()

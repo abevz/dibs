@@ -226,7 +226,7 @@ func handleClaimIssue(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 					writeError(w, http.StatusConflict, core.ErrIdempotencyConflict, apiErr.Message)
 					return
 				case core.ErrLeaseHeld:
-					writeError(w, http.StatusConflict, core.ErrLeaseHeld, apiErr.Message)
+					writeAPIError(w, http.StatusConflict, apiErr)
 					return
 				case core.ErrIssueNotReady:
 					writeError(w, http.StatusConflict, core.ErrIssueNotReady, apiErr.Message)

@@ -220,7 +220,7 @@ func fail(err error) {
 	var clientErr *client.ClientError
 	if errors.As(err, &clientErr) {
 		if jsonOutput {
-			resp := core.APIErrorResponse{Error: core.NewAPIError(clientErr.Code, clientErr.Message)}
+			resp := core.APIErrorResponse{Error: core.APIError{Code: clientErr.Code, Message: clientErr.Message, Details: clientErr.Details}}
 			json.NewEncoder(os.Stderr).Encode(resp)
 		} else {
 			fmt.Fprintf(os.Stderr, "error: %v\n", clientErr)
@@ -329,6 +329,7 @@ func runHealth(ctx context.Context, c *client.Client) error {
 	}
 	fmt.Printf("Name:       %s\n", health.Name)
 	fmt.Printf("Status:     %s\n", health.Status)
+	fmt.Printf("Version:    %s\n", health.Version)
 	fmt.Printf("Revision:   %s\n", health.Revision)
 	fmt.Printf("DBPath:     %s\n", health.DBPath)
 	fmt.Printf("SocketPath: %s\n", health.SocketPath)
@@ -357,12 +358,16 @@ func runDependency(ctx context.Context, c *client.Client, args []string) error {
 	return runIssueDependency(ctx, c, args)
 }
 
-// printVersion reports the dibs build revision so an installed binary can be
-// compared against the source checkout (`git rev-parse HEAD`). build.Revision
-// is embedded by the Makefile ldflags; it reads "unknown" for plain
-// `go build`/`go install` binaries that skipped the Makefile.
+// printVersion works without a daemon so bug reports can identify the binary.
 func printVersion() {
-	fmt.Printf("dibs revision %s\n", build.Revision)
+	if jsonOutput {
+		_ = json.NewEncoder(os.Stdout).Encode(struct {
+			Version  string `json:"version"`
+			Revision string `json:"revision"`
+		}{Version: build.Version, Revision: build.Revision})
+		return
+	}
+	fmt.Printf("dibs %s (%s)\n", build.Version, build.ShortRevision())
 }
 
 func printIssue(i core.Issue) {

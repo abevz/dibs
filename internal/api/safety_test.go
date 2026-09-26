@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/abevz/dibs/internal/build"
 	"github.com/abevz/dibs/internal/config"
 	"github.com/abevz/dibs/internal/core"
 	"github.com/abevz/dibs/internal/store/sqlite"
@@ -86,14 +87,15 @@ func TestDaemonSafetyFieldsAndMutationLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 	var health struct {
-		Status string            `json:"status"`
-		Safety core.SafetyHealth `json:"safety"`
+		Status  string            `json:"status"`
+		Version string            `json:"version"`
+		Safety  core.SafetyHealth `json:"safety"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
 		t.Fatal(err)
 	}
 	_ = resp.Body.Close()
-	if health.Status != "ok" || health.Safety.ActiveLeases != 1 || health.Safety.MutationCounters.ClaimConflicts != 1 || health.Safety.DurableClaimConflicts != 1 ||
+	if health.Status != "ok" || health.Version != build.Version || health.Safety.ActiveLeases != 1 || health.Safety.MutationCounters.ClaimConflicts != 1 || health.Safety.DurableClaimConflicts != 1 ||
 		!health.Safety.SingletonLockHeld || !health.Safety.MigrationsVerifiedAtStartup || !health.Safety.IntegrityVerifiedAtStartup ||
 		health.Safety.LatestMigration != "0011_rejection_counts.sql" {
 		t.Fatalf("health = %+v", health)
@@ -115,6 +117,7 @@ func TestDaemonSafetyFieldsAndMutationLogs(t *testing.T) {
 		strings.Contains(logs.String(), claim.LeaseToken) {
 		t.Fatalf("unsafe or missing mutation log: %s", logs.String())
 	}
+	client.CloseIdleConnections()
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)

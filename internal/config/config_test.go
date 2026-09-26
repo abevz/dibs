@@ -29,6 +29,14 @@ func TestConfigRecognizesOnlyOwnedDefaultRuntimePaths(t *testing.T) {
 
 func TestCanonicalEnvironmentWinsOverLegacy(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	// Env distinguishes an absent variable from an explicitly empty one.
+	// Restore the caller's environment after testing the absent case.
+	for _, key := range []string{"DIBS_OPERATOR_TOKEN", "AF_OPERATOR_TOKEN"} {
+		t.Setenv(key, "")
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+	}
 	t.Setenv("DIBS_DB", "/tmp/dibs.db")
 	t.Setenv("AF_COORDINATOR_DB", "/tmp/legacy.db")
 	t.Setenv("DIBS_SOCKET", "/tmp/dibs.sock")
