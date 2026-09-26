@@ -117,6 +117,12 @@ retain heartbeat and lease-loss behavior, and hand off unfinished work through
 the atomic lifecycle. A read-only `dibs watch` shows ready work, holders and
 remaining lease time, blockers, recent events, and an obvious disconnected state.
 
+For RC2, the owner chose one task per one-shot agent invocation. Claude Code
+and Codex `Stop` is turn-scoped, so `afc-132` uses explicit completion inside
+`issue run --require-complete`; an ordinary successful agent exit without that
+signal hands off. Automatic issue selection and long-lived interactive lease
+handling are deferred.
+
 Acceptance: two real agent sessions perform distinct tasks; interruption of one
 does not corrupt the other's ownership or falsely complete unfinished work.
 The documented integration works from a fresh installation. Record the actual

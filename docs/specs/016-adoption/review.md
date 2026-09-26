@@ -250,6 +250,43 @@ are historical and do not override that coordinator closure.
   Linux/macOS checks remain the `afc-128` evidence above. Documentation/link
   validation and independent review are recorded with the implementation PR.
 
+## Wave B integrations
+
+### afc-132 — one-shot Claude Code/Codex hooks (implementation review pending)
+
+- Owner selected one task per `issue run` for RC2. Current Claude Code 2.1.280
+  and Codex CLI 0.157.1 expose turn-scoped `Stop`, so SessionStart is read-only
+  and completion is explicit through `issue run --require-complete` plus
+  `dibs hooks complete`. A successful agent exit without that marker uses the
+  existing atomic `HANDOFF:` path. Auto-selection is deferred.
+- `dibs hooks install --agent claude|codex` merges a project SessionStart hook
+  without replacing unrelated configuration. It pins the executable path so
+  an agent login shell with an older `dibs` on PATH uses the intended version.
+  The old hook snippets were removed because their schema and script paths
+  were stale.
+- Focused CLI tests cover config preservation, idempotence, symlink refusal,
+  explicit completion, and unfinished handoff. In an isolated daemon/database,
+  simultaneous `issue run` calls for one issue returned a successful first
+  claim and `lease_held` for the second; the first completed and closed.
+  Evidence: `/tmp/afc132-smoke.noUqg6/`.
+- Two separate Codex CLI sessions used project hooks and completed distinct
+  isolated issues (`demo-2`, then `demo-1`) through the explicit marker;
+  both ended `done`. Initial Claude Code attempts hit intentionally low USD
+  budgets and correctly handed off without closing. A final Claude Code
+  2.1.280 run read `NOTE.txt`, called the pinned `dibs hooks complete`, and
+  closed `demo-3` as `done`. Evidence: `/tmp/afc132-agents.p4U4rT/`.
+- Independent review found an installer match that could replace a wrapped
+  user command. The match now accepts only a standalone generated Dibs
+  command; a regression test preserves `cleanup.sh && ...`. Review also
+  questioned daemon startup; an isolated stopped-daemon smoke proved
+  `hooks session-start` starts `dibsd` and returns the ready context. Evidence:
+  `/tmp/afc132-autostart/`.
+- The first broad `go test ./...` run was invalidated by an ambient
+  `AF_OPERATOR_TOKEN` in the environment. The clean full suite passed with
+  `AF_OPERATOR_TOKEN` and `DIBS_OPERATOR_TOKEN` removed; `go vet ./cmd/dibs
+  ./internal/watch` and `git diff --check` passed. Independent review is
+  required before merging.
+
 ## Discovered bugs
 
 ### afc-138 — MCP stdio framing (owner review pending)

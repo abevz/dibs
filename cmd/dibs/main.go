@@ -97,7 +97,7 @@ func main() {
 	c := client.New(cfg.SocketPath)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if filtered[0] != "version" && filtered[0] != "protocol" && filtered[0] != "health" && filtered[0] != "doctor" && filtered[0] != "daemon" && filtered[0] != "init" && filtered[0] != "watch" {
+	if commandNeedsDaemon(filtered) {
 		if err := firstuse.EnsureDaemon(ctx, cfg, firstuse.FindDaemon()); err != nil {
 			fail(err)
 		}
@@ -143,6 +143,8 @@ func main() {
 		err = runStats(ctx, c, filtered[1:])
 	case "watch":
 		err = runWatch(ctx, c, filtered[1:])
+	case "hooks":
+		err = runHooks(ctx, c, filtered[1:])
 	case "issue":
 		err = runIssue(ctx, c, filtered[1:])
 	case "dependency":
@@ -159,6 +161,17 @@ func main() {
 	}
 	if err != nil {
 		fail(err)
+	}
+}
+
+func commandNeedsDaemon(args []string) bool {
+	switch args[0] {
+	case "version", "protocol", "health", "doctor", "daemon", "init", "watch":
+		return false
+	case "hooks":
+		return len(args) > 1 && args[1] == "session-start"
+	default:
+		return true
 	}
 }
 

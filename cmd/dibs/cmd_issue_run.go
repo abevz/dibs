@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -15,7 +16,7 @@ import (
 	"github.com/abevz/dibs/internal/core"
 )
 
-const issueRunUsage = "Usage: dibs issue run <issue-id> [--actor <name>] [--ttl <seconds>] [--close-resolution done|cancelled] [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note <text>] [--invocation-mode interactive|scheduled|unknown] -- <command> [args...]\n" + lifecycleHint +
+const issueRunUsage = "Usage: dibs issue run <issue-id> [--actor <name>] [--ttl <seconds>] [--require-complete] [--close-resolution done|cancelled] [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note <text>] [--invocation-mode interactive|scheduled|unknown] -- <command> [args...]\n" + lifecycleHint +
 	"\nOwns claim -> heartbeat -> close/handoff around a single subprocess; the child receives the lease token in its environment, never in argv. On exit 0, closes with --close-resolution (default done). On any other exit, or on Ctrl-C, hands the lease off with an auto-generated HANDOFF: note instead of closing. On confirmed lease ownership loss (heartbeat rejected with lease_expired, or the lease window closing without proof), the child is terminated and the CLI exits non-zero with lease_expired without sending a close request."
 
 // runIssueRun claims issueID, execs the given command with the lease
@@ -56,6 +57,7 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	closeResolution := "done"
 	var branch, prURL, commitSHA, note string
 	invocationMode := ""
+	requireComplete := false
 
 	for i := 1; i < len(flagArgs); i++ {
 		switch flagArgs[i] {
@@ -99,6 +101,8 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 				invocationMode = flagArgs[i+1]
 				i++
 			}
+		case "--require-complete":
+			requireComplete = true
 		default:
 			return usageErr(issueRunUsage, fmt.Sprintf("unknown flag: %s", flagArgs[i]))
 		}
@@ -109,7 +113,17 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	if ttl <= 0 {
 		return usageErr(issueRunUsage, "--ttl must be positive")
 	}
-
+	completionDir := ""
+	completionFile := ""
+	var err error
+	if requireComplete {
+		completionDir, err = os.MkdirTemp("", "dibs-run-*")
+		if err != nil {
+			return fmt.Errorf("create completion directory: %w", err)
+		}
+		defer os.RemoveAll(completionDir)
+		completionFile = completionDir + "/complete"
+	}
 	holder, err := resolveActor(actor)
 	if err != nil {
 		return usageErr(issueRunUsage, err.Error())
@@ -124,7 +138,7 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 
 	claim, err := c.ClaimIssueWithSessionAndMode(ctx, issueID, holder, ttl, "", invocationMode)
 	if err != nil {
-		fail(err)
+		return err
 	}
 	fmt.Printf("Claimed %s (version %d, expires %s)\n", issueID, claim.Version, claim.ExpiresAt)
 
@@ -181,6 +195,9 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		"AF_ISSUE_ID="+issueID,
 		fmt.Sprintf("AF_EXPECTED_VERSION=%d", claim.Version),
 	)
+	if requireComplete {
+		cmd.Env = append(cmd.Env, "DIBS_COMPLETION_FILE="+completionFile)
+	}
 	// exec.CommandContext's default cancellation is an immediate SIGKILL of
 	// only the process leader. Signal the isolated workload group so shells and
 	// their current children all get the same graceful-stop request.
@@ -239,6 +256,12 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 
 	background := context.Background()
 
+	if runErr == nil && requireComplete {
+		marker, markerErr := os.ReadFile(completionFile)
+		if markerErr != nil || string(marker) != "done\n" {
+			runErr = errors.New("agent exited without dibs hooks complete")
+		}
+	}
 	if runErr == nil {
 		result, err := c.CloseIssue(background, issueID, core.CloseIssueRequest{
 			Resolution:      closeResolution,
@@ -269,6 +292,9 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		exitCode = exitErr.ExitCode()
 	}
 	handoffNote := fmt.Sprintf("HANDOFF: issue run command failed (exit %d)", exitCode)
+	if requireComplete && strings.Contains(runErr.Error(), "without dibs hooks complete") {
+		handoffNote = "HANDOFF: agent run ended without explicit completion"
+	}
 	if ctx.Err() != nil {
 		handoffNote = "HANDOFF: issue run cancelled"
 	}
@@ -276,6 +302,9 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		return fmt.Errorf("command failed (%v) and handoff also failed: %w", runErr, err)
 	}
 	fmt.Fprintf(os.Stderr, "issue run: command failed, lease handed off with note: %s\n", handoffNote)
+	if completionDir != "" {
+		_ = os.RemoveAll(completionDir)
+	}
 	os.Exit(exitCode)
 	return nil // unreachable
 }

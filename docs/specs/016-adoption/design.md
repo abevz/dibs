@@ -40,9 +40,11 @@ out of the authoritative database and never call mutation endpoints while
 refreshing. A disconnected view labels its data stale.
 
 Hooks are thin client-side integrations over `issue run`. SessionStart presents
-ready items and does not claim by default. The selected issue enters the
-normal claim/heartbeat/cancel/close-or-handoff path. For unfinished work, the
-Stop hook checks ownership, then writes a `HANDOFF:` note through the atomic
+ready items and does not claim. The selected issue enters the normal
+claim/heartbeat/cancel/close-or-handoff path. The one-shot agent command uses
+`issue run --require-complete`; its completion
+marker permits closing only after `dibs hooks complete`. An unfinished command
+exits without that marker, so `issue run` writes a `HANDOFF:` note through the atomic
 handoff path. Any hook unable to prove lease ownership must stop work; it must
 not assume success from an absent response.
 
@@ -111,7 +113,7 @@ public tag.
    Retain `AF_*` variables and old socket/DB paths as deprecated aliases.
    GitHub topics: `ai-agents`, `claude-code`, `worktree`, `coordination`.
 2. **Plugin claim policy:** SessionStart shows ready work for agent/user choice.
-   Auto-claim of top ready item requires an explicit flag for unattended use.
+   RC2 requires explicit issue selection; auto-selection is deferred.
 3. **Swarm command/result:** arbitrary command after `--`, issue-run context in
    environment, built-in Claude Code preset. Branch per issue by default; PR
    creation is later opt-in `--pr`. Document each harness recipe and verify at
@@ -122,8 +124,9 @@ public tag.
 5. **First claim target:** install, init, create, claim in four user commands
    and at most two minutes; no `make`, service manager, demo issue, or seed
    issue is needed.
-6. **Stop hook:** unfinished work uses atomic `HANDOFF:` after an ownership
-   check.
+6. **One-shot lifecycle:** Claude Code and Codex `Stop` is turn-scoped. The
+   explicit one-command `issue run --require-complete` wrapper handles unfinished
+   work through atomic `HANDOFF:` after the child exits, with ownership fencing.
 7. **Swarm cleanup:** retain failed/incomplete worktrees; remove only
    verified, merged, unreferenced worktrees through explicit cleanup.
 8. **Distribution:** the release-pinned `install.sh` asset is the primary

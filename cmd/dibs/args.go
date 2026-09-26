@@ -26,6 +26,9 @@ var commandRoutes = map[string]argRoute{
 	"health": {"", 0}, "doctor": {"", 0}, "protocol": {"", 0}, "version": {"", 0},
 	"init":         {"--path --dry-run? --project --repo --default-branch", 0},
 	"watch":        {"--project --once?", 0},
+	"hooks install": {"--agent --path", 0},
+	"hooks session-start": {"--agent --project", 0},
+	"hooks complete": {"", 0},
 	"daemon start": {"", 0}, "daemon stop": {"", 0},
 	"project add": {"--key --name --description", 0}, "project list": {"", 0},
 	"repo add": {"--project --logical-name --canonical-git-dir --default-branch --remotes", 0}, "repo list": {"--project", 0},
@@ -42,7 +45,7 @@ var commandRoutes = map[string]argRoute{
 	"issue claim":     {"--holder --actor --ttl --session-id --invocation-mode --operation-id --retry-last?", 1},
 	"issue heartbeat": {"--lease-token --lease-generation --ttl --operation-id", 1}, "issue release": {"--lease-token --lease-generation --operation-id", 1},
 	"issue handoff":          {"--lease-token --lease-generation --note --invocation-mode --operation-id", 1},
-	"issue run":              {"--actor --ttl --close-resolution --branch --pr-url --commit-sha --note --invocation-mode", 1},
+	"issue run":              {"--actor --ttl --close-resolution --branch --pr-url --commit-sha --note --invocation-mode --require-complete?", 1},
 	"issue edit":             {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release? --operation-id", 1},
 	"issue update":           {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release? --operation-id", 1},
 	"issue close":            {"--resolution --expected-version --lease-token --lease-generation --branch --pr-url --commit-sha --note --invocation-mode --operation-id", 1},
@@ -59,6 +62,8 @@ var commandRoutes = map[string]argRoute{
 }
 
 var requiredCommandFlags = map[string]string{
+	"hooks install":          "--agent",
+	"hooks session-start":    "--agent",
 	"project add":            "--key --name",
 	"repo add":               "--project --logical-name --canonical-git-dir",
 	"worktree register":      "--repo --absolute-path",
@@ -86,7 +91,7 @@ func validateCommandArgs(args []string) error {
 	}
 	path := []string{args[0]}
 	switch args[0] {
-	case "project", "repo", "worktree", "artifact-root", "artifact", "export", "daemon":
+	case "project", "repo", "worktree", "artifact-root", "artifact", "export", "daemon", "hooks":
 		if len(args) < 2 {
 			return argumentError(args[0] + " subcommand is required")
 		}

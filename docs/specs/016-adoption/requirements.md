@@ -49,12 +49,13 @@
   the released binaries and tested behavior, and a development-only GIF must
   be labeled as such until its feature is released.
 - **R-07 Hooks.** Claude Code and Codex integration shows ready work at session
-  start; the agent or user chooses by default. Auto-claiming the top item is
-  available only through an explicit flag. Execution uses `issue run` ownership,
-  heartbeat, cancellation, and handoff semantics. For unfinished work, the
-  Stop hook checks ownership and uses the atomic lifecycle path to write a
-  `HANDOFF:` note. Two sessions must not work the same issue, and a lost
-  session's lease must become reclaimable.
+  start without claiming it. The agent or user chooses one issue explicitly.
+  The RC2 mode is one agent command per `issue run --require-complete`; only an
+  explicit `dibs hooks complete` inside that run permits closing as done.
+  Normal exit without completion and failed runs use the atomic `HANDOFF:`
+  path. Lease heartbeats, cancellation and ownership loss use `issue run`.
+  Two sessions must not work the same issue, and a lost session's lease must
+  become reclaimable. Auto-selection is deferred beyond RC2.
 - **R-08 Swarm.** `dibs swarm -n N -- <cmd>` launches an arbitrary configured
   agent command in one separate worktree per claimed issue, supplies issue-run
   context through its environment, and records a branch per issue. A built-in

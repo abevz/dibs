@@ -10,6 +10,7 @@ type flagHelp struct {
 // flagHelpText is the shared vocabulary for the flags in commandRoutes.
 // Command-specific meanings belong in commandFlagHelpText below.
 var flagHelpText = map[string]flagHelp{
+	"--agent":             {"claude|codex", "Agent whose project SessionStart hook is being configured."},
 	"--absolute-path":     {"path", "Absolute filesystem path to the worktree."},
 	"--acceptance":        {"text", "Conditions that must be met to finish the issue."},
 	"--actor":             {"name", "Identity recorded as the acting agent or user."},
@@ -53,6 +54,7 @@ var flagHelpText = map[string]flagHelp{
 	"--path":              {"path", "Filesystem or repository-relative path, depending on the command."},
 	"--pr-url":            {"url", "Pull request URL recorded when closing the issue."},
 	"--primary":           {"", "Mark this as the primary artifact root."},
+	"--require-complete":  {"", "Close only after the child calls dibs hooks complete; otherwise hand off."},
 	"--priority":          {"number", "Issue priority; lower numbers run first (default: 3)."},
 	"--project":           {"key-or-id", "Project key or UUID."},
 	"--reason":            {"text", "Reason for an operator override; recorded in the audit trail."},

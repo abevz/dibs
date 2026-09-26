@@ -1,15 +1,3 @@
-# Codex lease check hook
+# Codex integration
 
-1. Copy or symlink `check-lease.sh` (already done).
-2. Add to your Codex project config:
-   ```json
-   "hooks": {
-     "preToolUse": {
-       "tools": ["Edit", "Write", "Bash"],
-       "command": "${workspaceFolder}/contrib/hooks/codex/check-lease.sh",
-       "mode": "warn"
-     }
-   }
-   ```
-3. **Optional**: Export `DIBS_ACTOR=<your-agent-name>` (unique per concurrent instance, e.g. session-PID suffix: `codex-$$`). If omitted, `dibs` will automatically infer the agent identity from the process tree.
-4. Set `DIBS_HOOK_MODE=block` to block instead of warn.
+See [one-shot agent integration](../README.md). Run `dibs hooks install --agent codex` in the repository. The installed project hook is `.codex/hooks.json` → `hooks.SessionStart`; review and trust it with `/hooks` before use.
