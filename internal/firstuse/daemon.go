@@ -18,6 +18,9 @@ import (
 // EnsureDaemon starts the installed companion binary when the configured socket
 // is unavailable. dibsd's database lock decides which concurrent starter wins.
 func EnsureDaemon(ctx context.Context, cfg config.Config, daemonPath string) error {
+	if err := config.ValidateSocketPath(cfg.SocketPath); err != nil {
+		return err
+	}
 	c := client.New(cfg.SocketPath)
 	if h, err := c.Health(ctx); err == nil {
 		if h.Status != "ok" || filepath.Clean(h.DBPath) != filepath.Clean(cfg.DBPath) {
