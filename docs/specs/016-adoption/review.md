@@ -22,8 +22,18 @@
   does not forward the caller's environment and ignores `Set` lines after
   other commands. This covers the demo part of `afc-134`; the post remains
   with the owner.
-- Open gap: the Homebrew tap formula is still at `0.1.0-rc.1`; rc.2 and rc.3
-  were not pushed to `abevz/homebrew-dibs`.
+- The Homebrew tap had stayed at `0.1.0-rc.1`, because copying `dibs.rb`
+  into `abevz/homebrew-dibs` was a manual step outside the release process
+  (`afc-168`). [Tap PR #3](https://github.com/abevz/homebrew-dibs/pull/3)
+  installed the rc.3 asset byte-for-byte; its archive hashes match
+  `checksums.txt`. The tap CI now also requires the installed `dibs version`
+  to match the formula version, and it passed on all four platforms.
+  [Tap PR #4](https://github.com/abevz/homebrew-dibs/pull/4) adds a daily and
+  manually dispatchable sync workflow: it validates the newest release's
+  `dibs.rb`, pushes `formula/<tag>`, dispatches the required tests, and opens
+  a pull request. While the tap does not allow Actions to create pull
+  requests, it opens an issue with the compare link instead. A manual run
+  reported that the formula already matches rc.3.
 
 ## Launch without swarm — owner decision (2026-09-26)
 
