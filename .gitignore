@@ -10,3 +10,5 @@
 /afctl
 /.codewhale/
 /AGENTS.local.md
+.demo-frames/
+.demo-tmp/

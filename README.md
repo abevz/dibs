@@ -4,10 +4,14 @@ When two local AI agents pick the same task, both can spend time on it before
 either notices. `dibs` gives them a shared ready queue and an atomic claim:
 one gets the lease, while the other sees that the work is taken.
 
-![An actual dibs watch session showing a ready task becoming leased while another task remains blocked](docs/assets/dibs-watch-demo.gif)
+![Two agents claim the same task at once: one gets the lease, the other moves to the next task; a failed run hands its task back to the queue and the other agent finishes it](docs/assets/dibs-race-demo.gif)
 
-The recording uses a temporary local daemon and shows `dibs watch` from the
-`v0.1.0-rc.2` preview.
+Two simulated agents (shell scripts named claude and codex, not real model
+sessions) drain one queue with `dibs issue run --require-complete` while
+`dibs watch` shows the board. Both try `demo-1` at the same moment and exactly
+one gets the lease. The first attempt at `demo-3` fails, so its lease is handed
+off and the task returns to the queue. The run uses a temporary daemon and
+state; re-record it with [`contrib/demo/record.sh`](contrib/demo/record.sh).
 
 **Your AI agents call dibs on work. Exactly one wins.**
 
