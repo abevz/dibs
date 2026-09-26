@@ -1,5 +1,21 @@
 # 016 Adoption Review
 
+## Launch without swarm — owner decision (2026-09-26)
+
+- The owner decided that launch (`afc-134`) and the adoption epic
+  (`afc-126`) no longer wait for swarm (`afc-133`). This matches the delivery
+  plan, which already called swarm an independently releasable extension that
+  does not block the first preview.
+- The launch demonstration is the README race demo from `afc-158`
+  ([PR #103](https://github.com/abevz/dibs/pull/103)): two agents contest one
+  claim with exactly one owner, complete distinct issues, and recover a failed
+  attempt through `HANDOFF`. Before launch it is re-run against the published
+  release binaries.
+- R-09, the task table, and the packet README were reconciled. In the
+  coordinator, the `afc-134` → `afc-133` block was replaced by `afc-158`, and
+  the `afc-126`/`afc-134` acceptance text no longer requires a swarm demo.
+  `afc-133` keeps its own `-n 3` demonstration and failure-isolation gates.
+
 ## afc-153 — tag publication recovery and public smoke (delivered)
 
 - The owner approved the RC2 tag. Run `36243260831` passed tests, build,
