@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -15,6 +16,14 @@ import (
 	"github.com/abevz/dibs/internal/core"
 	"github.com/abevz/dibs/internal/testsocket"
 )
+
+func TestEvaluateSocketPath(t *testing.T) {
+	path := "/" + strings.Repeat("x", len(syscall.RawSockaddrUnix{}.Path))
+	result := EvaluateSocketPath(config.Config{SocketPath: path})
+	if result.Status != "WARN" || !strings.Contains(result.Message, path) || !strings.Contains(result.Message, "DIBS_SOCKET") {
+		t.Fatalf("result = %+v, want actionable warning", result)
+	}
+}
 
 type mockExec struct {
 	cmdOut []byte

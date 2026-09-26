@@ -443,8 +443,16 @@ func EvaluateConfigMismatch(h *core.Health, cfg config.Config) Result {
 	}
 }
 
+func EvaluateSocketPath(cfg config.Config) Result {
+	const name = "Socket path"
+	if err := config.ValidateSocketPath(cfg.SocketPath); err != nil {
+		return Result{Name: name, Status: "WARN", Message: err.Error(), Hint: "Set DIBS_SOCKET to a shorter path"}
+	}
+	return Result{Name: name, Status: "ok", Message: "Configured Unix socket path fits the platform limit"}
+}
+
 func RunAll(ctx context.Context, c *client.Client, cfg config.Config) []Result {
-	var results []Result
+	results := []Result{EvaluateSocketPath(cfg)}
 
 	resDaemon, h := EvaluateDaemon(ctx, c)
 	results = append(results, resDaemon)
