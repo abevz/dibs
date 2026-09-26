@@ -22,8 +22,19 @@ const (
 
 // APIError is the standard error envelope returned by the daemon.
 type APIError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string            `json:"code"`
+	Message string            `json:"message"`
+	Details *LeaseHeldDetails `json:"details,omitempty"`
+}
+
+// LeaseHeldDetails contains only public, advisory lease metadata. A token or
+// attempt identifier must never appear in a claim conflict.
+type LeaseHeldDetails struct {
+	ShortID        string `json:"short_id"`
+	Holder         string `json:"holder"`
+	LeaseExpiresAt string `json:"lease_expires_at"`
+	LeasePID       int    `json:"lease_pid,omitempty"`
+	LeaseHost      string `json:"lease_host,omitempty"`
 }
 
 // APIErrorResponse is the outer wrapper for an error response.

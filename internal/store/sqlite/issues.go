@@ -513,8 +513,47 @@ func ClaimIssueWithOperation(ctx context.Context, db *sql.DB, issueID string, re
 		}
 		return resp, err
 	}
+	// A losing insert can race the winner's commit. Read the committed lease
+	// after the failed transaction has rolled back so the caller still gets a
+	// useful lease_held response rather than an internal UUID.
+	if heldErr, err := activeLeaseConflict(ctx, db, issueID, time.Now().UTC().Format(time.RFC3339)); err == nil {
+		return core.ClaimResponse{}, heldErr
+	} else if !errors.Is(err, errOperationRace) {
+		return core.ClaimResponse{}, err
+	}
 	return core.ClaimResponse{}, core.NewAPIError(core.ErrConflict,
 		"claim raced a concurrent operation; retry")
+}
+
+type claimConflictQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func activeLeaseConflict(ctx context.Context, q claimConflictQueryer, issueID, nowStr string) (core.APIError, error) {
+	var shortID, holder, expiresAt, sessionID string
+	err := q.QueryRowContext(ctx,
+		`SELECT i.short_id, l.holder, l.expires_at, COALESCE(l.session_id, '')
+		 FROM issues i JOIN leases l ON l.issue_id = i.id
+		 WHERE i.id = ? AND l.expires_at > ?`, issueID, nowStr,
+	).Scan(&shortID, &holder, &expiresAt, &sessionID)
+	if err == sql.ErrNoRows {
+		return core.APIError{}, errOperationRace
+	}
+	if err != nil {
+		return core.APIError{}, fmt.Errorf("read active lease conflict: %w", err)
+	}
+	host, pid := parseLeaseProcessSessionID(sessionID)
+	message := fmt.Sprintf("%s is already leased by %s until %s", shortID, holder, expiresAt)
+	if pid > 0 && host != "" {
+		message += fmt.Sprintf(" (PID %d@%s)", pid, host)
+	}
+	return core.APIError{
+		Code: core.ErrLeaseHeld, Message: message,
+		Details: &core.LeaseHeldDetails{
+			ShortID: shortID, Holder: holder, LeaseExpiresAt: expiresAt,
+			LeasePID: pid, LeaseHost: host,
+		},
+	}, nil
 }
 
 func claimIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core.ClaimRequest) (core.ClaimResponse, error) {
@@ -577,17 +616,10 @@ func claimIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 	// Holder is attribution, not authentication. An active lease always wins;
 	// claim never reads or returns its token, even when the caller repeats the
 	// same holder string. Retry-safe recovery belongs to the operation ledger.
-	var activeLease int
-	err = tx.QueryRowContext(ctx,
-		`SELECT 1 FROM leases WHERE issue_id = ? AND expires_at > ?`,
-		issueID, nowStr,
-	).Scan(&activeLease)
-	if err != nil && err != sql.ErrNoRows {
-		return core.ClaimResponse{}, fmt.Errorf("check lease: %w", err)
-	}
-	if err == nil {
-		return core.ClaimResponse{}, core.NewAPIError(core.ErrLeaseHeld,
-			"issue is already claimed: "+issueID)
+	if heldErr, err := activeLeaseConflict(ctx, tx, issueID, nowStr); err == nil {
+		return core.ClaimResponse{}, heldErr
+	} else if !errors.Is(err, errOperationRace) {
+		return core.ClaimResponse{}, err
 	}
 
 	// Re-evaluate the exact ready eligibility predicate inside the claim
@@ -659,11 +691,7 @@ func claimIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 			// With an operation_id in play the winner may be this very
 			// operation committing on another connection. Retry so the ledger
 			// lookup can replay it rather than reporting a false conflict.
-			if req.OperationID != "" {
-				return core.ClaimResponse{}, errOperationRace
-			}
-			return core.ClaimResponse{}, core.NewAPIError(core.ErrLeaseHeld,
-				"issue is already claimed: "+issueID)
+			return core.ClaimResponse{}, errOperationRace
 		}
 		return core.ClaimResponse{}, fmt.Errorf("insert lease: %w", err)
 	}
