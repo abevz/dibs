@@ -9,16 +9,21 @@
 - Claim operation journals now retain the full request fingerprint (operation
   ID, holder, TTL, invocation mode, and session ID). Bare `--retry-last` and
   reuse of a matching explicit `--operation-id` replay that request across
-  processes. Legacy ID-only journals remain readable and a definite rejection
-  restores the previous record.
+  processes. The new `.json` journal takes precedence over the old `.op`
+  journal; old IDs remain readable even if their text looks like JSON. A
+  definite rejection removes the new record or restores its predecessor.
 - Focused tests cover automatic and explicit session IDs, the CLI request,
   typed store parsing, full-request replay in separate processes, and legacy
-  journal restoration. An installed-binary scratch check showed `16215@arch`
+  journal restoration, including a JSON-shaped legacy ID. An installed-binary
+  scratch check showed `16215@arch`
   in watch text and matching `lease_pid`/`lease_host` in JSON; evidence:
   `/tmp/dibs-afc152-smoke.uIn5Op/`. After the replay fix, `go test ./...`,
-  `go build ./...`, `go vet ./...`, and `git diff --check` passed; full-suite
-  evidence: `/tmp/dibs-afc152-go-test-final.log`. Renewed independent review
-  and PR CI are pending.
+  `go build ./...`, `go vet ./...`, and `git diff --check` passed. The full suite
+  passed before the separate-journal fix; evidence:
+  `/tmp/dibs-afc152-go-test-final.log`. After that fix, focused replay tests
+  and the full `cmd/dibs` package passed; evidence:
+  `/tmp/dibs-afc152-cmd-final.log`. Renewed independent review and PR CI are
+  pending.
 
 ## afc-141 — repository relocation (implementation pending merge)
 

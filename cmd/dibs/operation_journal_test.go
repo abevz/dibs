@@ -50,8 +50,8 @@ func TestClaimJournalPersistsSessionAndRestoresLegacyRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if previous != oldID {
-		t.Fatalf("previous journal = %q, want %q", previous, oldID)
+	if previous != "" {
+		t.Fatalf("previous new-format journal = %q, want empty", previous)
 	}
 	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("journal permissions: info=%v err=%v", info, err)
@@ -67,9 +67,9 @@ func TestClaimJournalPersistsSessionAndRestoresLegacyRecord(t *testing.T) {
 	}
 }
 
-func TestClaimJournalReadsLegacyIDBeginningWithBrace(t *testing.T) {
+func TestClaimJournalReadsJSONShapedLegacyID(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	const legacyID = "{legacy-operation-12345"
+	const legacyID = `{"operation_id":"12345678","holder":"x","ttl_seconds":1}`
 	if _, _, err := journalOperationID("claim", "demo-1", legacyID); err != nil {
 		t.Fatal(err)
 	}

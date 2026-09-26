@@ -30,7 +30,7 @@ func journalClaimOperation(target string, req core.ClaimRequest) (string, string
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", "", fmt.Errorf("create operation journal: %w", err)
 	}
-	path := filepath.Join(dir, fmt.Sprintf("claim-%s.op", sanitizeJournalName(target)))
+	path := claimRequestJournalPath(dir, target)
 	previous, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return "", "", fmt.Errorf("read operation journal: %w", err)
@@ -53,23 +53,24 @@ func readJournaledClaimOperation(target string) (claimJournalRecord, string, err
 	if err != nil {
 		return claimJournalRecord{}, "", err
 	}
-	path := filepath.Join(dir, fmt.Sprintf("claim-%s.op", sanitizeJournalName(target)))
+	path := claimRequestJournalPath(dir, target)
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return claimJournalRecord{}, path, nil
+		legacyPath := filepath.Join(dir, fmt.Sprintf("claim-%s.op", sanitizeJournalName(target)))
+		legacyData, legacyErr := os.ReadFile(legacyPath)
+		if os.IsNotExist(legacyErr) {
+			return claimJournalRecord{}, path, nil
+		}
+		if legacyErr != nil {
+			return claimJournalRecord{}, legacyPath, fmt.Errorf("read operation journal: %w", legacyErr)
+		}
+		return claimJournalRecord{OperationID: strings.TrimSpace(string(legacyData))}, legacyPath, nil
 	}
 	if err != nil {
 		return claimJournalRecord{}, path, fmt.Errorf("read operation journal: %w", err)
 	}
-	value := strings.TrimSpace(string(data))
-	if !strings.HasPrefix(value, "{") {
-		return claimJournalRecord{OperationID: value}, path, nil // legacy ID-only journal
-	}
 	var record claimJournalRecord
-	if err := json.Unmarshal([]byte(value), &record); err != nil {
-		if core.ValidateOperationID(value) == nil {
-			return claimJournalRecord{OperationID: value}, path, nil
-		}
+	if err := json.Unmarshal(data, &record); err != nil {
 		return claimJournalRecord{}, path, fmt.Errorf("invalid claim operation journal: %s", path)
 	}
 	if record.OperationID == "" {
@@ -79,6 +80,10 @@ func readJournaledClaimOperation(target string) (claimJournalRecord, string, err
 		return claimJournalRecord{}, path, fmt.Errorf("incomplete claim operation journal: %s", path)
 	}
 	return record, path, nil
+}
+
+func claimRequestJournalPath(dir, target string) string {
+	return filepath.Join(dir, fmt.Sprintf("claim-%s.json", sanitizeJournalName(target)))
 }
 
 // operationJournalDir is where dibs records an operation_id before sending

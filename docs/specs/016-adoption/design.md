@@ -45,7 +45,9 @@ caller ancestor at claim time, not a live lease supervisor. `watch` parses
 this alongside `dibs-run:v1` and treats both as self-reported. Claim retries
 persist the holder, TTL, invocation mode, and session ID with the operation ID
 so `--retry-last` and reuse of the same `--operation-id` send the original
-fingerprint even from another process; old ID-only journals remain readable.
+fingerprint even from another process. New records use a `.json` claim journal;
+old ID-only `.op` journals remain readable without interpreting their contents
+as JSON.
 
 Hooks are thin client-side integrations over `issue run`. SessionStart presents
 ready items and does not claim. The selected issue enters the normal
