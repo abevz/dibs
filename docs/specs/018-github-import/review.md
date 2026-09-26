@@ -68,6 +68,62 @@
 
 ## Evidence
 
+### afc-164 owner decisions (2026-09-26)
+
+- The CLI-only `hooks complete` marker may carry PR URL, commit SHA, branch,
+  and note. Nonempty values override `issue run` launch flags; no flags keep
+  the legacy marker. This is an approved extension so an agent can record a
+  PR created during its run.
+- Publication markers use `issue_closed` event ID, not its second-resolution
+  timestamp. Comment list and POST use the fetched issue's `comments_url` to
+  tolerate repository transfer or rename.
+- Missing `github:` keys stop `issue close --publish` before close and
+  `issue run --publish` before claim. After a successful local close, a
+  publication failure does not change close success; JSON carries structured
+  publication status. Explicit publish fails nonzero when it cannot post.
+- `locked` always stops preflight, even if the caller has write access. This
+  is an accepted simplification for this slice.
+- An explicit publish of an operator-closed issue is outside R-07 for this
+  slice. The reader rejects a latest `issue_operator_closed` event so it
+  cannot accidentally publish a preceding ordinary close after reopen.
+- A close note is used only when its `note_added` event immediately precedes
+  the latest `issue_closed` with the same actor and timestamp. The API gives
+  notes second-resolution times and no link to the close event, so another
+  note by that author in the same second remains ambiguous. Adding `note_id`
+  to the close payload is follow-up work for `afc-90`.
+- The note is public, line quoted, capped at 2,000 runes with a final `…`.
+  Markdown and @mentions remain as written. The branch is also public.
+  Exact nonempty values of the three current lease/operator token env vars
+  are rejected if present in either field. Close/run also reject their exact
+  active lease token even when the parent environment does not hold it; no
+  heuristic cleaning is applied.
+- `gh api --slurp` first appears in [GitHub CLI 2.48.0](https://github.com/cli/cli/releases/tag/v2.48.0);
+  doctor warns for older versions. `cancelled` closes publish; handoffs and
+  lease expiry do not.
+
+### afc-164 implementation evidence
+
+- CLI-only `issue publish`, `issue close --publish`, `issue run --publish`,
+  extended `hooks complete`, GitHub comment client, and doctor version guard
+  were implemented without daemon, API, store, or schema changes.
+- Focused tests covered preflight before close/claim, event and note selection,
+  marker idempotency across two closes in one second, moved-repository
+  `comments_url`, locked/not-found, token rejection, line quoting and rune
+  truncation, hook metadata override, JSON result shape, and publish failure
+  after successful close for both close and run. Both close/run retained a
+  successful exit; explicit publish exited nonzero on the same fake `gh`
+  failure.
+- `gofmt` and `go build ./...` passed; `go test ./...` passed. Full logs:
+  `/tmp/dibs-afc164-full-build.log` and `/tmp/dibs-afc164-full-test.log`.
+- A temporary real `dibsd` with isolated HOME, DIBS_DB, DIBS_SOCKET and fake
+  `gh` imported `o/r#1`, ran `issue run --require-complete --publish` with
+  PR URL, branch and note set by `hooks complete`, then repeated
+  `issue publish --json`. The fake GitHub state held one comment with the
+  PR, note, and close-event marker; repeat reported `already: true`; local
+  issue status was `done`. Scratch state: `/tmp/dibs-afc164.erBTHy`.
+- A real GitHub API round trip, release binaries, and owner-created rc.4 tag
+  were intentionally not tested here; they belong to `afc-165`.
+
 ### afc-163 (implementation in review)
 
 - Owner clarifications: with explicit `--project`, scope follows presence of

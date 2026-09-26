@@ -209,6 +209,10 @@ Global flags:
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 func fail(err error) {
+	var reported *reportedError
+	if errors.As(err, &reported) {
+		os.Exit(1)
+	}
 	var argErr *cliArgumentError
 	if errors.As(err, &argErr) {
 		if jsonOutput {

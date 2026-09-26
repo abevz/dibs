@@ -16,7 +16,7 @@ import (
 	"github.com/abevz/dibs/internal/core"
 )
 
-const issueRunUsage = "Usage: dibs issue run <issue-id> [--actor <name>] [--ttl <seconds>] [--require-complete] [--close-resolution done|cancelled] [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note <text>] [--invocation-mode interactive|scheduled|unknown] -- <command> [args...]\n" + lifecycleHint +
+const issueRunUsage = "Usage: dibs issue run <issue-id> [--actor <name>] [--ttl <seconds>] [--require-complete] [--close-resolution done|cancelled] [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note <text>] [--invocation-mode interactive|scheduled|unknown] [--publish] -- <command> [args...]\n" + lifecycleHint +
 	"\nOwns claim -> heartbeat -> close/handoff around a single subprocess; the child receives the lease token in its environment, never in argv. On exit 0, closes with --close-resolution (default done). On any other exit, or on Ctrl-C, hands the lease off with an auto-generated HANDOFF: note instead of closing. On confirmed lease ownership loss (heartbeat rejected with lease_expired, or the lease window closing without proof), the child is terminated and the CLI exits non-zero with lease_expired without sending a close request."
 
 // runIssueRun claims issueID, execs the given command with the lease
@@ -58,6 +58,7 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	var branch, prURL, commitSHA, note string
 	invocationMode := ""
 	requireComplete := false
+	publish := false
 
 	for i := 1; i < len(flagArgs); i++ {
 		switch flagArgs[i] {
@@ -103,6 +104,8 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 			}
 		case "--require-complete":
 			requireComplete = true
+		case "--publish":
+			publish = true
 		default:
 			return usageErr(issueRunUsage, fmt.Sprintf("unknown flag: %s", flagArgs[i]))
 		}
@@ -135,6 +138,11 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		}
 		invocationMode = normalized
 	}
+	if publish {
+		if err := requireGitHubExternalKey(ctx, c, issueID); err != nil {
+			return err
+		}
+	}
 
 	// session_id is advisory process metadata for watch, not an ownership key.
 	// The PID belongs to this supervisor, which maintains the lease heartbeat.
@@ -146,7 +154,11 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Claimed %s (version %d, expires %s)\n", issueID, claim.Version, claim.ExpiresAt)
+	if jsonOutput {
+		fmt.Fprintf(os.Stderr, "Claimed %s (version %d, expires %s)\n", issueID, claim.Version, claim.ExpiresAt)
+	} else {
+		fmt.Printf("Claimed %s (version %d, expires %s)\n", issueID, claim.Version, claim.ExpiresAt)
+	}
 
 	heartbeatInterval := time.Duration(ttl) * time.Second / 3
 
@@ -184,6 +196,9 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	cmd := exec.CommandContext(childCtx, cmdArgs[0], cmdArgs[1:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
+	if jsonOutput {
+		cmd.Stdout = os.Stderr
+	}
 	cmd.Stderr = os.Stderr
 	// Isolate the launched workload from dibs's own process group. Cancelling
 	// only the shell leader can otherwise leave its current child running and
@@ -264,8 +279,22 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 
 	if runErr == nil && requireComplete {
 		marker, markerErr := os.ReadFile(completionFile)
-		if markerErr != nil || string(marker) != "done\n" {
+		completion, parseErr := parseCompletionMarker(marker)
+		if markerErr != nil || parseErr != nil {
 			runErr = errors.New("agent exited without dibs hooks complete")
+		} else {
+			if completion.PRURL != "" {
+				prURL = completion.PRURL
+			}
+			if completion.CommitSHA != "" {
+				commitSHA = completion.CommitSHA
+			}
+			if completion.Branch != "" {
+				branch = completion.Branch
+			}
+			if completion.Note != "" {
+				note = completion.Note
+			}
 		}
 	}
 	if runErr == nil {
@@ -284,11 +313,26 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		if err != nil {
 			return fmt.Errorf("command succeeded but close failed: %w", err)
 		}
+		var publication *publishResult
+		if publish {
+			outcome := publishAfterClose(background, c, issueID, claim.LeaseToken)
+			publication = &outcome
+		}
 		if jsonOutput {
-			json.NewEncoder(os.Stdout).Encode(result)
+			if publication != nil {
+				json.NewEncoder(os.Stdout).Encode(struct {
+					core.CloseIssueResult
+					Publish *publishResult `json:"publish"`
+				}{result, publication})
+			} else {
+				json.NewEncoder(os.Stdout).Encode(result)
+			}
 			return nil
 		}
 		fmt.Println("Issue closed.")
+		if publication != nil {
+			printPublishResult(*publication, issueID)
+		}
 		return nil
 	}
 

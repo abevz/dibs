@@ -39,9 +39,9 @@ func TestCLIWithFakeGH(t *testing.T) {
 	dir := t.TempDir()
 	script := `#!/bin/sh
 case "$*" in
-  'api repos/o/r/issues/7') printf '%s' '{"title":"T","body":"B","state":"open","html_url":"https://github.com/o/r/issues/7"}' ;;
-  'api repos/o/r/issues/7/comments --paginate --slurp') printf '%s' '[[{"body":"one"}],[{"body":"two"}]]' ;;
-  'api repos/o/r/issues/7/comments --method POST --input -') /bin/cat ;;
+  'api repos/o/r/issues/7') printf '%s' '{"title":"T","body":"B","state":"open","html_url":"https://github.com/o/r/issues/7","comments_url":"https://api.github.com/repos/new/repo/issues/7/comments"}' ;;
+  'api repos/new/repo/issues/7/comments --paginate --slurp') printf '%s' '[[{"body":"one"}],[{"body":"two"}]]' ;;
+  'api repos/new/repo/issues/7/comments --method POST --input -') /bin/cat ;;
   *) echo 'unexpected arguments' >&2; exit 1 ;;
 esac
 `
@@ -55,13 +55,21 @@ esac
 	if err != nil || issue.Title != "T" {
 		t.Fatalf("GetIssue = %+v, %v", issue, err)
 	}
-	comments, err := client.ListComments(context.Background(), ref)
+	comments, err := client.ListComments(context.Background(), issue.CommentsURL)
 	if err != nil || len(comments) != 2 || comments[1].Body != "two" {
 		t.Fatalf("ListComments = %+v, %v", comments, err)
 	}
-	comment, err := client.CreateComment(context.Background(), ref, "a secret-looking string")
+	comment, err := client.CreateComment(context.Background(), issue.CommentsURL, "a secret-looking string")
 	if err != nil || !strings.Contains(comment.Body, "a secret-looking string") {
 		t.Fatalf("CreateComment = %+v, %v", comment, err)
+	}
+}
+
+func TestCommentsEndpointRejectsUntrustedURL(t *testing.T) {
+	for _, raw := range []string{"", "https://evil.test/repos/o/r/issues/1/comments", "https://api.github.com.evil.test/repos/o/r/issues/1/comments", "https://api.github.com@evil.test/repos/o/r/issues/1/comments", "https://api.github.com/repos/o/r/issues/1/comments?token=x"} {
+		if _, err := commentsEndpoint(raw); err == nil {
+			t.Fatalf("accepted %q", raw)
+		}
 	}
 }
 

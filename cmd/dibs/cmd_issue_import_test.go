@@ -27,10 +27,10 @@ type fakeImportGitHub struct {
 func (f fakeImportGitHub) GetIssue(context.Context, github.IssueRef) (github.Issue, error) {
 	return f.issue, f.err
 }
-func (fakeImportGitHub) ListComments(context.Context, github.IssueRef) ([]github.Comment, error) {
+func (fakeImportGitHub) ListComments(context.Context, string) ([]github.Comment, error) {
 	return nil, nil
 }
-func (fakeImportGitHub) CreateComment(context.Context, github.IssueRef, string) (github.Comment, error) {
+func (fakeImportGitHub) CreateComment(context.Context, string, string) (github.Comment, error) {
 	return github.Comment{}, nil
 }
 

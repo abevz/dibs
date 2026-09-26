@@ -30,9 +30,10 @@ func TestEvaluateGitHubCLI(t *testing.T) {
 		wantSecond []string
 	}{
 		{"missing", [][]byte{nil}, []error{errors.New("missing")}, "WARN", 1, nil},
-		{"auth", [][]byte{[]byte("gh version 2.1\n"), nil}, []error{nil, errors.New("logged out")}, "WARN", 2, []string{"gh", "auth", "status", "--hostname", "github.com"}},
-		{"api", [][]byte{[]byte("gh version 2.1\n"), nil, []byte("network error")}, []error{nil, nil, errors.New("fail")}, "WARN", 3, nil},
-		{"success", [][]byte{[]byte("gh version 2.1\n"), nil, []byte(`{"resources":{"core":{"remaining":123}}}`)}, []error{nil, nil, nil}, "ok", 3, nil},
+		{"too old", [][]byte{[]byte("gh version 2.47.9\n")}, []error{nil}, "WARN", 1, nil},
+		{"auth", [][]byte{[]byte("gh version 2.48.0\n"), nil}, []error{nil, errors.New("logged out")}, "WARN", 2, []string{"gh", "auth", "status", "--hostname", "github.com"}},
+		{"api", [][]byte{[]byte("gh version 2.48.0\n"), nil, []byte("network error")}, []error{nil, nil, errors.New("fail")}, "WARN", 3, nil},
+		{"success", [][]byte{[]byte("gh version 2.48.0\n"), nil, []byte(`{"resources":{"core":{"remaining":123}}}`)}, []error{nil, nil, nil}, "ok", 3, nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -44,7 +45,7 @@ func TestEvaluateGitHubCLI(t *testing.T) {
 			if tc.wantSecond != nil && !reflect.DeepEqual(e.calls[1], tc.wantSecond) {
 				t.Fatalf("auth command = %v", e.calls[1])
 			}
-			if tc.name == "success" && got.Message != "gh version 2.1; 123 core API requests remaining" {
+			if tc.name == "success" && got.Message != "gh version 2.48.0; 123 core API requests remaining" {
 				t.Fatalf("message = %q", got.Message)
 			}
 		})

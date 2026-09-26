@@ -11,7 +11,10 @@ owner merges.
 | MCP and protocol | `afc-169` | `afc-164` | Move import/publish logic into `internal/ghsync` with no behavior change (existing CLI tests unmodified); MCP `import_issue`, `publish_issue`, and `close_issue.publish` per R-14 and design "Shared core, MCP, and protocol"; MCP tests with a fake client; protocol section per R-15 (embedded copy stays identical); `docs/mcp-server-v1.md` tools list and amended constraint; managed `AGENTS.md` block line; SessionStart source label, one-line titles, and conditional guidance per R-16 and design "Claude Code and Codex integration", with tests; `contrib/hooks/README.md` "Work from a GitHub issue" section. |
 | End-to-end and release | `afc-165` | `afc-163`, `afc-164`, `afc-169` | README "Work from GitHub Issues" section; owner tags `v0.1.0-rc.4`; `dibs doctor` shows the GitHub CLI check as ok on the test machine and as a warning with `gh` removed from `PATH`; the R-12 real round trips on throwaway issues in `abevz/dibs-sandbox`, using the published binaries: CLI, `dibs-mcp`, one `claude -p` and one `codex exec` session under `issue run --publish --require-complete` whose comments link their PRs, and one `import_issue` from an interactive Codex session; transcript and comment links recorded in `review.md`. |
 
-`afc-163` merged in PR #113. `afc-164` is in progress.
+`afc-163` merged in PR #113 (`6c90a41`) and its issue is closed. `afc-164`
+implementation and verification are complete; its PR and owner merge remain.
+`afc-169` follows that merge, and `afc-165` follows `afc-169` and the
+owner-created rc.4 tag.
 
 ## Order
 

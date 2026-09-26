@@ -64,6 +64,7 @@ type Issue struct {
 	State       string          `json:"state"`
 	Locked      bool            `json:"locked"`
 	HTMLURL     string          `json:"html_url"`
+	CommentsURL string          `json:"comments_url"`
 	PullRequest json.RawMessage `json:"pull_request"`
 }
 
@@ -76,8 +77,8 @@ type Comment struct {
 
 type Client interface {
 	GetIssue(context.Context, IssueRef) (Issue, error)
-	ListComments(context.Context, IssueRef) ([]Comment, error)
-	CreateComment(context.Context, IssueRef, string) (Comment, error)
+	ListComments(context.Context, string) ([]Comment, error)
+	CreateComment(context.Context, string, string) (Comment, error)
 }
 
 type Error struct {
@@ -163,8 +164,22 @@ func (c CLI) GetIssue(ctx context.Context, ref IssueRef) (Issue, error) {
 	return issue, nil
 }
 
-func (c CLI) ListComments(ctx context.Context, ref IssueRef) ([]Comment, error) {
-	out, err := c.call(ctx, nil, "api", ref.endpoint()+"/comments", "--paginate", "--slurp")
+// commentsEndpoint only accepts the GitHub API URL returned by GetIssue.
+// In particular, no arbitrary host or URL credentials reach gh api.
+func commentsEndpoint(raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host != "api.github.com" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !strings.HasPrefix(u.Path, "/repos/") || !strings.HasSuffix(u.Path, "/comments") {
+		return "", fmt.Errorf("github: invalid comments_url in issue response")
+	}
+	return strings.TrimPrefix(u.Path, "/"), nil
+}
+
+func (c CLI) ListComments(ctx context.Context, commentsURL string) ([]Comment, error) {
+	endpoint, err := commentsEndpoint(commentsURL)
+	if err != nil {
+		return nil, err
+	}
+	out, err := c.call(ctx, nil, "api", endpoint, "--paginate", "--slurp")
 	if err != nil {
 		return nil, err
 	}
@@ -179,12 +194,16 @@ func (c CLI) ListComments(ctx context.Context, ref IssueRef) ([]Comment, error) 
 	return comments, nil
 }
 
-func (c CLI) CreateComment(ctx context.Context, ref IssueRef, body string) (Comment, error) {
+func (c CLI) CreateComment(ctx context.Context, commentsURL, body string) (Comment, error) {
+	endpoint, err := commentsEndpoint(commentsURL)
+	if err != nil {
+		return Comment{}, err
+	}
 	input, err := json.Marshal(map[string]string{"body": body})
 	if err != nil {
 		return Comment{}, err
 	}
-	out, err := c.call(ctx, input, "api", ref.endpoint()+"/comments", "--method", "POST", "--input", "-")
+	out, err := c.call(ctx, input, "api", endpoint, "--method", "POST", "--input", "-")
 	if err != nil {
 		return Comment{}, err
 	}

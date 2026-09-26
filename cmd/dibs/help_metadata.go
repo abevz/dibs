@@ -58,6 +58,7 @@ var flagHelpText = map[string]flagHelp{
 	"--primary":           {"", "Mark this as the primary artifact root."},
 	"--require-complete":  {"", "Close only after the child calls dibs hooks complete; otherwise hand off."},
 	"--priority":          {"number", "Issue priority; lower numbers run first (default: 3)."},
+	"--publish":           {"", "Publish the closed result, closing note, and branch publicly to GitHub after local close (gh >= 2.48.0)."},
 	"--project":           {"key-or-id", "Project key or UUID."},
 	"--reason":            {"text", "Reason for an operator override; recorded in the audit trail."},
 	"--relation":          {"name", "Issue-to-artifact relation (for example, implements)."},
