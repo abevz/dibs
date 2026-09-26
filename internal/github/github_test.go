@@ -16,6 +16,7 @@ func TestParseIssueRef(t *testing.T) {
 	}{
 		{"Acme/App#42", "github:acme/app#42"},
 		{"https://github.com/Acme/App/issues/42?foo=bar#comment", "github:acme/app#42"},
+		{"https://github.com/Acme/App/issues/42/?foo=bar#comment", "github:acme/app#42"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
@@ -25,7 +26,7 @@ func TestParseIssueRef(t *testing.T) {
 			}
 		})
 	}
-	for _, input := range []string{"https://github.com/o/r/pull/1", "https://evil.example/o/r/issues/1", "o/r#0", "o/r#no", "o/r#1/extra", "https://github.com/o/r/issues/1/extra", "https://github.com/o/r/issues/1/", "https://github.com/o/r/issues%2f1", "o/#1", "o/r#99999999999999999999"} {
+	for _, input := range []string{"https://github.com/o/r/pull/1", "https://evil.example/o/r/issues/1", "o/r#0", "o/r#no", "o/r#1/extra", "https://github.com/o/r/issues/1/extra", "https://github.com/o/r/issues/1//", "https://github.com/o/r/issues%2f1", "o/#1", "o/r#99999999999999999999"} {
 		t.Run("invalid "+input, func(t *testing.T) {
 			if _, err := ParseIssueRef(input); err == nil {
 				t.Fatalf("accepted %q", input)
@@ -96,7 +97,7 @@ func TestCLIErrorsWithFakeGH(t *testing.T) {
 			t.Setenv("PATH", dir)
 			_, err := (CLI{}).GetIssue(context.Background(), IssueRef{"o", "r", 1})
 			var ghErr *Error
-			if !errors.As(err, &ghErr) || ghErr.Code != tc.code {
+			if !errors.As(err, &ghErr) || ghErr.Code != tc.code || !strings.Contains(ghErr.Message(), tc.stderr) {
 				t.Fatalf("GetIssue error = %v, want %s", err, tc.code)
 			}
 		})
@@ -123,4 +124,15 @@ func TestCLIErrorsWithFakeGH(t *testing.T) {
 			t.Fatalf("GetIssue error = %v", err)
 		}
 	})
+}
+
+func TestShortStderr(t *testing.T) {
+	got := shortStderr("  first line\nsecond   line  ")
+	if got != "first line second line" {
+		t.Fatalf("shortStderr = %q", got)
+	}
+	got = shortStderr(strings.Repeat("é", 300))
+	if len([]rune(got)) != 241 || !strings.HasSuffix(got, "…") {
+		t.Fatalf("long stderr not truncated at rune boundary: %q", got)
+	}
 }

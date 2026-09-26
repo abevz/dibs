@@ -43,8 +43,9 @@ goes through the doctor's existing `OSExec` interface, so tests can fake it.
 ## Reference parsing
 
 `ParseIssueRef` accepts `https://github.com/<owner>/<repo>/issues/<n>`
-(ignoring query and fragment) and `<owner>/<repo>#<n>`. It rejects `/pull/`
-URLs, other hosts, missing parts, and non-positive numbers. `ExternalKey()`
+(allowing a trailing slash and ignoring query and fragment) and
+`<owner>/<repo>#<n>`. It rejects `/pull/` URLs, other hosts, missing parts,
+and non-positive numbers. `ExternalKey()`
 returns `github:<owner>/<repo>#<n>` with owner and repository lowercased;
 GitHub treats them case-insensitively.
 
@@ -58,7 +59,8 @@ dibs issue import <url|owner/repo#n> [--project <key>] [--repo <name>]
 
 1. Parse the reference (R-01). Resolve the target (R-02): without `--project`,
    run `git rev-parse --git-common-dir` in the current directory and match it
-   against registered repositories; use that repository and its project with
+   against registered repositories, including legacy registrations that point
+   at a checkout; use that repository and its project with
    repository scope. With an explicit `--project`, infer project scope when
    `--repo` is absent and repository scope when `--repo` is present.
 2. Look up `external_key` in the target project with the existing issue-list

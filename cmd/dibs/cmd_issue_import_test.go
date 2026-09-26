@@ -187,6 +187,39 @@ func TestIssueImportCWDResolution(t *testing.T) {
 	}
 }
 
+func TestIssueImportCWDLegacyCheckoutRegistration(t *testing.T) {
+	root := t.TempDir()
+	mainCheckout := filepath.Join(root, "main")
+	linkedCheckout := filepath.Join(root, "linked")
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main", mainCheckout},
+		{"-C", mainCheckout, "config", "user.name", "Test"},
+		{"-C", mainCheckout, "config", "user.email", "test@example.invalid"},
+		{"-C", mainCheckout, "commit", "-q", "--allow-empty", "-m", "initial"},
+		{"-C", mainCheckout, "worktree", "add", "-q", "-b", "feature", linkedCheckout},
+	} {
+		cmd := exec.Command("git", args...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %s: %v", args, out, err)
+		}
+	}
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(linkedCheckout); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	// Legacy dibs registrations store the checkout path, not .git.
+	fixture := newImportFixture(t, mainCheckout)
+	gh := fakeImportGitHub{issue: github.Issue{Title: "Task", State: "open", HTMLURL: "https://github.com/o/r/issues/1"}}
+	got, _, err := importIssue(context.Background(), fixture.client, gh, []string{"o/r#1"})
+	if err != nil || !got.Imported || got.Issue.ScopeKind != "repository" {
+		t.Fatalf("legacy checkout import = %+v, %v", got, err)
+	}
+}
+
 func TestIssueImportRefRejectedBeforeDaemon(t *testing.T) {
 	for _, ref := range []string{"https://github.com/o/r/pull/1", "https://elsewhere.test/o/r/issues/1", "o/r#0"} {
 		if err := validateCommandArgs([]string{"issue", "import", ref}); err == nil {

@@ -52,3 +52,10 @@
   error-class JSON output passed. No test called the real GitHub API.
 - Real GitHub round trip, publish, README/protocol updates, tag, and release
   remain in `afc-164`/`afc-165` or owner work as described in tasks.md.
+- PR #113 follow-up: current-checkout target resolution now reuses
+  `firstuse.SameRegisteredGitDir` and recognizes legacy checkout paths;
+  `ParseIssueRef` accepts one trailing slash; typed `github.Error` includes a
+  short, one-line `gh` stderr in human and JSON messages. Focused regression
+  tests cover all three changes. `go build ./...` and `go test ./...` passed
+  after the fix. A scratch daemon recognized a legacy checkout registration
+  from a linked worktree and returned the expected JSON import and error.

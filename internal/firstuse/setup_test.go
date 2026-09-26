@@ -85,7 +85,7 @@ func TestLegacyCheckoutRegistrationMatchesGitCommonDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !sameRegisteredGitDir(context.Background(), main, info.GitDir) {
+	if !SameRegisteredGitDir(context.Background(), main, info.GitDir) {
 		t.Fatal("legacy checkout path did not match its Git common directory")
 	}
 	foreign := filepath.Join(root, "foreign")
@@ -93,7 +93,7 @@ func TestLegacyCheckoutRegistrationMatchesGitCommonDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	gitTest(t, foreign, "init", "-b", "main")
-	if sameRegisteredGitDir(context.Background(), foreign, info.GitDir) {
+	if SameRegisteredGitDir(context.Background(), foreign, info.GitDir) {
 		t.Fatal("foreign repository matched the registered Git directory")
 	}
 }

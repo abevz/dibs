@@ -30,7 +30,8 @@ func ParseIssueRef(raw string) (IssueRef, error) {
 		if err != nil || !strings.EqualFold(u.Hostname(), "github.com") || u.User != nil || u.Port() != "" {
 			return IssueRef{}, fmt.Errorf("invalid GitHub issue URL: %q", raw)
 		}
-		parts := strings.Split(strings.TrimPrefix(u.EscapedPath(), "/"), "/")
+		path := strings.TrimSuffix(u.EscapedPath(), "/")
+		parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 		if len(parts) != 4 || parts[2] != "issues" {
 			return IssueRef{}, fmt.Errorf("expected a GitHub issue URL, not a pull request: %q", raw)
 		}
@@ -82,9 +83,20 @@ type Client interface {
 type Error struct {
 	Code   string
 	Remedy string
+	Stderr string
 }
 
-func (e *Error) Error() string { return e.Code + ": " + e.Remedy }
+func (e *Error) Message() string {
+	if e.Stderr == "" {
+		return e.Remedy
+	}
+	if strings.HasPrefix(strings.ToLower(e.Stderr), "gh:") {
+		return e.Stderr + "; " + e.Remedy
+	}
+	return "gh: " + e.Stderr + "; " + e.Remedy
+}
+
+func (e *Error) Error() string { return e.Code + ": " + e.Message() }
 
 // CLI uses the user's gh authentication and never writes credentials to dibs.
 type CLI struct{}
@@ -106,26 +118,37 @@ func (CLI) call(ctx context.Context, input []byte, args ...string) ([]byte, erro
 func classifyError(err, ctxErr error) error {
 	var execErr *exec.Error
 	if errors.As(err, &execErr) && errors.Is(execErr.Err, exec.ErrNotFound) {
-		return &Error{"gh_missing", "install GitHub CLI (gh)"}
+		return &Error{Code: "gh_missing", Remedy: "install GitHub CLI (gh)"}
 	}
 	if errors.Is(ctxErr, context.DeadlineExceeded) || errors.Is(ctxErr, context.Canceled) {
-		return &Error{"timeout", "retry the GitHub request; check your network connection"}
+		return &Error{Code: "timeout", Remedy: "retry the GitHub request; check your network connection"}
 	}
 	var exitErr *exec.ExitError
 	message := strings.ToLower(err.Error())
+	stderr := ""
 	if errors.As(err, &exitErr) {
 		message += " " + strings.ToLower(string(exitErr.Stderr))
+		stderr = shortStderr(string(exitErr.Stderr))
 	}
 	switch {
 	case strings.Contains(message, "rate limit"), strings.Contains(message, "secondary rate"):
-		return &Error{"rate_limited", "wait for the GitHub API rate limit to reset"}
+		return &Error{Code: "rate_limited", Remedy: "wait for the GitHub API rate limit to reset", Stderr: stderr}
 	case strings.Contains(message, "not logged in"), strings.Contains(message, "authentication required"), strings.Contains(message, "authentication failed"), strings.Contains(message, "requires authentication"), strings.Contains(message, "bad credentials"), strings.Contains(message, "http 401"), strings.Contains(message, "gh auth login"):
-		return &Error{"gh_auth", "run gh auth login for github.com"}
+		return &Error{Code: "gh_auth", Remedy: "run gh auth login for github.com", Stderr: stderr}
 	case strings.Contains(message, "http 404"), strings.Contains(message, "404 not found"), strings.Contains(message, "not found (http 404)"):
-		return &Error{"not_found", "check the issue reference and your repository access"}
+		return &Error{Code: "not_found", Remedy: "check the issue reference and your repository access", Stderr: stderr}
 	default:
-		return &Error{"github", "check gh and your network connection, then retry"}
+		return &Error{Code: "github", Remedy: "check gh and your network connection, then retry", Stderr: stderr}
 	}
+}
+
+func shortStderr(raw string) string {
+	oneLine := strings.Join(strings.Fields(raw), " ")
+	runes := []rune(oneLine)
+	if len(runes) > 240 {
+		return string(runes[:240]) + "…"
+	}
+	return oneLine
 }
 
 func (c CLI) GetIssue(ctx context.Context, ref IssueRef) (Issue, error) {

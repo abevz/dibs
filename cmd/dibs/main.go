@@ -231,7 +231,7 @@ func fail(err error) {
 	var githubErr *github.Error
 	if errors.As(err, &githubErr) {
 		if jsonOutput {
-			json.NewEncoder(os.Stderr).Encode(core.APIErrorResponse{Error: core.NewAPIError(githubErr.Code, githubErr.Remedy)})
+			json.NewEncoder(os.Stderr).Encode(core.APIErrorResponse{Error: core.NewAPIError(githubErr.Code, githubErr.Message())})
 		} else {
 			fmt.Fprintf(os.Stderr, "error: %v\n", githubErr)
 		}

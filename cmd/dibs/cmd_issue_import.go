@@ -13,6 +13,7 @@ import (
 
 	"github.com/abevz/dibs/internal/client"
 	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/firstuse"
 	"github.com/abevz/dibs/internal/github"
 	"github.com/google/uuid"
 )
@@ -127,8 +128,7 @@ func resolveImportTarget(ctx context.Context, c *client.Client, opts importOptio
 			return project, "", "", fmt.Errorf("cannot resolve Git common directory; pass --project: %w", err)
 		}
 		for _, candidate := range repos {
-			registered, err := filepath.EvalSymlinks(candidate.CanonicalGitDir)
-			if err == nil && registered == gitDir {
+			if firstuse.SameRegisteredGitDir(ctx, candidate.CanonicalGitDir, gitDir) {
 				repo = candidate
 				break
 			}
