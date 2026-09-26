@@ -31,6 +31,21 @@ func Plan(ctx context.Context, oldCanonical, newCanonical string, worktrees []co
 		return nil, fmt.Errorf("repository identity: %w", err)
 	}
 	oldParent, newParent := filepath.Dir(oldCanonical), filepath.Dir(newCanonical)
+	oldMain, newMain := "", ""
+	// init records a checkout's .git directory as canonical. In that layout
+	// its main worktree is the parent of canonical, not a sibling of it.
+	for _, wt := range worktrees {
+		if !wt.IsMain || wt.AbsolutePath != oldParent {
+			continue
+		}
+		if filepath.Base(oldCanonical) != filepath.Base(newCanonical) {
+			return nil, fmt.Errorf("new Git directory must retain %s basename", filepath.Base(oldCanonical))
+		}
+		oldParent = filepath.Dir(wt.AbsolutePath)
+		newParent = filepath.Dir(filepath.Dir(newCanonical))
+		oldMain, newMain = wt.AbsolutePath, filepath.Dir(newCanonical)
+		break
+	}
 	changes := make([]core.WorktreePathChange, 0, len(worktrees))
 	seen := map[string]bool{}
 	for _, wt := range worktrees {
@@ -41,6 +56,8 @@ func Plan(ctx context.Context, oldCanonical, newCanonical string, worktrees []co
 		newPath := filepath.Join(newParent, rel)
 		if wt.AbsolutePath == oldCanonical {
 			newPath = newCanonical
+		} else if wt.AbsolutePath == oldMain {
+			newPath = newMain
 		}
 		if seen[newPath] {
 			return nil, fmt.Errorf("multiple worktrees would use %s", newPath)
@@ -84,6 +101,13 @@ func gitPath(ctx context.Context, path, arg string) (string, error) {
 		return "", fmt.Errorf("path must be an accessible directory: %s", path)
 	}
 	cmd := exec.CommandContext(ctx, "git", "-C", path, "rev-parse", "--path-format=absolute", arg)
+	// Git environment overrides can make a foreign path look like the same
+	// checkout, defeating the identity check. Probe the path itself.
+	for _, env := range os.Environ() {
+		if !strings.HasPrefix(env, "GIT_") {
+			cmd.Env = append(cmd.Env, env)
+		}
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse %s failed: %w", arg, err)

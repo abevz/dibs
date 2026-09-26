@@ -378,17 +378,22 @@ the same relative paths, then run:
 dibs repo relocate --repo <repository-id> --new-path /absolute/new/path/main
 dibs repo list --project <project-key>
 dibs worktree list --repo <repository-id>
+git -C /absolute/new/path/main worktree repair /absolute/new/path/main
 ```
 
 `--new-path` names the new location of the **registered canonical path**. For
 registrations created by `dibs init`, that is normally the Git common directory
 (`.git` or `.bare`); older registrations may name the main checkout instead.
-The daemon verifies the old and new Git object store and each mapped worktree
-before changing SQLite. If a worktree was deleted or lives outside the moved
-parent, relocate or prune that registration explicitly and retry. The command
-prints an operation ID; supply it with `--operation-id` to retry an uncertain
-request without making a second change. Remove the temporary symlink after
-checking the returned paths and `dibs doctor`.
+For a repository with linked worktrees, pass **every moved worktree path** to
+`git worktree repair` as additional arguments. Git stores absolute pointers in
+linked worktrees' `.git` files; these must be repaired before removing the old
+path. Verify `git -C <each-new-worktree> rev-parse --git-common-dir` after
+removing the temporary symlink. The daemon verifies the old and new Git object
+store and each mapped worktree before changing SQLite. If a worktree was
+deleted or lives outside the moved parent, resolve its registration explicitly
+and retry. The command prints an operation ID; supply it with
+`--operation-id` to retry an uncertain request without making a second change.
+Then check `dibs doctor`.
 
 ## Agent guidance sync
 

@@ -75,6 +75,17 @@ func handleRelocateRepo(st store.CoordinatorStore, logger *slog.Logger) http.Han
 			writeInternalError(w, err, "failed to find repository")
 			return
 		}
+		if replay, ok, err := st.ReplayRepoRelocate(r.Context(), repo.ID, req); err != nil {
+			if apiErr, isAPI := errAsAPIError(err); isAPI && apiErr.Code == core.ErrIdempotencyConflict {
+				writeError(w, http.StatusConflict, apiErr.Code, apiErr.Message)
+				return
+			}
+			writeInternalError(w, err, "failed to check relocation operation")
+			return
+		} else if ok {
+			writeJSON(w, http.StatusOK, replay)
+			return
+		}
 		worktrees, err := st.ListWorktrees(r.Context(), repo.ID)
 		if err != nil {
 			writeInternalError(w, err, "failed to list worktrees")

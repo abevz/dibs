@@ -34,6 +34,11 @@ func TestRelocateRepoAPIRejectsDifferentGitAndReplays(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldMain := filepath.Join(oldParent, "main")
+	aliasParent := filepath.Join(root, "alias")
+	if err := os.Symlink(newParent, aliasParent); err != nil {
+		t.Fatal(err)
+	}
+	aliasMain := filepath.Join(aliasParent, "main")
 	ctx := context.Background()
 	if _, err := sqlite.CreateProject(ctx, db, "demo", "Demo", ""); err != nil {
 		t.Fatal(err)
@@ -70,20 +75,27 @@ func TestRelocateRepoAPIRejectsDifferentGitAndReplays(t *testing.T) {
 		t.Fatalf("foreign path status = %d", bad.StatusCode)
 	}
 	bad.Body.Close()
-	first, result := call(main, "relocate-api-good")
-	if first.StatusCode != http.StatusOK || result.Repository.ID != repo.ID || len(result.Worktrees) != 1 || result.Worktrees[0].ID != wt.ID || result.Worktrees[0].AbsolutePath != main {
+	first, result := call(aliasMain, "relocate-api-good")
+	if first.StatusCode != http.StatusOK || result.Repository.ID != repo.ID || len(result.Worktrees) != 1 || result.Worktrees[0].ID != wt.ID || result.Worktrees[0].AbsolutePath != aliasMain {
 		t.Fatalf("relocate status/result = %d %+v", first.StatusCode, result)
 	}
 	issues, err := sqlite.ListIssues(ctx, db, core.IssueListParams{Worktree: wt.ID})
 	if err != nil || len(issues) != 1 || issues[0].ID != issue.ID {
 		t.Fatalf("issue lookup after relocation = %+v, %v", issues, err)
 	}
-	replay, replayResult := call(main, "relocate-api-good")
+	second, secondResult := call(main, "relocate-api-second")
+	if second.StatusCode != http.StatusOK || secondResult.Repository.CanonicalGitDir != main {
+		t.Fatalf("second relocate = %d %+v", second.StatusCode, secondResult)
+	}
+	if err := os.Remove(aliasParent); err != nil {
+		t.Fatal(err)
+	}
+	replay, replayResult := call(aliasMain, "relocate-api-good")
 	if replay.StatusCode != http.StatusOK || replayResult.OperationID != result.OperationID {
 		t.Fatalf("replay status/result = %d %+v", replay.StatusCode, replayResult)
 	}
 	var events int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE event_type = 'repo_relocated'`).Scan(&events); err != nil || events != 1 {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE event_type = 'repo_relocated'`).Scan(&events); err != nil || events != 2 {
 		t.Fatalf("events = %d, %v", events, err)
 	}
 }

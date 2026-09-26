@@ -54,3 +54,51 @@ func TestPlanSameGitWorktreesAndRejectsOtherCheckout(t *testing.T) {
 		t.Fatal("stale worktree registration accepted")
 	}
 }
+
+func TestPlanInitGitDirAndRepairLinkedWorktreeAfterMove(t *testing.T) {
+	root := t.TempDir()
+	oldParent := filepath.Join(root, "old")
+	oldMain := filepath.Join(oldParent, "main")
+	if err := os.MkdirAll(oldMain, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(t, "-C", oldMain, "init", "-b", "main")
+	git(t, "-C", oldMain, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial")
+	git(t, "-C", oldMain, "worktree", "add", "-b", "feature", filepath.Join(oldParent, "feature"))
+	newParent := filepath.Join(root, "new")
+	if err := os.Rename(oldParent, newParent); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(newParent, oldParent); err != nil {
+		t.Fatal(err)
+	}
+	newMain := filepath.Join(newParent, "main")
+	newFeature := filepath.Join(newParent, "feature")
+	changes, err := Plan(context.Background(), filepath.Join(oldMain, ".git"), filepath.Join(newMain, ".git"), []core.Worktree{
+		{ID: "main", AbsolutePath: oldMain, IsMain: true},
+		{ID: "feature", AbsolutePath: filepath.Join(oldParent, "feature")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 2 || changes[0].NewPath != newMain || changes[1].NewPath != newFeature {
+		t.Fatalf("init-created mapping = %+v", changes)
+	}
+	git(t, "-C", newMain, "worktree", "repair", newFeature)
+	if err := os.Remove(oldParent); err != nil {
+		t.Fatal(err)
+	}
+	git(t, "-C", newFeature, "rev-parse", "--git-common-dir")
+}
+
+func TestPlanIgnoresGitEnvironmentOverrides(t *testing.T) {
+	root := t.TempDir()
+	registered := filepath.Join(root, "registered")
+	foreign := filepath.Join(root, "foreign")
+	git(t, "init", registered)
+	git(t, "init", foreign)
+	t.Setenv("GIT_DIR", filepath.Join(registered, ".git"))
+	if _, err := Plan(context.Background(), registered, foreign, nil); err == nil || !strings.Contains(err.Error(), "different Git checkouts") {
+		t.Fatalf("Git environment overrode path identity: %v", err)
+	}
+}

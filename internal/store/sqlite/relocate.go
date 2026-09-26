@@ -24,6 +24,19 @@ func RelocateRepo(ctx context.Context, db *sql.DB, repoID, expectedPath string, 
 	return core.RelocateRepoResult{}, fmt.Errorf("relocate operation raced repeatedly")
 }
 
+// ReplayRepoRelocate checks an already committed result before filesystem
+// validation. A later move may have removed the original destination path.
+func ReplayRepoRelocate(ctx context.Context, db *sql.DB, repoID string, req core.RelocateRepoRequest) (core.RelocateRepoResult, bool, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return core.RelocateRepoResult{}, false, err
+	}
+	defer tx.Rollback()
+	fingerprintReq := req
+	fingerprintReq.OperationID = ""
+	return replayOperation[core.RelocateRepoResult](ctx, tx, req.OperationID, core.OperationKindRepoRelocate, repoID, requestFingerprint(fingerprintReq))
+}
+
 func relocateRepoOnce(ctx context.Context, db *sql.DB, repoID, expectedPath string, req core.RelocateRepoRequest, changes []core.WorktreePathChange) (core.RelocateRepoResult, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

@@ -8,7 +8,10 @@
   result and a single `repo_relocated` global event records a successful move.
   Repository, worktree, and issue IDs remain stable.
 - Focused API/store/Git-path tests cover a foreign checkout, stale worktree,
-  target-path collision, retained issue reference, replay, and one audit event.
+  target-path collision, retained issue reference, replay after a second move,
+  and one audit event per move. They also cover `dibs init`'s `.git` canonical
+  path, linked-worktree repair after removing the old path, and inherited
+  `GIT_DIR` override rejection.
   `go test ./...`, `go build ./...`, and `git diff --check` passed in the task
   worktree. A scratch daemon exercise moved a registration through a temporary
   symlink, removed the symlink, replayed the operation, and reran `dibs init`
@@ -16,8 +19,13 @@
   isolated PATH. Evidence: `/tmp/dibs-afc141-go-test-final.log` and
   `/tmp/dibs-afc141-smoke.T71HKf/`.
 - Live registration relocation and compatibility-symlink removal remain for
-  after merge and installed-daemon verification. Independent review and CI are
-  still pending for this revision.
+  after merge and installed-daemon verification. Initial independent review
+  found the `.git` mapping, linked-worktree repair, replay ordering, and Git
+  environment gaps; this revision addresses them. A full race run had an
+  existing API shutdown timeout in `TestDaemonSafetyFieldsAndMutationLogs`;
+  that test passed in a focused race rerun. Evidence:
+  `/tmp/dibs-afc141-race.log` and `/tmp/dibs-afc141-race-focused.log`.
+  Final independent review and CI are pending for this revision.
 
 Status: approved by owner; packet active. Rename `afc-137` was owner-closed on
 2026-09-23 after PR #67 (`4dd9983`). Earlier per-PR pending-review notes below

@@ -64,6 +64,10 @@ func (s *Store) RelocateRepo(ctx context.Context, repoID, expectedPath string, r
 	return RelocateRepo(ctx, s.db, repoID, expectedPath, req, changes)
 }
 
+func (s *Store) ReplayRepoRelocate(ctx context.Context, repoID string, req core.RelocateRepoRequest) (core.RelocateRepoResult, bool, error) {
+	return ReplayRepoRelocate(ctx, s.db, repoID, req)
+}
+
 func (s *Store) UpsertWorktree(ctx context.Context, repoID string, req core.CreateWorktreeRequest) (core.Worktree, bool, error) {
 	return UpsertWorktree(ctx, s.db, repoID, req)
 }
