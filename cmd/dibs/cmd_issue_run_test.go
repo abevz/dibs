@@ -84,6 +84,7 @@ func TestIssueRunHelpFlagShortCircuits(t *testing.T) {
 // binary invocation -- there's no lighter-weight in-process seam for it.
 type mockCoordinator struct {
 	mu                         sync.Mutex
+	claimSessionIDs            []string
 	claimVersion               int
 	claimExpiry                string
 	closeReqs                  []map[string]any
@@ -125,6 +126,16 @@ func (m *mockCoordinator) handler() http.Handler {
 		})
 	})
 	mux.HandleFunc("POST /v1/issues/{id}/claim", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			SessionID string `json:"session_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid claim body", http.StatusBadRequest)
+			return
+		}
+		m.mu.Lock()
+		m.claimSessionIDs = append(m.claimSessionIDs, body.SessionID)
+		m.mu.Unlock()
 		expiry := m.claimExpiry
 		if expiry == "" {
 			expiry = "2099-01-01T00:00:00Z"
@@ -295,6 +306,9 @@ func TestIssueRunClosesOnSuccess(t *testing.T) {
 	}
 	if got["lease_token"] != "test-lease-token" {
 		t.Errorf("lease_token = %v, want test-lease-token", got["lease_token"])
+	}
+	if len(mock.claimSessionIDs) != 1 || !strings.HasPrefix(mock.claimSessionIDs[0], "dibs-run:v1:") {
+		t.Errorf("claim session ID = %v, want issue-run process metadata", mock.claimSessionIDs)
 	}
 }
 

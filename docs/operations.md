@@ -358,6 +358,13 @@ Press `r` to refresh or `q` to quit. It refreshes every two seconds and marks
 the last complete view stale if the daemon becomes unavailable. Use
 `dibs watch --project <key> --once` for a text snapshot or add `--json` for a
 machine-readable snapshot. Watch reads the daemon API and does not claim work.
+For an active lease started by `dibs issue run`, Active leases shows the PID of
+the supervising `dibs` process and its hostname. The values come from the
+claimant's session ID and are **self-reported**, not verified by the daemon;
+another local client can report the same format. `PID ?` means process
+metadata is unavailable, as with ordinary manual or older claims. `--json`
+exposes `lease_pid` and `lease_host` when present. PIDs can be reused, and
+lease ownership still requires the token and generation.
 The installed `dibs` and running `dibsd` must both include the watch endpoint;
 restart an older daemon explicitly after upgrading it.
 

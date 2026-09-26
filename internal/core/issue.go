@@ -98,30 +98,35 @@ func NormalizeInvocationMode(mode string) (string, error) {
 
 // Issue represents a task or work item in a project.
 type Issue struct {
-	ID                 string       `json:"id"`
-	ShortID            string       `json:"short_id"`
-	ProjectID          string       `json:"project_id"`
-	RepositoryID       string       `json:"repository_id,omitempty"`
-	WorktreeID         string       `json:"worktree_id,omitempty"`
-	ScopeKind          string       `json:"scope_kind"`
-	IssueType          string       `json:"issue_type"`
-	Title              string       `json:"title"`
-	ExternalKey        string       `json:"external_key,omitempty"`
-	Description        string       `json:"description,omitempty"`
-	AcceptanceCriteria string       `json:"acceptance_criteria,omitempty"`
-	Status             string       `json:"status"`
-	Priority           int          `json:"priority"`
-	Assignee           string       `json:"assignee,omitempty"`
-	Version            int          `json:"version"`
-	ClaimedAt          string       `json:"claimed_at,omitempty"`
-	Holder             string       `json:"holder,omitempty"`
-	LeaseExpiresAt     string       `json:"lease_expires_at,omitempty"`
-	ClosedAt           string       `json:"closed_at,omitempty"`
-	CreatedAt          string       `json:"created_at"`
-	UpdatedAt          string       `json:"updated_at"`
-	Dependencies       []Dependency `json:"dependencies,omitempty"`
-	Blocked            bool         `json:"blocked,omitempty"`
-	BlockedBy          []string     `json:"blocked_by,omitempty"`
+	ID                 string `json:"id"`
+	ShortID            string `json:"short_id"`
+	ProjectID          string `json:"project_id"`
+	RepositoryID       string `json:"repository_id,omitempty"`
+	WorktreeID         string `json:"worktree_id,omitempty"`
+	ScopeKind          string `json:"scope_kind"`
+	IssueType          string `json:"issue_type"`
+	Title              string `json:"title"`
+	ExternalKey        string `json:"external_key,omitempty"`
+	Description        string `json:"description,omitempty"`
+	AcceptanceCriteria string `json:"acceptance_criteria,omitempty"`
+	Status             string `json:"status"`
+	Priority           int    `json:"priority"`
+	Assignee           string `json:"assignee,omitempty"`
+	Version            int    `json:"version"`
+	ClaimedAt          string `json:"claimed_at,omitempty"`
+	Holder             string `json:"holder,omitempty"`
+	LeaseExpiresAt     string `json:"lease_expires_at,omitempty"`
+	// LeasePID is client-reported process metadata. issue run reports its local
+	// supervisor; other clients can report the same typed session ID. It is
+	// advisory, scoped to LeaseHost, and never proves ownership.
+	LeasePID     int          `json:"lease_pid,omitempty"`
+	LeaseHost    string       `json:"lease_host,omitempty"`
+	ClosedAt     string       `json:"closed_at,omitempty"`
+	CreatedAt    string       `json:"created_at"`
+	UpdatedAt    string       `json:"updated_at"`
+	Dependencies []Dependency `json:"dependencies,omitempty"`
+	Blocked      bool         `json:"blocked,omitempty"`
+	BlockedBy    []string     `json:"blocked_by,omitempty"`
 	// Blocks lists the short IDs of non-terminal issues that this issue blocks
 	// (the reverse of BlockedBy). It makes a blocking relationship visible from
 	// both sides: A.BlockedBy contains B iff B.Blocks contains A.

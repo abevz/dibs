@@ -230,6 +230,27 @@ are historical and do not override that coordinator closure.
   `go mod tidy -diff` and `git diff --check` were clean. Independent review
   and CI evidence are recorded on the implementation PR.
 
+### afc-151 — active lease process diagnostics
+
+- `issue run` records its supervisor PID and hostname in the existing lease
+  session ID. The daemon derives advisory `lease_pid` and `lease_host` fields
+  only for active, typed `dibs-run:v1` sessions. Ordinary manual and old
+  claims keep unknown process data. A caller can deliberately send that
+  format, so the board labels values self-reported; no migration or ownership
+  rule changes.
+- In a post-rebase isolated daemon/database smoke, an active `issue run`
+  process had PID 105477; `watch --json` reported `lease_pid: 105477` and
+  `lease_host: arch`, and the text board showed `105477@arch` with a
+  `PID self-reported` footer. Evidence: `/tmp/afc151-smoke.zKJVBV/`.
+- Store tests cover two hosts sharing a PID, ordinary and spoofed manual
+  session IDs, expired metadata, and malformed typed IDs. Watch tests cover
+  JSON fields and known versus unknown text display. Independent review found
+  that placing PID before TTL hid TTL at 60 columns. The final compact
+  rendering shows ID, TTL, complete PID@host, then holder at 60 columns;
+  a regression test asserts both values. Clean `go test ./...`, focused `go vet`,
+  gofmt, and diff checks passed. Independent read-only review of the final
+  implementation found no remaining defects.
+
 ### afc-131 — newcomer README
 
 - Rewrote the opening around duplicate task work, the exact public tagline,
