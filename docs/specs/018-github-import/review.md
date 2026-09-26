@@ -58,6 +58,8 @@
 - `issue run --publish` posts from the parent process, so agent sandboxes
   that block network access do not affect publication. Whether Codex applies
   its sandbox to MCP servers is not established; afc-165 verifies it.
+- Owner approved this amendment on 2026-09-26 (in session, relayed by the
+  agent).
 
 ## Approval
 
