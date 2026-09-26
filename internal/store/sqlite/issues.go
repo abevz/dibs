@@ -2377,6 +2377,48 @@ type legacyEventCursor struct {
 
 // ListGlobalEvents returns a global cursor-paginated event stream ordered by
 // daemon-assigned sequence.
+// ListRecentEvents returns the newest events in ascending order and a cursor
+// positioned at the newest event, ready for subsequent ListGlobalEvents calls.
+func ListRecentEvents(ctx context.Context, db *sql.DB, limit int) (core.EventPage, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := db.QueryContext(ctx,
+		`SELECT sequence, id, issue_id, actor, event_type, payload_json, created_at
+		 FROM events ORDER BY sequence DESC LIMIT ?`, limit)
+	if err != nil {
+		return core.EventPage{}, fmt.Errorf("list recent events: %w", err)
+	}
+	defer rows.Close()
+	events := make([]core.Event, 0)
+	for rows.Next() {
+		var event core.Event
+		var issueID sql.NullString
+		if err := rows.Scan(&event.Sequence, &event.ID, &issueID, &event.Actor, &event.EventType, &event.PayloadJSON, &event.CreatedAt); err != nil {
+			return core.EventPage{}, fmt.Errorf("scan recent event: %w", err)
+		}
+		if issueID.Valid {
+			event.IssueID = issueID.String
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return core.EventPage{}, fmt.Errorf("iterate recent events: %w", err)
+	}
+	for left, right := 0, len(events)-1; left < right; left, right = left+1, right-1 {
+		events[left], events[right] = events[right], events[left]
+	}
+	sequence := int64(0)
+	if len(events) > 0 {
+		sequence = events[len(events)-1].Sequence
+	}
+	cursor, err := encodeEventCursor(eventCursor{Sequence: sequence})
+	if err != nil {
+		return core.EventPage{}, err
+	}
+	return core.EventPage{Events: events, NextSince: cursor}, nil
+}
+
 func ListGlobalEvents(ctx context.Context, db *sql.DB, since string, limit int) (core.EventPage, error) {
 	if limit <= 0 {
 		limit = 100

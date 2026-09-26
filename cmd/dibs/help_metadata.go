@@ -48,6 +48,7 @@ var flagHelpText = map[string]flagHelp{
 	"--name":              {"display-name", "Human-readable project name; spaces are allowed."},
 	"--note":              {"text", "Note recorded with the issue action."},
 	"--offset":            {"number", "Number of matching issues to skip (0–1000000)."},
+	"--once":              {"", "Print one watch snapshot without opening an interactive board."},
 	"--operation-id":      {"id", "Stable ID for safely retrying the same mutation."},
 	"--path":              {"path", "Filesystem or repository-relative path, depending on the command."},
 	"--pr-url":            {"url", "Pull request URL recorded when closing the issue."},

@@ -572,6 +572,22 @@ func (c *Client) ListEvents(ctx context.Context, issueID string) ([]core.Event, 
 	return result.Events, nil
 }
 
+// RecentEvents reads the newest events and returns a cursor for future updates.
+func (c *Client) RecentEvents(ctx context.Context, limit int) (core.EventPage, error) {
+	path := "/v1/events/recent"
+	if limit > 0 {
+		path += "?limit=" + strconv.Itoa(limit)
+	}
+	var result core.EventPage
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &result); err != nil {
+		return core.EventPage{}, err
+	}
+	if result.Events == nil {
+		result.Events = []core.Event{}
+	}
+	return result, nil
+}
+
 // WatchEvents sends a GET /v1/events request with cursor pagination and optional long-polling.
 func (c *Client) WatchEvents(ctx context.Context, since string, limit, waitMS int) (core.EventPage, error) {
 	path := "/v1/events"

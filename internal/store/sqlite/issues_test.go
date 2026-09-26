@@ -4408,6 +4408,34 @@ func TestListGlobalEvents(t *testing.T) {
 	}
 }
 
+func TestListRecentEventsStartsAtNewest(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	ctx := context.Background()
+	for _, id := range []string{"first", "second", "third"} {
+		if _, err := db.Exec(`INSERT INTO events (id, actor, event_type, payload_json, created_at) VALUES (?, 'test', 'test.event', '{}', ?)`, id, time.Now().UTC().Format(time.RFC3339)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := ListRecentEvents(ctx, db, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 2 || page.Events[0].ID != "second" || page.Events[1].ID != "third" {
+		t.Fatalf("recent events = %#v", page.Events)
+	}
+	if _, err := db.Exec(`INSERT INTO events (id, actor, event_type, payload_json, created_at) VALUES ('fourth', 'test', 'test.event', '{}', ?)`, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		t.Fatal(err)
+	}
+	followup, err := ListGlobalEvents(ctx, db, page.NextSince, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(followup.Events) != 1 || followup.Events[0].ID != "fourth" {
+		t.Fatalf("events after recent cursor = %#v", followup.Events)
+	}
+}
+
 func TestListGlobalEventsInvalidCursor(t *testing.T) {
 	t.Parallel()
 	db := newTestDB(t)

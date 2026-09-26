@@ -157,6 +157,7 @@ func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st s
 	mux.HandleFunc("GET /v1/issues/{issue_id}/notes", handleListNotes(st, logger))
 	mux.HandleFunc("GET /v1/issues/{issue_id}/events", handleListEvents(st, logger))
 	mux.HandleFunc("GET /v1/events", handleWatchEvents(st, logger))
+	mux.HandleFunc("GET /v1/events/recent", handleRecentEvents(st, logger))
 	mux.HandleFunc("GET /v1/issues", handleListIssues(st, logger))
 
 	server := &http.Server{
