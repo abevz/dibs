@@ -208,6 +208,34 @@ Before finishing implementation work:
 - build the repo
 - run tests relevant to the touched code
 
+### Verification budget
+
+Verify in proportion to the change. The goal is evidence, not repeated
+rebuilds.
+
+- While iterating, run focused tests for the touched packages
+  (`go test ./internal/<pkg>/...`) with the normal Go cache. Do not add
+  `-count=1` or run `./...` after every edit.
+- Once before opening or updating a PR, run `gofmt`, `go build ./...`, and
+  `go test ./...`. Add `-count=1` only when a cached pass would mislead, for
+  example when tests read environment, files, or time. Record the commands
+  in the PR.
+- Cross-compile (`GOOS=darwin GOARCH=arm64 go test -exec /bin/true <pkgs>`)
+  only when the change touches platform-specific code: build tags,
+  `_linux.go`/`_darwin.go` files, syscall constants, or OS limits such as
+  socket path length. CI covers Linux; the release workflow installs natively
+  on all four platforms when release paths change.
+- If a slow or flaky test fails, rerun it once. If it fails again and is
+  unrelated to the change, record it in the PR and file a coordinator issue
+  instead of looping or blocking the task.
+- Tests must not depend on the developer's environment. Clear inherited
+  variables a test reads with `t.Setenv` (for example `DIBS_OPERATOR_TOKEN`,
+  `AF_OPERATOR_TOKEN`, and `DIBS_*` paths); do not work around it by
+  scrubbing the shell.
+- Do not `git pull` in the `main/` checkout from task work. Its post-merge
+  hook runs `make build-install` and restarts an active `dibsd`. Start task
+  worktrees from `origin/main` after `git fetch` instead.
+
 ## Testing policy
 
 Running tests is not the same as having tests. Rules:
