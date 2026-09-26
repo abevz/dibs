@@ -1,6 +1,6 @@
 # Installing dibs
 
-The `v0.1.0-rc.1` preview is published for Linux amd64/arm64 and macOS
+The `v0.1.0-rc.2` preview is published for Linux amd64/arm64 and macOS
 Intel/Apple Silicon. Use its versioned URL: GitHub's `latest` URL selects
 stable releases and does not select this prerelease.
 
@@ -9,7 +9,7 @@ stable releases and does not select this prerelease.
 Install the published preview:
 
 ```sh
-curl -fsSL https://github.com/abevz/dibs/releases/download/v0.1.0-rc.1/install.sh | sh /dev/stdin
+curl -fsSL https://github.com/abevz/dibs/releases/download/v0.1.0-rc.2/install.sh | sh /dev/stdin
 ```
 
 The downloaded script carries the release tag that supplied it, and fetches the
@@ -22,7 +22,7 @@ hint when that directory is not available in the current shell.
 To inspect the exact script before running it:
 
 ```sh
-curl -fsSL -o install.sh https://github.com/abevz/dibs/releases/download/v0.1.0-rc.1/install.sh
+curl -fsSL -o install.sh https://github.com/abevz/dibs/releases/download/v0.1.0-rc.2/install.sh
 less install.sh
 sh install.sh
 ```
@@ -88,7 +88,7 @@ discard work.
 
 ## Homebrew
 
-If Homebrew is already installed, the same preview is available from the
+If Homebrew is already installed, the preview is available from the
 [dibs tap](https://github.com/abevz/homebrew-dibs):
 
 ```sh
@@ -107,8 +107,9 @@ described in [operations](operations.md#explicit-service-switch).
 
 ## Install with Go
 
-For Go users, this version-pinned source install was checked on Linux amd64
-with Go 1.27.1:
+For Go users, this earlier version-pinned source install was checked on Linux
+amd64 with Go 1.27.1. The rc.2 source install will be checked after its tag is
+published:
 
 ```sh
 go install github.com/abevz/dibs/cmd/dibs@v0.1.0-rc.1 \
