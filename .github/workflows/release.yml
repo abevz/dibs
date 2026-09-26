@@ -36,6 +36,8 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_version || format('v0.0.0-ci.{0}', github.run_number) }}
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +64,7 @@ jobs:
           archive="dibs_${GOOS}_${GOARCH}"
           mkdir -p "dist/${archive}"
           revision="$(git rev-parse HEAD)"
-          ldflags="-X github.com/abevz/dibs/internal/build.Revision=${revision}"
+          ldflags="-X github.com/abevz/dibs/internal/build.Revision=${revision} -X github.com/abevz/dibs/internal/build.Version=${VERSION}"
           go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibs" ./cmd/dibs/
           go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibsd" ./cmd/dibsd/
           go build -buildvcs=false -ldflags "${ldflags}" -o "dist/${archive}/dibs-mcp" ./cmd/dibs-mcp/
@@ -94,6 +96,8 @@ jobs:
 
   verify:
     needs: package
+    env:
+      VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_version || format('v0.0.0-ci.{0}', github.run_number) }}
     strategy:
       fail-fast: false
       matrix:
@@ -135,9 +139,9 @@ jobs:
           test -x "$BINDIR/dibs-mcp"
           tar -xOf "release-bundle/dibs_${TARGET}.tar.gz" LICENSE > "$RUNNER_TEMP/archive-LICENSE"
           cmp "$RUNNER_TEMP/archive-LICENSE" "$RUNNER_TEMP/share/licenses/dibs/LICENSE"
-          "$BINDIR/dibs" version
+          test "$("$BINDIR/dibs" version)" = "dibs $VERSION (${GITHUB_SHA:0:7})"
           sh release-bundle/install.sh
-          "$BINDIR/dibs" version
+          test "$("$BINDIR/dibs" version)" = "dibs $VERSION (${GITHUB_SHA:0:7})"
           sh contrib/install/test-first-use.sh "$BINDIR"
           if command -v ruby >/dev/null 2>&1; then
             ruby -c release-bundle/dibs.rb

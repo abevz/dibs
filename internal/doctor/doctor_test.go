@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -16,10 +17,41 @@ import (
 	"github.com/abevz/dibs/internal/testsocket"
 )
 
+func TestEvaluateSocketPath(t *testing.T) {
+	path := "/" + strings.Repeat("x", len(syscall.RawSockaddrUnix{}.Path))
+	result := EvaluateSocketPath(config.Config{SocketPath: path})
+	if result.Status != "WARN" || !strings.Contains(result.Message, path) || !strings.Contains(result.Message, "DIBS_SOCKET") {
+		t.Fatalf("result = %+v, want actionable warning", result)
+	}
+}
+
 type mockExec struct {
 	cmdOut []byte
 	cmdErr error
 	env    map[string]string
+}
+
+func TestEvaluateBinaryVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name, cliVersion, daemonVersion, wantStatus string
+		healthAvailable                             bool
+	}{
+		{name: "matching release", cliVersion: "v0.1.0-rc.3", daemonVersion: "v0.1.0-rc.3", healthAvailable: true, wantStatus: "ok"},
+		{name: "different release", cliVersion: "v0.1.0-rc.3", daemonVersion: "v0.1.0-rc.2", healthAvailable: true, wantStatus: "WARN"},
+		{name: "older daemon", cliVersion: "v0.1.0-rc.3", healthAvailable: true, wantStatus: "WARN"},
+		{name: "unreachable daemon", cliVersion: "v0.1.0-rc.3", wantStatus: "WARN"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var h *core.Health
+			if tc.healthAvailable {
+				h = &core.Health{Version: tc.daemonVersion}
+			}
+			result := evaluateBinaryVersion(h, tc.cliVersion)
+			if result.Status != tc.wantStatus {
+				t.Fatalf("result = %+v, want %s", result, tc.wantStatus)
+			}
+		})
+	}
 }
 
 func TestEvaluateOperatorTokenMigration(t *testing.T) {

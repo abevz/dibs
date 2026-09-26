@@ -22,6 +22,9 @@ import (
 )
 
 func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st store.CoordinatorStore) error {
+	if err := config.ValidateSocketPath(cfg.SocketPath); err != nil {
+		return err
+	}
 	if err := ensureRuntimeDirectory(filepath.Dir(cfg.SocketPath), cfg.UsesDefaultSocketPath()); err != nil {
 		return fmt.Errorf("create socket directory: %w", err)
 	}
@@ -73,6 +76,7 @@ func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st s
 			DBPath:                  cfg.DBPath,
 			SocketPath:              cfg.SocketPath,
 			Time:                    time.Now().UTC(),
+			Version:                 build.Version,
 			Revision:                build.Revision,
 			OperatorTokenConfigured: &operatorTokenConfigured,
 		}

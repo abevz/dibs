@@ -3,7 +3,8 @@ BINDIR ?= $(HOME)/.local/bin
 BACKUPDIR ?= $(HOME)/backups/dibs
 SYSTEMCTL_USER ?= sh contrib/install/systemctl-user.sh
 GIT_REVISION := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
-LD_VERSION_FLAG = -ldflags "-X github.com/abevz/dibs/internal/build.Revision=$(GIT_REVISION)"
+GIT_VERSION ?= dev
+LD_VERSION_FLAG = -ldflags "-X github.com/abevz/dibs/internal/build.Revision=$(GIT_REVISION) -X github.com/abevz/dibs/internal/build.Version=$(GIT_VERSION)"
 
 .PHONY: preflight fmt vet lint build test test-concurrency build-install install-service uninstall-service restart-service install-launchd uninstall-launchd install-backup uninstall-backup install-backup-systemd uninstall-backup-systemd install-backup-launchd uninstall-backup-launchd install-hooks
 

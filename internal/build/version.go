@@ -1,5 +1,9 @@
 package build
 
+// Version is the release tag embedded by the release workflow. Source builds
+// keep the dev marker unless their build explicitly supplies a version.
+var Version = "dev"
+
 // Revision is the git commit SHA the running binary was built from. `make
 // build`/`make build-install` set it automatically via ldflags to
 // `git rev-parse HEAD`; it stays "unknown" for builds that skip the
@@ -8,3 +12,10 @@ package build
 // in `dibs` use it to detect a daemon still running an older commit than
 // the source checkout it was rebuilt from.
 var Revision = "unknown"
+
+func ShortRevision() string {
+	if len(Revision) > 7 {
+		return Revision[:7]
+	}
+	return Revision
+}

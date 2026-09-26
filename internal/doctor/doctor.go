@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/abevz/dibs/internal/build"
 	"github.com/abevz/dibs/internal/client"
 	"github.com/abevz/dibs/internal/config"
 	"github.com/abevz/dibs/internal/core"
@@ -97,6 +98,30 @@ func EvaluateDaemon(ctx context.Context, c *client.Client) (Result, *core.Health
 		Status:  "ok",
 		Message: "Daemon is reachable and responding",
 	}, &h
+}
+
+// EvaluateBinaryVersion compares the installed CLI and responding daemon. An
+// older daemon without a version field should be restarted after an upgrade.
+func EvaluateBinaryVersion(h *core.Health) Result {
+	return evaluateBinaryVersion(h, build.Version)
+}
+
+func evaluateBinaryVersion(h *core.Health, cliVersion string) Result {
+	const name = "Binary version"
+	if h == nil {
+		return Result{Name: name, Status: "WARN", Message: "Daemon version unavailable"}
+	}
+	if h.Version == "" {
+		return Result{Name: name, Status: "WARN", Message: "Daemon does not report a version", Hint: "Rebuild and restart dibsd"}
+	}
+	if h.Version != cliVersion {
+		return Result{
+			Name: name, Status: "WARN",
+			Message: fmt.Sprintf("CLI version %s differs from daemon version %s", cliVersion, h.Version),
+			Hint:    "Install matching dibs and dibsd binaries, then restart dibsd",
+		}
+	}
+	return Result{Name: name, Status: "ok", Message: "CLI and daemon versions match (" + cliVersion + ")"}
 }
 
 // EvaluateBinaryRevision compares the daemon's build.Revision (the git SHA
@@ -443,11 +468,20 @@ func EvaluateConfigMismatch(h *core.Health, cfg config.Config) Result {
 	}
 }
 
+func EvaluateSocketPath(cfg config.Config) Result {
+	const name = "Socket path"
+	if err := config.ValidateSocketPath(cfg.SocketPath); err != nil {
+		return Result{Name: name, Status: "WARN", Message: err.Error(), Hint: "Set DIBS_SOCKET to a shorter path"}
+	}
+	return Result{Name: name, Status: "ok", Message: "Configured Unix socket path fits the platform limit"}
+}
+
 func RunAll(ctx context.Context, c *client.Client, cfg config.Config) []Result {
-	var results []Result
+	results := []Result{EvaluateSocketPath(cfg)}
 
 	resDaemon, h := EvaluateDaemon(ctx, c)
 	results = append(results, resDaemon)
+	results = append(results, EvaluateBinaryVersion(h))
 
 	e := realExec{}
 	results = append(results, EvaluateBinaryRevision(h, e))
