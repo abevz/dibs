@@ -147,6 +147,15 @@ func (c *Client) ListRepos(ctx context.Context, project string) ([]core.Reposito
 	return result.Repositories, nil
 }
 
+// RelocateRepo moves a repository registration and its worktree paths.
+func (c *Client) RelocateRepo(ctx context.Context, repoID string, req core.RelocateRepoRequest) (core.RelocateRepoResult, error) {
+	var result core.RelocateRepoResult
+	if err := c.doJSON(ctx, http.MethodPost, "/v1/repos/"+url.PathEscape(repoID)+"/relocate", req, &result); err != nil {
+		return core.RelocateRepoResult{}, err
+	}
+	return result, nil
+}
+
 // RegisterWorktree sends a POST /v1/worktrees request.
 func (c *Client) RegisterWorktree(ctx context.Context, req core.CreateWorktreeRequest) (core.Worktree, error) {
 	var result struct {

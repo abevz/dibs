@@ -33,3 +33,9 @@ The epic's end-to-end measure is install, init, create, claim in four commands
 and at most two minutes on a clean supported machine without `make` or a
 service manager. Record the exact command transcript and elapsed time in the
 implementation review.
+
+## afc-141 repository relocation
+
+- [x] Add the daemon/API/CLI relocation operation, atomic path update, operation replay, and audit event.
+- [x] Verify same Git store, all worktree mappings, collision rejection, idempotency, retained IDs, and lookup after move in tests and a scratch daemon.
+- [ ] Relocate the live af-coordinator registration from the compatibility symlink to `~/github/dibs/main`; verify doctor and path lookups, then remove the compatibility symlink.

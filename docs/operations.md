@@ -368,6 +368,28 @@ lease ownership still requires the token and generation.
 The installed `dibs` and running `dibsd` must both include the watch endpoint;
 restart an older daemon explicitly after upgrading it.
 
+## Moving a registered repository
+
+Keep the old path reachable while updating dibs (a temporary symlink is
+sufficient). Move the whole repository parent so its registered worktrees keep
+the same relative paths, then run:
+
+```sh
+dibs repo relocate --repo <repository-id> --new-path /absolute/new/path/main
+dibs repo list --project <project-key>
+dibs worktree list --repo <repository-id>
+```
+
+`--new-path` names the new location of the **registered canonical path**. For
+registrations created by `dibs init`, that is normally the Git common directory
+(`.git` or `.bare`); older registrations may name the main checkout instead.
+The daemon verifies the old and new Git object store and each mapped worktree
+before changing SQLite. If a worktree was deleted or lives outside the moved
+parent, relocate or prune that registration explicitly and retry. The command
+prints an operation ID; supply it with `--operation-id` to retry an uncertain
+request without making a second change. Remove the temporary symlink after
+checking the returned paths and `dibs doctor`.
+
 ## Agent guidance sync
 
 `dibs protocol` is the canonical detailed agent workflow. `dibs init`

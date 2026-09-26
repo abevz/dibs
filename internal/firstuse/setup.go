@@ -124,7 +124,7 @@ func Register(ctx context.Context, c *client.Client, info GitContext, explicitPr
 		return project, core.Repository{}, core.Worktree{}, err
 	}
 	for _, existing := range allRepos {
-		if filepath.Clean(existing.CanonicalGitDir) != filepath.Clean(info.GitDir) {
+		if !sameRegisteredGitDir(ctx, existing.CanonicalGitDir, info.GitDir) {
 			continue
 		}
 		if existing.ProjectID != project.ID {
@@ -161,7 +161,7 @@ func Register(ctx context.Context, c *client.Client, info GitContext, explicitPr
 	}
 	var repo core.Repository
 	for _, r := range repos {
-		if filepath.Clean(r.CanonicalGitDir) == filepath.Clean(info.GitDir) {
+		if sameRegisteredGitDir(ctx, r.CanonicalGitDir, info.GitDir) {
 			repo = r
 			break
 		}
@@ -186,7 +186,7 @@ func Register(ctx context.Context, c *client.Client, info GitContext, explicitPr
 				return project, repo, core.Worktree{}, err
 			}
 			for _, r := range repos {
-				if filepath.Clean(r.CanonicalGitDir) == filepath.Clean(info.GitDir) {
+				if sameRegisteredGitDir(ctx, r.CanonicalGitDir, info.GitDir) {
 					repo = r
 					break
 				}
@@ -199,4 +199,23 @@ func Register(ctx context.Context, c *client.Client, info GitContext, explicitPr
 	wt, err := c.RegisterWorktree(ctx, core.CreateWorktreeRequest{Repo: repo.ID, AbsolutePath: info.Worktree,
 		Branch: info.Branch, HeadCommit: info.HeadCommit, IsMain: info.IsMain})
 	return project, repo, wt, err
+}
+
+// Legacy registrations may point at a checkout, whereas init records the Git
+// common directory. After relocation both forms must identify one repository.
+func sameRegisteredGitDir(ctx context.Context, registered, common string) bool {
+	if filepath.Clean(registered) == filepath.Clean(common) {
+		return true
+	}
+	cmd := exec.CommandContext(ctx, "git", "-C", registered, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	got, err := filepath.EvalSymlinks(strings.TrimSpace(string(out)))
+	if err != nil {
+		return false
+	}
+	want, err := filepath.EvalSymlinks(common)
+	return err == nil && got == want
 }

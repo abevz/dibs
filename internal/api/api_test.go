@@ -44,6 +44,7 @@ func registerRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.Logger) {
 	// Repos
 	mux.HandleFunc("POST /v1/repos", handleCreateRepo(st, logger))
 	mux.HandleFunc("GET /v1/repos", handleListRepos(st, logger))
+	mux.HandleFunc("POST /v1/repos/{repo_id}/relocate", handleRelocateRepo(st, logger))
 
 	// Worktrees
 	mux.HandleFunc("POST /v1/worktrees", handleRegisterWorktree(st, logger))

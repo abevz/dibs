@@ -47,6 +47,25 @@ type CreateRemoteRequest struct {
 	IsPrimary  bool   `json:"is_primary,omitempty"`
 }
 
+// RelocateRepoRequest moves the registered paths for an existing repository.
+type RelocateRepoRequest struct {
+	NewCanonicalGitDir string `json:"new_canonical_git_dir"`
+	OperationID        string `json:"operation_id"`
+	Actor              string `json:"actor"`
+}
+
+type WorktreePathChange struct {
+	ID      string `json:"id"`
+	OldPath string `json:"old_path"`
+	NewPath string `json:"new_path"`
+}
+
+type RelocateRepoResult struct {
+	OperationID string     `json:"operation_id"`
+	Repository  Repository `json:"repository"`
+	Worktrees   []Worktree `json:"worktrees"`
+}
+
 // ValidateCreateRepo checks required fields for a new repository.
 func ValidateCreateRepo(req CreateRepoRequest) error {
 	var errs []string

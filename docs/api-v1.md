@@ -119,6 +119,8 @@ This is the compact route-to-implementation inventory for the current daemon.
 - `POST /v1/repos` -> `handleCreateRepo` -> `sqlite.CreateRepo`
 - `GET /v1/repos?project=` -> `handleListRepos` ->
   `sqlite.ListReposByProjectKey` / `sqlite.ListRepos`
+- `POST /v1/repos/{repo_id}/relocate` -> `handleRelocateRepo` ->
+  `sqlite.RelocateRepo`
 
 ### `internal/api/worktrees.go`
 
@@ -199,6 +201,12 @@ This is the compact route-to-implementation inventory for the current daemon.
 - `POST /v1/repos` — register repository (`project`, `logical_name`,
   `canonical_git_dir`, `default_branch`, remotes)
 - `GET  /v1/repos?project=` — list
+- `POST /v1/repos/{repo_id}/relocate` — atomically move the canonical Git path
+  and registered worktree paths. Body: `new_canonical_git_dir` (clean absolute
+  path), `operation_id` (required replay key), `actor`. The old and new paths
+  must resolve to the same Git object store, with each worktree resolving to
+  the same Git worktree. Response contains `operation_id`, `repository`, and
+  `worktrees`; one global `repo_relocated` event records a successful move.
 - `POST /v1/worktrees` — register/update worktree by `absolute_path`
   (upsert: re-registration refreshes branch, HEAD, `last_seen_at`)
 - `GET  /v1/worktrees?repo=` — list

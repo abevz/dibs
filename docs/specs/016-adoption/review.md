@@ -1,5 +1,24 @@
 # 016 Adoption Review
 
+## afc-141 — repository relocation (implementation pending merge)
+
+- `dibs repo relocate` and `POST /v1/repos/{repo_id}/relocate` verify the old
+  and new Git common store and every mapped worktree, then update registered
+  paths in one SQLite transaction. The operation ledger replays the original
+  result and a single `repo_relocated` global event records a successful move.
+  Repository, worktree, and issue IDs remain stable.
+- Focused API/store/Git-path tests cover a foreign checkout, stale worktree,
+  target-path collision, retained issue reference, replay, and one audit event.
+  `go test ./...`, `go build ./...`, and `git diff --check` passed in the task
+  worktree. A scratch daemon exercise moved a registration through a temporary
+  symlink, removed the symlink, replayed the operation, and reran `dibs init`
+  on the new path; the IDs stayed stable. Scratch `dibs doctor` passed with an
+  isolated PATH. Evidence: `/tmp/dibs-afc141-go-test-final.log` and
+  `/tmp/dibs-afc141-smoke.T71HKf/`.
+- Live registration relocation and compatibility-symlink removal remain for
+  after merge and installed-daemon verification. Independent review and CI are
+  still pending for this revision.
+
 Status: approved by owner; packet active. Rename `afc-137` was owner-closed on
 2026-09-23 after PR #67 (`4dd9983`). Earlier per-PR pending-review notes below
 are historical and do not override that coordinator closure.

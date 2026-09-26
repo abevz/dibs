@@ -5,16 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/abevz/dibs/internal/client"
 	"github.com/abevz/dibs/internal/core"
+	"github.com/google/uuid"
 )
 
 // ─── Repo ───────────────────────────────────────────────────────────────────
 
 func runRepo(ctx context.Context, c *client.Client, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("%s", "Usage: dibs repo <add|list>")
+		return fmt.Errorf("%s", "Usage: dibs repo <add|list|relocate>")
 	}
 
 	switch args[0] {
@@ -22,9 +24,58 @@ func runRepo(ctx context.Context, c *client.Client, args []string) error {
 		return runRepoAdd(ctx, c, args[1:])
 	case "list":
 		return runRepoList(ctx, c, args[1:])
+	case "relocate":
+		return runRepoRelocate(ctx, c, args[1:])
 	default:
 		return fmt.Errorf("unknown repo subcommand: %s\n", args[0])
 	}
+}
+
+func runRepoRelocate(ctx context.Context, c *client.Client, args []string) error {
+	var repoID, newPath, operationID string
+	for i := 0; i < len(args); i += 2 {
+		if i+1 >= len(args) {
+			return argumentError("repo relocate flags require values")
+		}
+		switch args[i] {
+		case "--repo":
+			repoID = args[i+1]
+		case "--new-path":
+			newPath = args[i+1]
+		case "--operation-id":
+			operationID = args[i+1]
+		default:
+			return argumentError("unknown repo relocate flag: " + args[i])
+		}
+	}
+	if repoID == "" || newPath == "" {
+		return argumentError("Usage: dibs repo relocate --repo <id> --new-path <absolute-checkout-path> [--operation-id <id>]")
+	}
+	absPath, err := filepath.Abs(newPath)
+	if err != nil {
+		return fmt.Errorf("resolve new path: %w", err)
+	}
+	if operationID == "" {
+		operationID = uuid.NewString()
+	}
+	actor, err := resolveActor("")
+	if err != nil {
+		return err
+	}
+	result, err := c.RelocateRepo(ctx, repoID, core.RelocateRepoRequest{
+		NewCanonicalGitDir: absPath, OperationID: operationID, Actor: actor,
+	})
+	if err != nil {
+		return fmt.Errorf("repo relocate (operation_id %s): %w", operationID, err)
+	}
+	if jsonOutput {
+		return json.NewEncoder(os.Stdout).Encode(result)
+	}
+	fmt.Printf("Operation ID: %s\nRepository:   %s\nGit path:     %s\n", result.OperationID, result.Repository.ID, result.Repository.CanonicalGitDir)
+	for _, wt := range result.Worktrees {
+		fmt.Printf("Worktree:     %s %s\n", wt.ID, wt.AbsolutePath)
+	}
+	return nil
 }
 
 func runRepoAdd(ctx context.Context, c *client.Client, args []string) error {

@@ -60,6 +60,10 @@ func (s *Store) ListReposByProjectKey(ctx context.Context, projectKey string) ([
 	return ListReposByProjectKey(ctx, s.db, projectKey)
 }
 
+func (s *Store) RelocateRepo(ctx context.Context, repoID, expectedPath string, req core.RelocateRepoRequest, changes []core.WorktreePathChange) (core.RelocateRepoResult, error) {
+	return RelocateRepo(ctx, s.db, repoID, expectedPath, req, changes)
+}
+
 func (s *Store) UpsertWorktree(ctx context.Context, repoID string, req core.CreateWorktreeRequest) (core.Worktree, bool, error) {
 	return UpsertWorktree(ctx, s.db, repoID, req)
 }

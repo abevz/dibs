@@ -146,3 +146,11 @@ decision to explain dibs through its own use cases without a Beads comparison.
 This supersedes the comparison clause in the original packet approval for the
 README and launch copy. The development `watch` demo must also identify its
 build until a published release includes it.
+
+## Repository relocation (afc-141)
+
+`POST /v1/repos/{repo_id}/relocate` accepts `new_canonical_git_dir`, `operation_id`, and `actor`. `dibs repo relocate --repo <id> --new-path <path> [--operation-id <uuid>]` calls it. The CLI supplies a fresh UUID when omitted and prints it for retry. The daemon reads the current repository and registered worktrees, resolves each old/new Git common dir and per-worktree git dir with `git rev-parse`, and compares their real filesystem paths. It maps the old canonical path's parent directory to the new one's parent directory; all registered worktrees must fit and exist at the mapped path. A legacy canonical path that names a checkout still matches `dibs init` discovery through its Git common dir.
+
+The SQLite transaction rechecks the original repository/worktree paths, updates every path and timestamp, writes one `repo_relocated` global event containing old/new paths and IDs, and records the complete result in the operation ledger. Replay is checked before state validation and returns the original result without another event. A path already owned by another worktree fails before any update. Existing issue foreign keys and artifact references retain their IDs.
+
+The old path must still resolve during verification. If the original checkout has moved, a temporary symlink to the new parent is an explicit prerequisite. This gives an exact common-store/worktree identity check rather than trusting a matching remote URL or commit alone.
