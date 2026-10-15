@@ -83,6 +83,13 @@ func sameCheckout(ctx context.Context, oldPath, newPath string) error {
 func sameGitPath(ctx context.Context, oldPath, newPath, arg string) error {
 	old, err := gitPath(ctx, oldPath, arg)
 	if err != nil {
+		if _, statErr := os.Stat(oldPath); os.IsNotExist(statErr) {
+			quote := func(path string) string {
+				return "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"
+			}
+			return fmt.Errorf("old path %s: %w; the old path must stay reachable during relocation; if its parent was moved, temporarily link it back (ensure the link's containing directory exists): ln -s %s %s; see docs/operations.md \"Moving a registered repository\"",
+				oldPath, err, quote(filepath.Dir(newPath)), quote(filepath.Dir(oldPath)))
+		}
 		return fmt.Errorf("old path %s: %w", oldPath, err)
 	}
 	newValue, err := gitPath(ctx, newPath, arg)
