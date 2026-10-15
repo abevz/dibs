@@ -1,0 +1,16 @@
+dibs watch · all projects
+
+PROJECT SUMMARY
+PROJECT            READY BLOCKED IN_PROGRESS DEFERRED  LAST EVENT
+demo                   0       0           1        0  2026-10-01T10:00:00Z
+
+STALE (1)
+  demo-1  <age> since update (no active lease)  Example issue
+
+READY (0)
+
+ACTIVE LEASES (0) · PID self-reported
+
+BLOCKED (0)
+
+RECENT EVENTS (0)
