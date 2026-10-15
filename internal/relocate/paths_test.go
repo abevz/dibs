@@ -2,6 +2,7 @@ package relocate
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,29 @@ import (
 
 	"github.com/abevz/dibs/internal/core"
 )
+
+func TestMissingOldCanonicalPathSuggestsReachabilityAndSymlink(t *testing.T) {
+	for _, canonical := range []string{"main", ".git", ".bare"} {
+		t.Run(canonical, func(t *testing.T) {
+			root := t.TempDir()
+			oldPath := filepath.Join(root, "old parent", canonical)
+			newPath := filepath.Join(root, "new parent", canonical)
+			_, err := Plan(context.Background(), oldPath, newPath, nil)
+			if err == nil {
+				t.Fatal("missing old path accepted")
+			}
+			for _, want := range []string{
+				"the old path must stay reachable during relocation",
+				fmt.Sprintf("ln -s '%s' '%s'", filepath.Dir(newPath), filepath.Dir(oldPath)),
+				`docs/operations.md "Moving a registered repository"`,
+			} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not include %q", err, want)
+				}
+			}
+		})
+	}
+}
 
 func git(t *testing.T, args ...string) {
 	t.Helper()
