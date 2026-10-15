@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +36,7 @@ func watchTestClient(t *testing.T) *client.Client {
 			return
 		}
 		var body any
-		issue := core.Issue{ID: "i", ShortID: "demo-1", ProjectID: "p", Status: "in_progress", Description: "Long description", UpdatedAt: "2026-10-01T10:00:00Z", Dependencies: []core.Dependency{{Kind: "related", DependsOnShortID: "demo-2"}}}
+		issue := core.Issue{ID: "i", ShortID: "demo-1", ProjectID: "p", Title: "Example issue", Status: "in_progress", Description: "Long description", UpdatedAt: "2026-10-01T10:00:00Z", Dependencies: []core.Dependency{{Kind: "related", DependsOnShortID: "demo-2"}}}
 		switch r.URL.Path {
 		case "/v1/projects":
 			body = map[string]any{"projects": []core.Project{{ID: "p", Key: "demo"}}}
@@ -65,7 +67,7 @@ func watchTestClient(t *testing.T) *client.Client {
 	return client.New(socket)
 }
 
-func TestWatchOnceIncludesSummaryStaleAndSingleNewline(t *testing.T) {
+func TestWatchOnceGoldenIncludesSummaryStaleAndSingleNewline(t *testing.T) {
 	c := watchTestClient(t)
 	oldJSON, oldStdout := jsonOutput, os.Stdout
 	defer func() { jsonOutput, os.Stdout = oldJSON, oldStdout }()
@@ -90,6 +92,18 @@ func TestWatchOnceIncludesSummaryStaleAndSingleNewline(t *testing.T) {
 	}
 	if !strings.HasSuffix(string(out), "\n") || strings.HasSuffix(string(out), "\n\n") {
 		t.Fatalf("bad trailing newlines: %q", out)
+	}
+	// Only elapsed wall time varies; preserve every whitespace byte so the
+	// golden catches terminal padding and extra trailing blank lines.
+	normalized := regexp.MustCompile(`demo-1  \S+ since update`).ReplaceAllString(
+		string(out), "demo-1  <age> since update",
+	)
+	want, err := os.ReadFile(filepath.Join("testdata", "watch-once.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized != string(want) {
+		t.Fatalf("watch --once output mismatch\ngot:  %q\nwant: %q", normalized, want)
 	}
 }
 
