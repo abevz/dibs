@@ -215,6 +215,40 @@ func (s *Service) Refresh(ctx context.Context, now time.Time) (Snapshot, error) 
 	return snapshot, nil
 }
 
+// Cursor returns the event cursor reached by the last complete refresh.
+func (s *Service) Cursor() string { return s.cursor }
+
+// WaitForEvents long-polls the daemon for events after cursor and reports
+// whether any arrived. It reads one indexed event page instead of a full
+// snapshot, so an idle board does not re-read the whole coordinator. An empty
+// cursor means no snapshot has been taken yet and always reports a change.
+func (s *Service) WaitForEvents(ctx context.Context, cursor string, wait time.Duration) (bool, error) {
+	if cursor == "" {
+		return true, nil
+	}
+	page, err := s.source.WatchEvents(ctx, cursor, 1, int(wait/time.Millisecond))
+	if err != nil {
+		return false, fmt.Errorf("wait for events: %w", err)
+	}
+	return len(page.Events) > 0, nil
+}
+
+// NextLeaseExpiry returns the earliest active lease expiry after now. Lease
+// expiry emits no event but can make an issue ready again.
+func (snapshot Snapshot) NextLeaseExpiry(now time.Time) (time.Time, bool) {
+	var next time.Time
+	for _, issue := range snapshot.Active {
+		expires, err := time.Parse(time.RFC3339, issue.LeaseExpiresAt)
+		if err != nil || !expires.After(now) {
+			continue
+		}
+		if next.IsZero() || expires.Before(next) {
+			next = expires
+		}
+	}
+	return next, !next.IsZero()
+}
+
 func leaseActive(expiresAt string, now time.Time) bool {
 	expires, err := time.Parse(time.RFC3339, expiresAt)
 	return err == nil && expires.After(now)

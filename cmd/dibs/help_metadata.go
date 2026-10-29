@@ -44,6 +44,7 @@ var flagHelpText = map[string]flagHelp{
 	"--full":              {"", "Include the issue's full details."},
 	"--head-commit":       {"sha", "Current HEAD commit of the worktree."},
 	"--holder":            {"name", "Identity that owns the issue lease."},
+	"--interval":          {"duration", "Watch: longest wait between full refreshes when no event arrives (default 5m, minimum 2s)."},
 	"--invocation-mode":   {"interactive|scheduled|unknown", "How this action was started; recorded in the audit trail."},
 	"--key":               {"project-key", "Unique lowercase project slug, at most 16 characters; prefixes issue IDs."},
 	"--kind":              {"kind", "Artifact kind, for example spec, tasks, code, or doc."},

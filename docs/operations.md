@@ -408,7 +408,12 @@ Age is labelled since expiry when the API exposes it, otherwise since update
 (the daemon hides expired lease metadata). Deferred/terminal issues are excluded.
 Clock updates move an expiring lease to STALE without coordinator writes.
 `--once` prints all summary and lane rows with one final newline.
-Press `r` to refresh or `q` to quit. It refreshes every two seconds and marks
+Press `r` to refresh or `q` to quit. Between full snapshots the board
+long-polls the event cursor (one indexed read every few seconds) and reloads
+only when a coordinator event arrives, just after the earliest active lease
+expires, or after `--interval` (default `5m`, minimum `2s`) for changes that
+emit no event, such as a newly registered project. An idle board therefore
+does not re-read the database. It marks
 the last complete view stale if the daemon becomes unavailable. Use
 `dibs watch --project <key> --once` for a text snapshot or add `--json` for a
 machine-readable snapshot. Watch reads the daemon API and does not claim work.
