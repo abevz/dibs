@@ -2,16 +2,31 @@
 
 ## Unreleased
 
+## v0.1.0-rc.6 — 2026-10-29
+
 ### Added
 
 - `dibs stats --by actor` and `--top N`: normalized claim-owner outcomes, costly
   issues and a documented claim-without-progress indicator (afc-175).
+- `dibs watch --interval <duration>` (default `5m`, minimum `2s`): the longest
+  wait between full board refreshes when no coordinator event arrives
+  (afc-182).
 
 ### Fixed
 
+- `dibs watch` no longer makes the daemon re-read the whole database every
+  ~2 s. The board long-polls the event cursor and reloads only on an event, at
+  the earliest active lease expiry, on `r`, or after `--interval`. On a 15 MB
+  database an open all-projects board dropped from ~8 MB/s reads and ~25%
+  daemon CPU to ~100 B/s and under 1%. Board output is unchanged; the fix is in
+  the CLI, so it works against an older running daemon (afc-182).
 - Auto-started daemon logs are bounded in the state directory instead of growing
   beside the socket; verified stop cleans owned pid/legacy startup-log artifacts
   (afc-160).
+- `dibs repo relocate` explains how to recover when the old path is already
+  gone: temporarily link it back, with the exact `ln -s` command (afc-155).
+- `dibs watch --once` output is locked down by a golden test: unpadded rows and
+  one final newline (afc-157).
 
 ## v0.1.0-rc.5 — 2026-10-02
 
