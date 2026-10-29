@@ -304,3 +304,84 @@ func TestOnceActiveLeaseUnknownProcessMetadata(t *testing.T) {
 		t.Fatalf("missing process output: %s", output)
 	}
 }
+
+type waitFixture struct {
+	*sourceFixture
+	page  core.EventPage
+	err   error
+	calls []string
+}
+
+func (f *waitFixture) WatchEvents(_ context.Context, since string, limit, waitMS int) (core.EventPage, error) {
+	f.calls = append(f.calls, fmt.Sprintf("%s/%d/%d", since, limit, waitMS))
+	return f.page, f.err
+}
+
+func TestWaitForEventsLongPollsOneEventAfterCursor(t *testing.T) {
+	tests := []struct {
+		name      string
+		cursor    string
+		page      core.EventPage
+		err       error
+		want      bool
+		wantErr   bool
+		wantCalls []string
+	}{
+		{name: "no snapshot yet", cursor: "", want: true},
+		{name: "event arrived", cursor: "c1", page: core.EventPage{Events: []core.Event{{Sequence: 2}}, NextSince: "c2"}, want: true, wantCalls: []string{"c1/1/4000"}},
+		{name: "timed out quietly", cursor: "c1", page: core.EventPage{NextSince: "c1"}, want: false, wantCalls: []string{"c1/1/4000"}},
+		{name: "daemon error", cursor: "c1", err: errors.New("down"), wantErr: true, wantCalls: []string{"c1/1/4000"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fixture := &waitFixture{sourceFixture: &sourceFixture{}, page: tt.page, err: tt.err}
+			changed, err := New(fixture, "").WaitForEvents(context.Background(), tt.cursor, 4*time.Second)
+			if (err != nil) != tt.wantErr || changed != tt.want {
+				t.Fatalf("changed=%v err=%v, want changed=%v err=%v", changed, err, tt.want, tt.wantErr)
+			}
+			if fmt.Sprint(fixture.calls) != fmt.Sprint(tt.wantCalls) {
+				t.Fatalf("calls = %v, want %v", fixture.calls, tt.wantCalls)
+			}
+		})
+	}
+}
+
+func TestRefreshExposesCursorForChangeWaits(t *testing.T) {
+	fixture := &sourceFixture{responses: []eventResponse{{page: core.EventPage{NextSince: "cursor-1"}}}}
+	service := New(fixture, "")
+	if service.Cursor() != "" {
+		t.Fatalf("cursor before refresh = %q", service.Cursor())
+	}
+	if _, err := service.Refresh(context.Background(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if service.Cursor() != "cursor-1" {
+		t.Fatalf("cursor after refresh = %q, want cursor-1", service.Cursor())
+	}
+}
+
+func TestNextLeaseExpiry(t *testing.T) {
+	now := time.Date(2026, 10, 29, 16, 0, 0, 0, time.UTC)
+	lease := func(offset time.Duration) core.Issue {
+		return core.Issue{Holder: "agent", LeaseExpiresAt: now.Add(offset).Format(time.RFC3339)}
+	}
+	tests := []struct {
+		name   string
+		active []core.Issue
+		want   time.Time
+		ok     bool
+	}{
+		{name: "no active leases"},
+		{name: "earliest future expiry", active: []core.Issue{lease(10 * time.Minute), lease(90 * time.Second), lease(time.Hour)}, want: now.Add(90 * time.Second), ok: true},
+		{name: "ignores expired and malformed", active: []core.Issue{lease(-time.Second), {LeaseExpiresAt: "soon"}, lease(time.Minute)}, want: now.Add(time.Minute), ok: true},
+		{name: "only expired", active: []core.Issue{lease(0), lease(-time.Minute)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := Snapshot{Active: tt.active}.NextLeaseExpiry(now)
+			if ok != tt.ok || !got.Equal(tt.want) {
+				t.Fatalf("NextLeaseExpiry = %v,%v want %v,%v", got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}

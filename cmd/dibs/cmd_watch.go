@@ -18,6 +18,7 @@ import (
 
 func runWatch(ctx context.Context, c *client.Client, args []string) error {
 	var project string
+	interval := defaultWatchInterval
 	once := jsonOutput
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -26,6 +27,16 @@ func runWatch(ctx context.Context, c *client.Client, args []string) error {
 				return argumentError("--project requires a key")
 			}
 			project = args[i+1]
+			i++
+		case "--interval":
+			if i+1 >= len(args) {
+				return argumentError("--interval requires a duration")
+			}
+			parsed, err := parseWatchInterval(args[i+1])
+			if err != nil {
+				return err
+			}
+			interval = parsed
 			i++
 		case "--once":
 			once = true
@@ -55,6 +66,7 @@ func runWatch(ctx context.Context, c *client.Client, args []string) error {
 		ctx:         ctx,
 		rootProject: project,
 		service:     svc,
+		interval:    interval,
 		snapshot:    watch.Snapshot{Project: project},
 		width:       100,
 		height:      28,
@@ -67,6 +79,25 @@ func runWatch(ctx context.Context, c *client.Client, args []string) error {
 		return nil
 	}
 	return err
+}
+
+const (
+	// defaultWatchInterval bounds how long the board trusts its snapshot when
+	// no event arrives, covering changes that emit no event (new projects).
+	defaultWatchInterval = 5 * time.Minute
+	minWatchInterval     = 2 * time.Second
+	// watchLongPoll stays below the client's 5 s HTTP timeout.
+	watchLongPoll = 4 * time.Second
+	// watchRetryDelay paces retries while the daemon is unavailable.
+	watchRetryDelay = 2 * time.Second
+)
+
+func parseWatchInterval(value string) (time.Duration, error) {
+	interval, err := time.ParseDuration(value)
+	if err != nil || interval < minWatchInterval {
+		return 0, argumentError("--interval requires a duration of at least " + minWatchInterval.String() + ", for example 30s or 5m")
+	}
+	return interval, nil
 }
 
 func terminalDevice(file *os.File) bool {
@@ -88,10 +119,21 @@ type watchDetailMsg struct {
 type watchRefreshMsg struct{}
 type watchClockMsg time.Time
 
+// watchChangeMsg reports one event long-poll. gen discards replies from a
+// poll started before a newer snapshot or scope change.
+type watchChangeMsg struct {
+	gen     int
+	changed bool
+	err     error
+}
+
 type watchModel struct {
 	footer        string
 	ctx           context.Context
 	service       *watch.Service
+	interval      time.Duration
+	dueAt         time.Time
+	waitGen       int
 	rootProject   string
 	selected      int
 	detailID      string
@@ -123,7 +165,40 @@ func watchClock() tea.Cmd {
 }
 
 func watchRefresh() tea.Cmd {
-	return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return watchRefreshMsg{} })
+	return tea.Tick(watchRetryDelay, func(time.Time) tea.Msg { return watchRefreshMsg{} })
+}
+
+// scheduleRefresh sets when the current snapshot is due for a full refresh
+// without an event: after the fallback interval or just past the earliest
+// active lease expiry, whichever comes first.
+func (m *watchModel) scheduleRefresh(now time.Time) {
+	interval := m.interval
+	if interval <= 0 {
+		interval = defaultWatchInterval
+	}
+	m.dueAt = now.Add(interval)
+	if expiry, ok := m.snapshot.NextLeaseExpiry(now); ok && expiry.Add(time.Second).Before(m.dueAt) {
+		m.dueAt = expiry.Add(time.Second)
+	}
+}
+
+// waitForChange long-polls for events after the current cursor, bounded by
+// the refresh deadline. It must only start while no snapshot fetch runs, so
+// the cursor read here cannot race Refresh.
+func (m *watchModel) waitForChange() tea.Cmd {
+	m.waitGen++
+	ctx, gen, service, cursor := m.ctx, m.waitGen, m.service, m.service.Cursor()
+	wait := time.Until(m.dueAt)
+	if wait > watchLongPoll {
+		wait = watchLongPoll
+	}
+	if wait <= 0 {
+		return func() tea.Msg { return watchChangeMsg{gen: gen} }
+	}
+	return func() tea.Msg {
+		changed, err := service.WaitForEvents(ctx, cursor, wait)
+		return watchChangeMsg{gen: gen, changed: changed, err: err}
+	}
 }
 
 func (m watchModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
@@ -207,6 +282,23 @@ func (m watchModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.loading = true
 			return m, m.fetch()
 		}
+	case watchChangeMsg:
+		if msg.gen != m.waitGen || m.loading {
+			return m, nil
+		}
+		if m.footer == "" {
+			m.footer = updateNotice(true)
+		}
+		if msg.err != nil {
+			m.lastErr = msg.err
+			return m, watchRefresh()
+		}
+		if msg.changed || !time.Now().Before(m.dueAt) {
+			m.loading = true
+			return m, m.fetch()
+		}
+		wait := m.waitForChange()
+		return m, wait
 	case watchDetailMsg:
 		if msg.id == m.detailID {
 			m.detailLoading = false
@@ -245,7 +337,12 @@ func (m watchModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected = 0
 			}
 		}
-		return m, watchRefresh()
+		if msg.err != nil {
+			return m, watchRefresh()
+		}
+		m.scheduleRefresh(time.Now())
+		wait := m.waitForChange()
+		return m, wait
 	}
 	return m, nil
 }
