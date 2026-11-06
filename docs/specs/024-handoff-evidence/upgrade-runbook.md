@@ -41,14 +41,27 @@ while True:
     if not isinstance(issues, list):
         raise SystemExit('unexpected issue-list response')
     for issue in issues:
-        deadline = issue.get('lease_expires_at')
+        if not isinstance(issue, dict):
+            raise SystemExit('issue row is not an object')
+        for field in ('id', 'short_id', 'status'):
+            if not isinstance(issue.get(field), str) or not issue[field].strip():
+                raise SystemExit(f'missing or invalid issue field: {field}')
+        if issue['status'] not in ('open', 'in_progress', 'blocked', 'deferred', 'done', 'cancelled'):
+            raise SystemExit('unknown issue status')
+        holder = issue.get('holder', '')
+        deadline = issue.get('lease_expires_at', '')
+        if not isinstance(holder, str) or not isinstance(deadline, str):
+            raise SystemExit('invalid lease field types')
+        if bool(holder.strip()) != bool(deadline.strip()):
+            raise SystemExit('incomplete lease metadata')
         if deadline:
             expiry = datetime.datetime.fromisoformat(deadline.replace('Z', '+00:00'))
+            if expiry.tzinfo is None:
+                raise SystemExit('lease expiry is missing a timezone')
             if expiry > now:
                 raise SystemExit(f"active dq lease: {issue['short_id']}")
-        else:
-            if issue.get('holder'):
-                raise SystemExit(f"unresolved dq holder: {issue['short_id']}")
+        elif issue['status'] == 'in_progress':
+            raise SystemExit(f"reconcile lease-less in_progress issue: {issue['short_id']}")
     if len(issues) < 1000:
         break
     offset += len(issues)

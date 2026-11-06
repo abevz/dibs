@@ -52,3 +52,9 @@ mutating shell block starts with `set -eu`. Isolated fixtures under
 revision and an unconfirmed migration all fail closed. Failed-stop/still-active
 shell fixtures verified that subsequent writes are skipped. Results:
 `merge/runbook-checks.log` outside Git.
+
+The maintenance gate also validates each issue row's required identity/status
+fields and lease metadata types/coherence, rejecting malformed rows or
+lease-less `in_progress` work for reconciliation. Optimized-Python fixtures
+cover malformed top-level/row shapes, missing fields, invalid metadata types,
+unpaired holder/deadline fields, unknown status and timezone-less expiry.
