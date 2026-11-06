@@ -58,3 +58,9 @@ fields and lease metadata types/coherence, rejecting malformed rows or
 lease-less `in_progress` work for reconciliation. Optimized-Python fixtures
 cover malformed top-level/row shapes, missing fields, invalid metadata types,
 unpaired holder/deadline fields, unknown status and timezone-less expiry.
+
+Maintenance now acquires and holds the daemon's persistent canonical database
+ownership lock across installation or database/binary rollback, refusing a
+stray daemon even if the systemd unit is inactive. Isolated lock-holder fixtures
+verify rejection before writes and exclusion through the critical section.
+The lock file is neither truncated nor removed; it is released before start.

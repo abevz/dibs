@@ -88,7 +88,7 @@ umask 077
 backup_dir="$HOME/.local/state/dibs/backups/pre-0012-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$backup_dir/bin"
 dibs health --json > "$backup_dir/health-before.json"
-db_path="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["db_path"])' "$backup_dir/health-before.json")"
+db_path="$(python3 -c 'import json,sys; print(__import__("pathlib").Path(json.load(open(sys.argv[1]))["db_path"]).resolve(strict=True))' "$backup_dir/health-before.json")"
 bin_dir="$HOME/.local/bin"  # confirm against command -v for all three below
 for executable in dibsd dibs dibs-mcp; do
   test "$(command -v "$executable")" = "$bin_dir/$executable"
@@ -122,6 +122,14 @@ already exists in durable state, back up that directory separately; JSONL and
 SQLite contain evidence metadata, not file bytes. Re-run the gate immediately
 before stopping, with dispatch still paused. If it fails, stop this procedure.
 
+The database path saved above is canonicalized, matching
+`AcquireDatabaseLock` in `internal/api/database_lock.go`. Its persistent
+`<canonical-db-path>.lock` file must never be removed, replaced or truncated.
+The Linux `flock` checks below also detect a daemon started outside systemd;
+`ActiveState=inactive` alone is insufficient. Refuse maintenance if the lock
+file or `flock` is unavailable. The nonblocking exclusive lock is held across
+all file replacements, so another conforming daemon cannot race the check.
+
 ## 3. Stop, build/install one version, then start
 
 Use the reviewed merged checkout in `~/github/dibs/main`, already advanced to
@@ -142,8 +150,19 @@ test -z "$(git status --porcelain)"
 sh contrib/install/systemctl-user.sh stop dibsd
 # Stop and investigate if the unit is not inactive or its daemon remains alive.
 test "$(sh contrib/install/systemctl-user.sh show dibsd -p ActiveState --value)" = inactive
+# Use the daemon's canonical, persistent ownership lock, without truncating it.
+command -v flock >/dev/null
+test -f "$db_path.lock"
+exec 9<>"$db_path.lock"
+if ! flock -n 9; then
+  echo 'Database is still owned; stop maintenance and reconcile the daemon.' >&2
+  exit 1
+fi
 make build-install BINDIR="$bin_dir" GIT_VERSION="$(git describe --tags --always)"
 # make build-install builds dibsd, dibs and dibs-mcp from this same checkout.
+# All file operations are complete. Release ownership immediately before start.
+flock -u 9
+exec 9>&-
 sh contrib/install/systemctl-user.sh start dibsd
 dibs doctor
 dibs health --json > "$backup_dir/health-after.json"
@@ -172,7 +191,9 @@ required order.
 ## 4. Roll back database and all three binaries together
 
 Keep dispatch paused. Execute each shell block with its own `set -eu`; a failed
-stop or inactive-state check must prevent every subsequent file operation.
+stop, inactive-state or ownership-lock check must prevent every subsequent file
+operation. Hold the lock through all database/binary replacements, then release
+it immediately before starting the daemon.
 An old binary refuses a database whose ledger contains
 0012, reporting `unknown applied migration "0012_issue_evidence.sql"` from
 `VerifyKnownMigrations`. Replacing only the binary is not a rollback. Do not
@@ -182,6 +203,14 @@ remove the migration row or drop the evidence table in place.
 set -eu
 sh contrib/install/systemctl-user.sh stop dibsd
 test "$(sh contrib/install/systemctl-user.sh show dibsd -p ActiveState --value)" = inactive
+# Use the daemon's canonical, persistent ownership lock, without truncating it.
+command -v flock >/dev/null
+test -f "$db_path.lock"
+exec 9<>"$db_path.lock"
+if ! flock -n 9; then
+  echo 'Database is still owned; stop maintenance and reconcile the daemon.' >&2
+  exit 1
+fi
 sha256sum -c "$backup_dir/SHA256SUMS"
 # Preserve the failed-upgrade DB and sidecars for inspection; never combine
 # old backup bytes with a WAL from the upgraded database.
@@ -198,6 +227,9 @@ for executable in dibsd dibs dibs-mcp; do
   cp "$backup_dir/bin/$executable" "$bin_dir/$executable"
   chmod 755 "$bin_dir/$executable"
 done
+# All file operations are complete. Release ownership immediately before start.
+flock -u 9
+exec 9>&-
 sh contrib/install/systemctl-user.sh start dibsd
 dibs doctor
 dibs health --json > "$backup_dir/health-rollback.json"
