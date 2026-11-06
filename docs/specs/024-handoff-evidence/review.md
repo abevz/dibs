@@ -43,3 +43,12 @@ Renewed evidence stays outside Git under the evidence directory's `merge/`:
 Independent final review is a publication gate; its final result is recorded
 with the reviewed revision in coordinator notes and the PR. No runtime review
 reports or database snapshots are committed.
+
+
+Final runbook review identified removable Python assertions and non-fail-fast
+install/rollback blocks. Safety gates now raise explicit errors, and each
+mutating shell block starts with `set -eu`. Isolated fixtures under
+`PYTHONOPTIMIZE=1` verified that queued work, active leases, bad health, a wrong
+revision and an unconfirmed migration all fail closed. Failed-stop/still-active
+shell fixtures verified that subsequent writes are skipped. Results:
+`merge/runbook-checks.log` outside Git.

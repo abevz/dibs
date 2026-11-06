@@ -21,7 +21,8 @@ dibs issue ready --project dq --tag queue/rigid --json
 
 Additionally dq must have **no active leases**, including issues not in either
 queue. Use the existing CLI, paginate all dq issues, and fail closed on a
-malformed response or an unparseable lease deadline:
+malformed response or an unparseable lease deadline. Safety checks use explicit
+errors and remain enabled under `PYTHONOPTIMIZE`:
 
 ```sh
 python3 - <<'PY'
@@ -30,20 +31,24 @@ now = datetime.datetime.now(datetime.timezone.utc)
 for tag in ('queue/v2', 'queue/rigid'):
     ready = json.loads(subprocess.check_output(
         ['dibs', 'issue', 'ready', '--project', 'dq', '--tag', tag, '--json']))
-    assert isinstance(ready, list) and not ready, f'{tag} is not empty'
+    if not isinstance(ready, list) or ready:
+        raise SystemExit(f'{tag} is not empty or response is malformed')
 offset = 0
 while True:
     issues = json.loads(subprocess.check_output(
         ['dibs', 'issue', 'list', '--project', 'dq', '--limit', '1000',
          '--offset', str(offset), '--json']))
-    assert isinstance(issues, list), 'unexpected issue-list response'
+    if not isinstance(issues, list):
+        raise SystemExit('unexpected issue-list response')
     for issue in issues:
         deadline = issue.get('lease_expires_at')
         if deadline:
             expiry = datetime.datetime.fromisoformat(deadline.replace('Z', '+00:00'))
-            assert expiry <= now, f"active dq lease: {issue['short_id']}"
+            if expiry > now:
+                raise SystemExit(f"active dq lease: {issue['short_id']}")
         else:
-            assert not issue.get('holder'), f"unresolved dq holder: {issue['short_id']}"
+            if issue.get('holder'):
+                raise SystemExit(f"unresolved dq holder: {issue['short_id']}")
     if len(issues) < 1000:
         break
     offset += len(issues)
@@ -86,7 +91,8 @@ source = sqlite3.connect(pathlib.Path(sys.argv[1]).resolve().as_uri() + '?mode=r
 target = sqlite3.connect(sys.argv[2])
 try:
     source.backup(target)
-    assert target.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+    if target.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+        raise SystemExit('SQLite backup integrity check failed')
 finally:
     target.close()
     source.close()
@@ -115,6 +121,7 @@ matches the separately approved SHA. Do not change the global hook setting.
 After the backup and final gate:
 
 ```sh
+set -eu
 cd "$HOME/github/dibs/main"
 approved_sha='<owner-approved full merge SHA>'
 test "$(git rev-parse HEAD)" = "$approved_sha"
@@ -130,9 +137,12 @@ dibs health --json > "$backup_dir/health-after.json"
 python3 - "$backup_dir/health-after.json" "$approved_sha" <<'PY'
 import json, sys
 health = json.load(open(sys.argv[1]))
-assert health['status'] == 'ok', health
-assert health['revision'] == sys.argv[2], 'wrong running revision'
-assert health['safety']['latest_migration'] == '0012_issue_evidence.sql', health
+if health['status'] != 'ok':
+    raise SystemExit('daemon health is not ok')
+if health['revision'] != sys.argv[2]:
+    raise SystemExit('wrong running revision')
+if health['safety']['latest_migration'] != '0012_issue_evidence.sql':
+    raise SystemExit('migration 0012 not confirmed')
 print('PASS: reviewed revision running with migration 0012')
 PY
 ```
@@ -148,12 +158,15 @@ required order.
 
 ## 4. Roll back database and all three binaries together
 
-Keep dispatch paused. An old binary refuses a database whose ledger contains
+Keep dispatch paused. Execute each shell block with its own `set -eu`; a failed
+stop or inactive-state check must prevent every subsequent file operation.
+An old binary refuses a database whose ledger contains
 0012, reporting `unknown applied migration "0012_issue_evidence.sql"` from
 `VerifyKnownMigrations`. Replacing only the binary is not a rollback. Do not
 remove the migration row or drop the evidence table in place.
 
 ```sh
+set -eu
 sh contrib/install/systemctl-user.sh stop dibsd
 test "$(sh contrib/install/systemctl-user.sh show dibsd -p ActiveState --value)" = inactive
 sha256sum -c "$backup_dir/SHA256SUMS"
