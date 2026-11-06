@@ -37,12 +37,12 @@ var commandRoutes = map[string]argRoute{
 	"worktree register": {"--repo --absolute-path --branch --head-commit --remote-name --remote-branch --main? --ephemeral?", 0},
 	"worktree list":     {"--repo", 0}, "worktree prune": {"--repo", 0}, "worktree unregister": {"--worktree", 0},
 	"artifact-root add": {"--repo --root-path --kind --primary?", 0}, "artifact-root list": {"--repo", 0},
-	"artifact register": {"--repo --relative-path --kind --worktree --artifact-root --title --external-key --status", 0},
-	"artifact list":     {"--repo", 0}, "export jsonl": {"", 0},
+	"artifact register": {"--repo --relative-path --kind --worktree --artifact-root --title --external-key --status --issue --file --commit --diff-hash", 0},
+	"artifact list":     {"--repo --issue", 0}, "artifact prune": {"--issue --days --apply?", 0}, "artifact cleanup": {"--issue --apply?", 0}, "export jsonl": {"", 0},
 	"stats":             {"--project --repo --since --until --by --top", 0},
 	"issue create":      {"--project --scope-kind --title --type --repo --worktree --external-key --description --acceptance --priority --tag --allow-duplicate? --operation-id --retry-last?", 0},
 	"issue import":      {"--project --repo --scope-kind --type --priority --acceptance --tag --allow-closed?", 1},
-	"issue publish":     {"", 1},
+	"issue publish":     {"--require-evidence --diff-hash", 1},
 	"issue create-form": {"--allow-duplicate?", 0},
 	"issue get":         {"--full?", 1}, "issue list": {"--project --status --type --repo --worktree --assignee --external-key --tag --limit --offset --columns", 0},
 	"issue ready":     {"--project --repo --tag --columns", 0},
@@ -52,7 +52,7 @@ var commandRoutes = map[string]argRoute{
 	"issue run":              {"--actor --ttl --close-resolution --branch --pr-url --commit-sha --note --invocation-mode --require-complete? --publish?", 1},
 	"issue edit":             {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release? --operation-id", 1},
 	"issue update":           {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release? --operation-id", 1},
-	"issue close":            {"--resolution --expected-version --lease-token --lease-generation --branch --pr-url --commit-sha --note --invocation-mode --operation-id --publish?", 1},
+	"issue close":            {"--resolution --expected-version --lease-token --lease-generation --branch --pr-url --commit-sha --note --invocation-mode --operation-id --publish? --require-evidence --diff-hash", 1},
 	"issue operator-close":   {"--resolution --expected-version --force? --reason --branch --pr-url --commit-sha --note", 1},
 	"issue operator-reopen":  {"--expected-version --force? --reason", 1},
 	"issue operator-release": {"--expected-version --force? --reason", 1},
@@ -74,7 +74,7 @@ var requiredCommandFlags = map[string]string{
 	"worktree register":      "--repo --absolute-path",
 	"worktree unregister":    "--worktree",
 	"artifact-root add":      "--repo --root-path",
-	"artifact register":      "--repo --relative-path --kind",
+	"artifact register":      "--kind",
 	"issue create":           "--project --scope-kind --title",
 	"issue heartbeat":        "--lease-token --lease-generation",
 	"issue release":          "--lease-token --lease-generation",
@@ -207,6 +207,34 @@ func validateCommandArgs(args []string) error {
 	if route.pos >= 0 && positionals != route.pos {
 		return argumentError(fmt.Sprintf("%s requires %d positional argument(s), got %d", key, route.pos, positionals))
 	}
+	if key == "artifact register" {
+		if seen["--issue"] {
+			if !core.ValidEvidenceKind(values["--kind"]) {
+				return argumentError("invalid issue evidence --kind: " + values["--kind"])
+			}
+			if !seen["--file"] {
+				return argumentError("artifact register --issue requires --file")
+			}
+			if seen["--repo"] || seen["--relative-path"] || seen["--worktree"] || seen["--artifact-root"] || seen["--title"] || seen["--external-key"] {
+				return argumentError("issue evidence cannot mix repository artifact flags")
+			}
+		} else {
+			if !core.ValidateArtifactKind(values["--kind"]) {
+				return argumentError("invalid repository artifact --kind: " + values["--kind"])
+			}
+			for _, f := range []string{"--repo", "--relative-path"} {
+				if !seen[f] {
+					return argumentError("artifact register requires " + f)
+				}
+			}
+			if seen["--file"] || seen["--commit"] || seen["--diff-hash"] {
+				return argumentError("evidence flags require --issue")
+			}
+		}
+	}
+	if key == "artifact list" && seen["--repo"] && seen["--issue"] {
+		return argumentError("choose --repo or --issue")
+	}
 	if key == "issue import" {
 		if _, err := github.ParseIssueRef(rest[0]); err != nil {
 			return argumentError(err.Error())
@@ -319,7 +347,7 @@ func validateFlagValue(command, flag, value string) error {
 			if value != "blocks" && value != "parent" && value != "related" && value != "discovered-from" {
 				return argumentError("invalid --kind: " + value)
 			}
-		} else if (command == "artifact register" || command == "artifact-root add" || command == "issue link") && !core.ValidateArtifactKind(value) {
+		} else if (command == "artifact register" || command == "artifact-root add" || command == "issue link") && !core.ValidateArtifactKind(value) && !(command == "artifact register" && core.ValidEvidenceKind(value)) {
 			return argumentError("invalid --kind: " + value)
 		}
 	case "--columns":

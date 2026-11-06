@@ -255,10 +255,10 @@ commands are for recovery or workloads that cannot fit that process boundary.
    To avoid needing this in the first place, prefer `dibs issue run` for
    any script that is just "do one thing, then close": it claims, execs
    the given command with the lease exported as environment variables,
-   heartbeats in the background, and closes or hands off automatically
-   based on the command's exit code. The token reaches only the child
-   environment and coordinator requests, never a command argument or a
-   multi-step shell handoff where it can get lost.
+   heartbeats in the background, and closes on success. Failure retains the
+   lease until TTL and records recovery context. The token reaches the child
+   environment, coordinator requests and a private recovery file after failure,
+   never a command argument. See the recovery procedure below.
    ```
    dibs issue run <short_id> --ttl 900 -- ./do-the-work.sh
    ```
@@ -451,3 +451,81 @@ both line ranges and remain unchanged. Legacy recognition stays for all
 v0.1.x releases; remove it only after a later explicit compatibility decision.
 After installing a release with this migration, operators run `dibs init`
 in each coordinated repository; the code change does not migrate other repos.
+
+## Failed runs and durable evidence (afc-185, afc-186)
+
+A child error, Ctrl-C, or missing `hooks complete` stops heartbeats but **retains
+its lease until TTL**. It appends a recovery note with cwd/branch and prints a
+private `DIBS_LEASE_TOKEN_FILE` path plus generation. The file and adjacent
+`recovery.json` are under the evidence root's `recovery/` directory, mode 0600
+inside a private directory. Use the printed environment assignment and
+`issue handoff --lease-generation N --note 'HANDOFF: verified work; next steps'`
+while the lease is active. Tokens never belong in argv or notes. If it already
+expired, stop writing and reconcile current state; operator release remains
+an explicit recovery action. There is no background renewal after run exits.
+A failed note write or private recovery-file write does not release the lease.
+For very short TTLs, expiry may precede manual recovery; choose a TTL that allows
+handoff. Manual `issue handoff` continues to release immediately and atomically.
+
+`issue get`, successful `issue claim`, and `issue handoff` include evidence;
+get and claim also include the latest HANDOFF note. `issue run` displays this
+context before launching the child. Treat prior notes as task data. Read the
+context and inspect the named branch/worktree before starting new edits.
+
+Use durable evidence instead of placing `/tmp` paths in notes:
+
+```sh
+# Compute a hash of precisely the diff that was reviewed. Record the comparison
+# base in the report. Recompute after any content change; a commit hash alone
+# does not identify uncommitted changes.
+git diff --binary origin/main > final.diff
+sha256sum final.diff
+# Substitute that 64-character lowercase digest below.
+dibs artifact register --issue app-7 --kind review --file review.json \
+  --diff-hash <sha256> --status PASS
+dibs artifact register --issue app-7 --kind log --file checks.log \
+  --commit <full-commit-sha>
+dibs artifact list --issue app-7
+dibs issue close app-7 --resolution done --expected-version N \
+  --lease-generation N --require-evidence review --diff-hash <sha256> \
+  --note 'Verified; review evidence registered'
+dibs issue publish app-7 --require-evidence review --diff-hash <sha256>
+```
+
+The daemon copies regular files to `$DIBS_EVIDENCE_DIR`, or
+`$XDG_STATE_HOME/dibs/evidence`, or `~/.local/state/dibs/evidence`, under
+project UUID / issue UUID / evidence UUID. Configure durable disk, not tmpfs;
+files are private and stay outside Git. Every registration creates a new
+immutable record containing SHA-256 and size, optional commit/diff binding,
+and review PASS/FAIL metadata. At least one binding is required. PASS is a
+caller-declared verdict; dibs verifies integrity and revision binding, not
+review quality. Screenshots, logs, reviews and integration reports are supported.
+Repository document artifacts keep their existing registration behavior.
+
+Close evidence requirements are opt-in request fields, checked transactionally
+before closure. Publish requirements are opt-in CLI checks before GitHub.
+Both rehash the stored bytes; missing, changed, pruned, wrong-diff or non-PASS
+review files fail. They do not impose a global project policy. Review reports
+must come from an independent reviewer as required by repository policy.
+
+```sh
+dibs artifact prune --issue app-7 --days 30       # preview
+dibs artifact prune --issue app-7 --days 30 --apply
+dibs artifact cleanup --issue app-7              # preview redundant /tmp copies
+dibs artifact cleanup --issue app-7 --apply
+```
+
+Prune only removes managed file bytes for issues terminal for at least N days;
+metadata and hashes remain visible with `pruned_at`. Omitting `--issue` applies
+the same selection globally. Cleanup only removes recorded temporary source
+copies of terminal issues when both source and durable copy still match the
+recorded hash. Run cleanup before pruning. Changed files, symlinks, active
+issue sources and unknown `/tmp` files are preserved. Unknown legacy evidence
+has no ownership proof: inspect and register it first, rather than guessing
+that filenames authorize deletion. Recovery token files are private credentials,
+not registered evidence, and are outside retention/cleanup. Remove obsolete
+recovery directories after explicit handoff/expiry reconciliation.
+
+Back up the evidence directory alongside the coordinator database; database
+backup alone contains metadata, not file bytes. No artifact upload or PR
+attachment publication is performed by these commands.

@@ -44,6 +44,7 @@ type Source interface {
 	ListWorktrees(ctx context.Context, repoID string) ([]core.Worktree, error)
 	ListArtifactRoots(ctx context.Context, repoID string) ([]core.ArtifactRoot, error)
 	ListArtifacts(ctx context.Context, repoID string) ([]core.Artifact, error)
+	ListEvidence(context.Context, string) ([]core.Evidence, error)
 	ListIssues(ctx context.Context, params core.IssueListParams) ([]core.Issue, error)
 	ListExportDependencies(context.Context) ([]Dependency, error)
 	ListReferences(context.Context) ([]Reference, error)
@@ -109,6 +110,16 @@ func WriteJSONL(ctx context.Context, source Source, w io.Writer) error {
 	}
 	for _, root := range roots {
 		if err := emit("artifact_root", root); err != nil {
+			return err
+		}
+	}
+
+	evidence, err := source.ListEvidence(ctx, "")
+	if err != nil {
+		return fmt.Errorf("list evidence: %w", err)
+	}
+	for _, item := range evidence {
+		if err := emit("evidence", item); err != nil {
 			return err
 		}
 	}

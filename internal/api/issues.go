@@ -240,6 +240,15 @@ func handleClaimIssue(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 			return
 		}
 
+		// Enrichment must not turn a committed claim into an apparent failure.
+		if issue, _, contextErr := st.GetIssue(r.Context(), issueID); contextErr == nil {
+			resp.Evidence = issue.Evidence
+			resp.LastHandoff = issue.LastHandoff
+			resp.WorktreeID = issue.WorktreeID
+		} else {
+			logger.Error("claim recovery context unavailable; read issue before writing", "issue_id", issueID, "error", contextErr)
+		}
+
 		writeJSON(w, http.StatusOK, resp)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/evidence"
 	"github.com/google/uuid"
 )
 
@@ -242,6 +243,18 @@ func GetIssue(ctx context.Context, db *sql.DB, id string) (core.Issue, *core.Iss
 		return core.Issue{}, nil, err
 	}
 	issue = populated[0]
+
+	issue.Evidence, err = listEvidence(ctx, db, issue.ID)
+	if err != nil {
+		return core.Issue{}, nil, err
+	}
+	var handoff core.Note
+	err = db.QueryRowContext(ctx, `SELECT id,issue_id,author,body,created_at FROM notes WHERE issue_id=? AND substr(body,1,8)='HANDOFF:' ORDER BY rowid DESC LIMIT 1`, issue.ID).Scan(&handoff.ID, &handoff.IssueID, &handoff.Author, &handoff.Body, &handoff.CreatedAt)
+	if err == nil {
+		issue.LastHandoff = &handoff
+	} else if err != sql.ErrNoRows {
+		return core.Issue{}, nil, err
+	}
 
 	return issue, lease, nil
 }
@@ -1077,7 +1090,14 @@ func handoffLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req co
 	}
 
 	runCoordinationProofHook(ctx, coordinationProofHandoffBeforeCommit)
-	outcome := core.HandoffResponse{Note: note}
+	items, err := listEvidence(ctx, tx, issueID)
+	if err != nil {
+		return core.HandoffResponse{}, err
+	}
+	if len(items) == 0 {
+		items = nil
+	}
+	outcome := core.HandoffResponse{Note: note, Evidence: items}
 	if req.OperationID != "" {
 		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindHandoff, issueID, holder, fingerprint, outcome, nowTime); err != nil {
 			return core.HandoffResponse{}, err
@@ -1542,6 +1562,20 @@ func closeIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 		return core.CloseIssueResult{}, err
 	}
 
+	if len(req.RequireEvidence) > 0 {
+		items, err := listEvidence(ctx, tx, issueID)
+		if err != nil {
+			return core.CloseIssueResult{}, err
+		}
+		if err = evidence.Check(items, req.RequireEvidence, req.DiffHash); err != nil {
+			return core.CloseIssueResult{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
+		}
+	}
+	runCoordinationProofHook(ctx, coordinationProofCloseEvidenceVerified)
+	// Rehashing large evidence may outlive the lease. Use a fresh timestamp
+	// for the fenced DELETE below; an expired lease rolls the transition back.
+	nowTime = time.Now().UTC()
+	now = nowTime.Format(time.RFC3339)
 	result, err := updateTerminalIssue(ctx, tx, issue, req.Resolution, now)
 	if err != nil {
 		return core.CloseIssueResult{}, err

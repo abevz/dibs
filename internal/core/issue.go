@@ -98,24 +98,26 @@ func NormalizeInvocationMode(mode string) (string, error) {
 
 // Issue represents a task or work item in a project.
 type Issue struct {
-	ID                 string `json:"id"`
-	ShortID            string `json:"short_id"`
-	ProjectID          string `json:"project_id"`
-	RepositoryID       string `json:"repository_id,omitempty"`
-	WorktreeID         string `json:"worktree_id,omitempty"`
-	ScopeKind          string `json:"scope_kind"`
-	IssueType          string `json:"issue_type"`
-	Title              string `json:"title"`
-	ExternalKey        string `json:"external_key,omitempty"`
-	Description        string `json:"description,omitempty"`
-	AcceptanceCriteria string `json:"acceptance_criteria,omitempty"`
-	Status             string `json:"status"`
-	Priority           int    `json:"priority"`
-	Assignee           string `json:"assignee,omitempty"`
-	Version            int    `json:"version"`
-	ClaimedAt          string `json:"claimed_at,omitempty"`
-	Holder             string `json:"holder,omitempty"`
-	LeaseExpiresAt     string `json:"lease_expires_at,omitempty"`
+	Evidence           []Evidence `json:"evidence,omitempty"`
+	LastHandoff        *Note      `json:"last_handoff,omitempty"`
+	ID                 string     `json:"id"`
+	ShortID            string     `json:"short_id"`
+	ProjectID          string     `json:"project_id"`
+	RepositoryID       string     `json:"repository_id,omitempty"`
+	WorktreeID         string     `json:"worktree_id,omitempty"`
+	ScopeKind          string     `json:"scope_kind"`
+	IssueType          string     `json:"issue_type"`
+	Title              string     `json:"title"`
+	ExternalKey        string     `json:"external_key,omitempty"`
+	Description        string     `json:"description,omitempty"`
+	AcceptanceCriteria string     `json:"acceptance_criteria,omitempty"`
+	Status             string     `json:"status"`
+	Priority           int        `json:"priority"`
+	Assignee           string     `json:"assignee,omitempty"`
+	Version            int        `json:"version"`
+	ClaimedAt          string     `json:"claimed_at,omitempty"`
+	Holder             string     `json:"holder,omitempty"`
+	LeaseExpiresAt     string     `json:"lease_expires_at,omitempty"`
 	// LeasePID is client-reported process metadata. issue run reports its local
 	// supervisor; manual issue claim may report a caller ancestor. Other
 	// clients can report the same typed session IDs. It is advisory, scoped to
@@ -262,10 +264,13 @@ func ClaimFingerprintFields(issueID string, req ClaimRequest, invocationMode str
 
 // ClaimResponse is returned on successful claim.
 type ClaimResponse struct {
-	LeaseToken      string `json:"lease_token"`
-	LeaseGeneration int64  `json:"lease_generation"`
-	ExpiresAt       string `json:"expires_at"`
-	AttemptID       string `json:"attempt_id"`
+	Evidence        []Evidence `json:"evidence,omitempty"`
+	LastHandoff     *Note      `json:"last_handoff,omitempty"`
+	WorktreeID      string     `json:"worktree_id,omitempty"`
+	LeaseToken      string     `json:"lease_token"`
+	LeaseGeneration int64      `json:"lease_generation"`
+	ExpiresAt       string     `json:"expires_at"`
+	AttemptID       string     `json:"attempt_id"`
 	// Version is the issue's version immediately after this claim. Claiming
 	// increments the issue version as a side effect, so this is the value to
 	// pass as --expected-version on the close/handoff that ends this attempt
@@ -309,7 +314,8 @@ type HandoffRequest struct {
 // HandoffResponse is returned after atomically recording a HANDOFF note and
 // releasing the active lease.
 type HandoffResponse struct {
-	Note Note `json:"note"`
+	Evidence []Evidence `json:"evidence,omitempty"`
+	Note     Note       `json:"note"`
 }
 
 // UpdateIssueRequest is the JSON body for PATCH /v1/issues/{issue_id}.
@@ -332,17 +338,19 @@ type UpdateIssueRequest struct {
 
 // CloseIssueRequest is the JSON body for POST /v1/issues/{issue_id}/close.
 type CloseIssueRequest struct {
-	Resolution      string `json:"resolution"`
-	Branch          string `json:"branch,omitempty"`
-	PRURL           string `json:"pr_url,omitempty"`
-	CommitSHA       string `json:"commit_sha,omitempty"`
-	ExpectedVersion int    `json:"expected_version"`
-	LeaseToken      string `json:"lease_token"`
-	LeaseGeneration int64  `json:"lease_generation"`
-	Actor           string `json:"actor,omitempty"`
-	Note            string `json:"note,omitempty"`
-	InvocationMode  string `json:"invocation_mode,omitempty"`
-	OperationID     string `json:"operation_id,omitempty"`
+	RequireEvidence []string `json:"require_evidence,omitempty"`
+	DiffHash        string   `json:"diff_hash,omitempty"`
+	Resolution      string   `json:"resolution"`
+	Branch          string   `json:"branch,omitempty"`
+	PRURL           string   `json:"pr_url,omitempty"`
+	CommitSHA       string   `json:"commit_sha,omitempty"`
+	ExpectedVersion int      `json:"expected_version"`
+	LeaseToken      string   `json:"lease_token"`
+	LeaseGeneration int64    `json:"lease_generation"`
+	Actor           string   `json:"actor,omitempty"`
+	Note            string   `json:"note,omitempty"`
+	InvocationMode  string   `json:"invocation_mode,omitempty"`
+	OperationID     string   `json:"operation_id,omitempty"`
 }
 
 // OperatorCloseIssueRequest closes an issue through the explicit local

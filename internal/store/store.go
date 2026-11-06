@@ -16,6 +16,9 @@ import (
 // handlers independent from SQLite package details without promising multiple
 // database backends.
 type CoordinatorStore interface {
+	RegisterEvidence(context.Context, string, core.RegisterEvidenceRequest) (core.Evidence, error)
+	ListEvidence(context.Context, string) ([]core.Evidence, error)
+	PruneEvidence(context.Context, core.EvidenceMaintenanceRequest) ([]core.Evidence, error)
 	Ping(context.Context) error
 	ExportJSONL(context.Context, io.Writer) error
 

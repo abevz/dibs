@@ -324,6 +324,11 @@ func TestMigrateLeaseGenerationBackfillsExistingLease(t *testing.T) {
 			if issueGeneration != tc.wantIssue {
 				t.Fatalf("issue lease_generation = %d, want %d", issueGeneration, tc.wantIssue)
 			}
+			// The daemon completes all embedded migrations before serving current
+			// read APIs. Keep the generation assertion above specific to migration 8.
+			if err := Migrate(context.Background(), db, migrations.FS); err != nil {
+				t.Fatal(err)
+			}
 			_, publicLease, err := GetIssue(context.Background(), db, issue.ID)
 			if err != nil {
 				t.Fatalf("read upgraded issue: %v", err)

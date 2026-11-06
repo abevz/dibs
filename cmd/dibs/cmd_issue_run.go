@@ -17,11 +17,11 @@ import (
 )
 
 const issueRunUsage = "Usage: dibs issue run <issue-id> [--actor <name>] [--ttl <seconds>] [--require-complete] [--close-resolution done|cancelled] [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note <text>] [--invocation-mode interactive|scheduled|unknown] [--publish] -- <command> [args...]\n" + lifecycleHint +
-	"\nOwns claim -> heartbeat -> close/handoff around a single subprocess; the child receives the lease token in its environment, never in argv. On exit 0, closes with --close-resolution (default done). On any other exit, or on Ctrl-C, hands the lease off with an auto-generated HANDOFF: note instead of closing. On confirmed lease ownership loss (heartbeat rejected with lease_expired, or the lease window closing without proof), the child is terminated and the CLI exits non-zero with lease_expired without sending a close request."
+	"\nOwns claim -> heartbeat -> close/handoff around a single subprocess; the child receives the lease token in its environment, never in argv. On exit 0, closes with --close-resolution (default done). On any other exit, Ctrl-C, or missing explicit completion, records recovery context and retains the lease until its TTL; deliberate handoff remains an explicit action. On confirmed lease ownership loss (heartbeat rejected with lease_expired, or the lease window closing without proof), the child is terminated and the CLI exits non-zero with lease_expired without sending a close request."
 
 // runIssueRun claims issueID, execs the given command with the lease
 // exported as environment variables, heartbeats in the background for the
-// duration of the run, and closes or hands off the issue based on how the
+// duration of the run, and closes or preserves the lease based on how the
 // command exited. If the background heartbeat proves lease ownership was
 // lost, the child is terminated and no close or handoff is sent: the run
 // returns a distinct lease_expired error instead. See issueRunUsage for the
@@ -160,6 +160,7 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		fmt.Printf("Claimed %s (version %d, expires %s)\n", issueID, claim.Version, claim.ExpiresAt)
 	}
 
+	printRecoveryContext(claim.LastHandoff, claim.Evidence)
 	heartbeatInterval := time.Duration(ttl) * time.Second / 3
 
 	// knownExpiry is the last deadline the daemon gave us, from the claim or
@@ -350,10 +351,24 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	if ctx.Err() != nil {
 		handoffNote = "HANDOFF: issue run cancelled"
 	}
-	if _, err := c.HandoffLeaseWithMode(background, issueID, claim.LeaseToken, claim.LeaseGeneration, handoffNote, invocationMode); err != nil {
-		return fmt.Errorf("command failed (%v) and handoff also failed: %w", runErr, err)
+	// Child failure is not an intentional release. Preserve the bounded lease
+	// so another ready-loop cannot overtake the holder's real handoff.
+	handoffNote += "\nRecovery pending; lease retained until TTL; heartbeat stopped." + runWorkContext()
+	tokenPath, recoveryErr := saveRunRecovery(issueID, claim)
+	if recoveryErr != nil {
+		fmt.Fprintf(os.Stderr, "issue run: could not save private recovery token: %v\n", recoveryErr)
 	}
-	fmt.Fprintf(os.Stderr, "issue run: command failed, lease handed off with note: %s\n", handoffNote)
+	if _, noteErr := c.CreateNoteWithMode(background, issueID, holder, handoffNote, invocationMode); noteErr != nil {
+		fmt.Fprintf(os.Stderr, "issue run: could not record recovery note: %v\n", noteErr)
+	}
+	fmt.Fprintf(os.Stderr, "issue run: command failed; lease retained until TTL (no further heartbeats). %s\n", handoffNote)
+	if tokenPath != "" {
+		fmt.Fprintf(os.Stderr, "Recovery: set DIBS_LEASE_TOKEN_FILE=%q and run dibs issue handoff %s --lease-generation %d --note 'HANDOFF: <verified work and next steps>' before expiry. Metadata: %s\n", tokenPath, issueID, claim.LeaseGeneration, strings.TrimSuffix(tokenPath, "lease-token")+"recovery.json")
+	}
+	if exitCode < 1 {
+		exitCode = 1
+	}
+
 	if completionDir != "" {
 		_ = os.RemoveAll(completionDir)
 	}

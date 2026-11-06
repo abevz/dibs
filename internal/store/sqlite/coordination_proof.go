@@ -9,6 +9,7 @@ import "context"
 type coordinationProofPoint string
 
 const (
+	coordinationProofCloseEvidenceVerified coordinationProofPoint = "close_evidence_verified"
 	coordinationProofClaimBeforeCommit     coordinationProofPoint = "claim_before_commit"
 	coordinationProofHeartbeatBeforeCommit coordinationProofPoint = "heartbeat_before_commit"
 	coordinationProofHandoffBeforeCommit   coordinationProofPoint = "handoff_before_commit"
