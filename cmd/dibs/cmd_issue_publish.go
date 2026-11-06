@@ -30,8 +30,12 @@ func runIssuePublish(ctx context.Context, c *client.Client, args []string) error
 		fmt.Println(issuePublishUsage)
 		return nil
 	}
-	if len(args) != 1 {
+	if len(args) < 1 {
 		return usageErr(issuePublishUsage, "one issue ID is required")
+	}
+	f := evidenceFlags(args[1:])
+	if err := checkIssueEvidence(ctx, c, args[0], f["--require-evidence"], f["--diff-hash"]); err != nil {
+		return err
 	}
 	issue, _, err := c.GetIssue(ctx, args[0])
 	if err != nil {

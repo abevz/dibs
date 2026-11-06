@@ -60,6 +60,10 @@ func registerRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.Logger) {
 
 	// Artifacts
 	mux.HandleFunc("POST /v1/artifacts", handleCreateArtifact(st, logger))
+	mux.HandleFunc("POST /v1/issues/{issue_id}/evidence", handleRegisterEvidence(st))
+	mux.HandleFunc("GET /v1/issues/{issue_id}/evidence", handleListEvidence(st))
+	mux.HandleFunc("GET /v1/evidence", handleListEvidence(st))
+	mux.HandleFunc("POST /v1/evidence/prune", handlePruneEvidence(st))
 	mux.HandleFunc("GET /v1/artifacts", handleListArtifacts(st, logger))
 
 	// Issues

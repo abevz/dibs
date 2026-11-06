@@ -462,3 +462,37 @@ daemon.
 - `DELETE /v1/issues/{issue_id}/dependencies/{depends_on}?kind=` — remove
 - `GET  /v1/issues/{issue_id}/events` — activity timeline ordered by
   `event.sequence`; every event response includes `sequence`
+
+
+## Issue evidence
+
+- `POST /v1/issues/{issue_id}/evidence`: `source_path` (absolute, daemon-local
+  regular file), `kind` (`screenshot|log|review|integration`), optional
+  `commit_sha` (full object ID), `diff_hash` (lowercase SHA-256), `status`
+  (`PASS|FAIL`, review only). At least one revision binding is required.
+  Returns `{ "evidence": <record> }` (201). The daemon computes SHA-256 and size
+  while copying into durable private state. Registration is append-only;
+  identical retry requests create separate records, not idempotent replay.
+- `GET /v1/issues/{issue_id}/evidence` and `GET /v1/evidence`: return
+  `{ "evidence": [...] }`, including metadata retained after pruning.
+- `POST /v1/evidence/prune`: `{ "issue_id": "optional short ID or UUID",
+  "days": 30, "apply": false }`. Positive days required; preview is default.
+  Selects terminal issues with `closed_at` older than cutoff, deletes managed
+  bytes only with apply, sets `pruned_at`, keeps summaries. Returns selected
+  evidence records. Filesystem and SQLite are not one atomic medium: an I/O
+  or commit failure can leave a missing file with unpruned metadata; retries
+  tolerate missing content and evidence gates fail closed.
+
+Issue detail includes `issue.evidence` and `issue.last_handoff` when present.
+Successful claims include `evidence`, `last_handoff`, `worktree_id`; claim
+context enrichment failure is logged and does not undo a committed claim.
+Read issue detail before editing if context is unavailable. A deliberate
+handoff response includes `evidence` alongside `note`.
+
+`POST /v1/issues/{issue_id}/close` accepts `require_evidence: ["review", "log"]`
+and `diff_hash`. Requirements verify kind, final diff binding, retained file
+integrity and PASS review status before the close state transition. These
+fields participate in operation fingerprints. Legacy callers with no kinds
+retain existing behavior. Publication gates are explicit CLI checks, not a
+new daemon GitHub boundary. Evidence paths are local and private; neither
+registration nor close automatically posts file content publicly.

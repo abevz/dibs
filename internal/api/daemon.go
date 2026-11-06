@@ -136,6 +136,10 @@ func RunDaemon(ctx context.Context, logger *slog.Logger, cfg config.Config, st s
 
 	// Artifact registration.
 	mux.HandleFunc("POST /v1/artifacts", handleCreateArtifact(st, logger))
+	mux.HandleFunc("POST /v1/issues/{issue_id}/evidence", handleRegisterEvidence(st))
+	mux.HandleFunc("GET /v1/issues/{issue_id}/evidence", handleListEvidence(st))
+	mux.HandleFunc("GET /v1/evidence", handleListEvidence(st))
+	mux.HandleFunc("POST /v1/evidence/prune", handlePruneEvidence(st))
 	mux.HandleFunc("GET /v1/artifacts", handleListArtifacts(st, logger))
 
 	// Issue registration.

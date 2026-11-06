@@ -116,6 +116,8 @@ func runArtifact(ctx context.Context, c *client.Client, args []string) error {
 	}
 
 	switch args[0] {
+	case "prune", "cleanup":
+		return runEvidenceMaintenance(ctx, c, args[0], args[1:])
 	case "register":
 		return runArtifactRegister(ctx, c, args[1:])
 	case "list":
@@ -126,6 +128,9 @@ func runArtifact(ctx context.Context, c *client.Client, args []string) error {
 }
 
 func runArtifactRegister(ctx context.Context, c *client.Client, args []string) error {
+	if evidenceFlags(args)["--issue"] != "" {
+		return registerIssueEvidence(ctx, c, args)
+	}
 	if len(args) < 6 {
 		return fmt.Errorf("%s", "Usage: dibs artifact register --repo <repo-id> --relative-path <path> --kind <kind> [--worktree <worktree-id>] [--artifact-root <root-id>] [--title <title>] [--external-key <key>] [--status <status>]")
 	}
@@ -189,6 +194,13 @@ func runArtifactRegister(ctx context.Context, c *client.Client, args []string) e
 }
 
 func runArtifactList(ctx context.Context, c *client.Client, args []string) error {
+	if id := evidenceFlags(args)["--issue"]; id != "" {
+		items, err := c.ListEvidence(ctx, id)
+		if err != nil {
+			return err
+		}
+		return outputEvidence(items)
+	}
 	repo := ""
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--repo" && i+1 < len(args) {

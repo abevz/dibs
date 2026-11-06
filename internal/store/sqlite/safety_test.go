@@ -81,7 +81,7 @@ func TestSafetyAuditSurvivesSecondConnectionWithoutSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.StaleRejections != 1 || snapshot.ClaimConflicts != 1 || snapshot.ActiveLeases != 1 || snapshot.LatestMigration != "0011_rejection_counts.sql" {
+	if snapshot.StaleRejections != 1 || snapshot.ClaimConflicts != 1 || snapshot.ActiveLeases != 1 || snapshot.LatestMigration != "0012_issue_evidence.sql" {
 		t.Fatalf("snapshot = %+v", snapshot)
 	}
 	if len(snapshot.TopStaleHolders) != 1 || snapshot.TopStaleHolders[0].Holder != "first" || snapshot.TopStaleHolders[0].CurrentGenerationAtLastRejection != second.LeaseGeneration {

@@ -389,6 +389,7 @@ func runIssueGet(ctx context.Context, c *client.Client, args []string) error {
 	} else {
 		printIssueDetailed(issue, lease)
 	}
+	printRecoveryContext(issue.LastHandoff, issue.Evidence)
 	return nil
 }
 
@@ -726,6 +727,7 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 		json.NewEncoder(os.Stdout).Encode(resp)
 		return nil
 	}
+	printRecoveryContext(resp.LastHandoff, resp.Evidence)
 	fmt.Printf("Operation ID: %s\n", operationID)
 	fmt.Printf("Lease Token: %s\n", resp.LeaseToken)
 	fmt.Printf("Attempt ID:  %s\n", resp.AttemptID)
@@ -964,6 +966,7 @@ func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error
 		json.NewEncoder(os.Stdout).Encode(resp)
 		return nil
 	}
+	printRecoveryContext(nil, resp.Evidence)
 	fmt.Printf("Handoff note recorded: %s\nLease released.\n", resp.Note.ID)
 	return nil
 }
@@ -1133,6 +1136,16 @@ func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 		case "--pr-url":
 			if i+1 < len(args) {
 				req.PRURL = args[i+1]
+				i++
+			}
+		case "--require-evidence":
+			if i+1 < len(args) {
+				req.RequireEvidence = strings.Split(args[i+1], ",")
+				i++
+			}
+		case "--diff-hash":
+			if i+1 < len(args) {
+				req.DiffHash = args[i+1]
 				i++
 			}
 		case "--commit-sha":

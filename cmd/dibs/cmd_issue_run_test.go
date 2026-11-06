@@ -219,6 +219,9 @@ func (m *mockCoordinator) handler() http.Handler {
 
 func buildAfctlForRunTest(t *testing.T) string {
 	t.Helper()
+	if os.Getenv("DIBS_EVIDENCE_DIR") == "" {
+		t.Setenv("DIBS_EVIDENCE_DIR", t.TempDir())
+	}
 	tmpDir := t.TempDir()
 	binPath := filepath.Join(tmpDir, "dibs")
 	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", binPath, ".")
@@ -312,7 +315,7 @@ func TestIssueRunClosesOnSuccess(t *testing.T) {
 	}
 }
 
-func TestIssueRunHandsOffOnFailureAndMirrorsExitCode(t *testing.T) {
+func TestIssueRunRetainsOnFailureAndMirrorsExitCode(t *testing.T) {
 	binPath := buildAfctlForRunTest(t)
 	mock := &mockCoordinator{claimVersion: 3}
 	sockPath := startMockCoordinator(t, mock)
@@ -337,15 +340,11 @@ func TestIssueRunHandsOffOnFailureAndMirrorsExitCode(t *testing.T) {
 	if len(mock.closeReqs) != 0 {
 		t.Fatalf("expected no close requests on failure, got %d", len(mock.closeReqs))
 	}
-	if len(mock.handoffReqs) != 1 {
-		t.Fatalf("expected exactly one handoff request, got %d", len(mock.handoffReqs))
+	if len(mock.handoffReqs) != 0 {
+		t.Fatalf("failure sent a handoff: %s", stderr.String())
 	}
-	note, _ := mock.handoffReqs[0]["note"].(string)
-	if !strings.HasPrefix(note, "HANDOFF:") {
-		t.Errorf("handoff note = %q, want HANDOFF: prefix", note)
-	}
-	if !strings.Contains(note, "exit 5") {
-		t.Errorf("handoff note = %q, want it to mention exit 5", note)
+	if !strings.Contains(stderr.String(), "exit 5") || !strings.Contains(stderr.String(), "lease retained") {
+		t.Fatalf("recovery message missing: %s", stderr.String())
 	}
 }
 
@@ -596,5 +595,41 @@ func TestIssueRunCleanShutdownWithHeartbeats(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "lease ownership lost") {
 		t.Errorf("stderr = %q, must not report ownership loss on a clean shutdown", stderr.String())
+	}
+}
+
+// The dq-67 failure path must not emit a handoff/release 18 seconds before
+// the holder can describe its work. A failed child keeps the bounded lease.
+func TestIssueRunFailureRetainsLeaseForRecovery(t *testing.T) {
+	t.Setenv("DIBS_EVIDENCE_DIR", t.TempDir())
+	bin := buildAfctlForRunTest(t)
+	mock := &mockCoordinator{claimVersion: 3}
+	sock := startMockCoordinator(t, mock)
+	cmd := exec.Command(bin, "issue", "run", "afc-185", "--ttl", "900", "--", "sh", "-c", "exit 7")
+	cmd.Env = append(os.Environ(), "DIBS_SOCKET="+sock)
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 7 {
+		t.Fatalf("exit=%v output=%s", err, out)
+	}
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if len(mock.handoffReqs) != 0 || len(mock.closeReqs) != 0 {
+		t.Fatalf("failed child released/closed: %s", out)
+	}
+	if !strings.Contains(string(out), "lease retained") || strings.Contains(string(out), "test-lease-token") {
+		t.Fatalf("recovery guidance/token leak: %s", out)
+	}
+	matches, err := filepath.Glob(filepath.Join(os.Getenv("DIBS_EVIDENCE_DIR"), "recovery", "*", "lease-token"))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("recovery token: %v %v", matches, err)
+	}
+	info, err := os.Stat(matches[0])
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("token permissions: %v %v", info, err)
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil || string(data) != "test-lease-token" {
+		t.Fatal("token not recoverable")
 	}
 }

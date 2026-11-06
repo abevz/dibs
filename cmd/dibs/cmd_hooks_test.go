@@ -15,7 +15,7 @@ func TestSessionStartContextGitHub(t *testing.T) {
 	bin := "/tmp/dibs"
 	base := "Dibs ready issues (read-only; no claim):\n" +
 		"- app-1: Local task  \n" +
-		"Choose one issue explicitly. Run it using `dibs issue run <issue-id> --require-complete -- <agent command>`. The run owns claim and heartbeat. Within that run call `" + bin + " hooks complete` only after acceptance criteria are met; otherwise exit leaves an atomic HANDOFF. Do not claim from this hook."
+		"Choose one issue explicitly. Run it using `dibs issue run <issue-id> --require-complete -- <agent command>`. The run owns claim and heartbeat. Within that run call `" + bin + " hooks complete` only after acceptance criteria are met; otherwise exit records recovery context and retains the lease until TTL. Do not claim from this hook."
 	got := sessionStartContext([]core.Issue{{ShortID: "app-1", Title: "Local task  "}}, bin)
 	if got != base {
 		t.Fatalf("local context changed:\n%q\nwant:\n%q", got, base)
@@ -96,7 +96,7 @@ func TestIssueRunRequiresExplicitCompletion(t *testing.T) {
 		child []string
 		close bool
 	}{
-		{"normal exit hands off", []string{"sh", "-c", "exit 0"}, false},
+		{"normal exit retains lease", []string{"sh", "-c", "exit 0"}, false},
 		{"explicit completion closes", []string{bin, "hooks", "complete"}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -120,11 +120,11 @@ func TestIssueRunRequiresExplicitCompletion(t *testing.T) {
 				}
 			}
 			if !tc.close {
-				if len(mock.closeReqs) != 0 || len(mock.handoffReqs) != 1 {
+				if len(mock.closeReqs) != 0 || len(mock.handoffReqs) != 0 {
 					t.Fatalf("close=%d handoff=%d", len(mock.closeReqs), len(mock.handoffReqs))
 				}
-				if note, _ := mock.handoffReqs[0]["note"].(string); !strings.HasPrefix(note, "HANDOFF:") {
-					t.Fatalf("note=%q", note)
+				if !strings.Contains(string(out), "lease retained") {
+					t.Fatalf("missing recovery context: %s", out)
 				}
 			}
 		})

@@ -209,6 +209,8 @@ func leafHelp(args []string) (string, bool) {
 		}
 	}
 	switch key {
+	case "artifact register":
+		b.WriteString("\nChoose repository mode (--repo and --relative-path), or issue evidence mode (--issue, --file, and --commit or --diff-hash). Review status is PASS or FAIL.\n")
 	case "issue link", "issue unlink":
 		b.WriteString("\nChoose one of --artifact or --path.\n")
 	case "issue dependency add", "issue dependency remove":

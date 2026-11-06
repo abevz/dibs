@@ -97,7 +97,7 @@ func TestDaemonSafetyFieldsAndMutationLogs(t *testing.T) {
 	_ = resp.Body.Close()
 	if health.Status != "ok" || health.Version != build.Version || health.Safety.ActiveLeases != 1 || health.Safety.MutationCounters.ClaimConflicts != 1 || health.Safety.DurableClaimConflicts != 1 ||
 		!health.Safety.SingletonLockHeld || !health.Safety.MigrationsVerifiedAtStartup || !health.Safety.IntegrityVerifiedAtStartup ||
-		health.Safety.LatestMigration != "0011_rejection_counts.sql" {
+		health.Safety.LatestMigration != "0012_issue_evidence.sql" {
 		t.Fatalf("health = %+v", health)
 	}
 	resp, err = client.Get("http://unix/v1/stats")
