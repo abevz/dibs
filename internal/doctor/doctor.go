@@ -549,6 +549,7 @@ func RunAll(ctx context.Context, c *client.Client, cfg config.Config) []Result {
 
 	e := realExec{}
 	results = append(results, EvaluateBinaryRevision(h, e))
+	results = append(results, checkIntegrationBlocks(ctx, c, e, h != nil)...)
 	home, err := os.UserHomeDir()
 	if err == nil {
 		results = append(results, EvaluateOperatorTokenMigration(h, home))

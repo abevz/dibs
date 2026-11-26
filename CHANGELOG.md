@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+## v0.2.0 — 2026-11-26
+
+### Upgrading from v0.1.0-rc.x
+
+Run `dibs doctor` to locate older managed blocks, then re-run `dibs init` in
+each registered checkout that needs it to update DIBS INTEGRATION v:2 to v:3.
+For existing databases, follow the [upgrade runbook](docs/specs/024-handoff-evidence/upgrade-runbook.md)
+when switching the live service to the new binaries.
+
+### Added
+
+- Lease holders can close, hand off, and release with `--expected-version
+  latest`. Close uses the current version inside the write transaction.
+  Numeric close conflicts report the current issue version and active lease
+  generation. MCP close and handoff also accept `"expected_version": "latest"`
+  (afc-188).
+- Register and verify durable issue evidence with SHA-256 and revision
+  binding. Issue reads, claims, and handoffs expose registered evidence. Close
+  and publish can require verified evidence, and cleanup prunes redundant
+  temporary sources under the documented retention rules (afc-186).
+
+### Fixed
+
+- The v:3 managed integration block and agent protocol explain when to delete
+  a manual lease token file, how to retry after a failed lifecycle command, and
+  how the owner can recover a lost token with audited operator commands
+  (afc-187).
+- Failed, cancelled, and incomplete `dibs issue run` calls retain the lease
+  until expiry and record private recovery context for an explicit handoff
+  (afc-185).
+- The upgrade and rollback runbook validates lease inventory, takes a
+  consistent SQLite backup, and holds database ownership during maintenance
+  (afc-185, afc-186).
+
 ## v0.1.0-rc.6 — 2026-10-29
 
 ### Added

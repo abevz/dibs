@@ -37,6 +37,23 @@ transcripts. If a manual lifecycle command is unavoidable, let the CLI read
 `DIBS_LEASE_TOKEN_FILE` to a private token file (mode `0600`); keep the token
 out of argv, logs, notes, and Git. Legacy `AF_*` variables are no longer read. Use canonical `DIBS_*` names.
 
+For a manual token file, delete it only after close, handoff, or release exits
+0. Use `cmd && rm`, never `cmd; rm` or a cleanup trap that runs regardless of
+exit status. On failure, keep the file and run `dibs issue get <id> --json` to
+reread the issue version and active lease generation. Reconcile the failure,
+verify that the generation still matches your claim, and retry within the
+lease window. If the token is lost, stop and report. Never re-claim by holder
+name to recover it.
+
+Only the owner runs these recovery commands. Agents can propose them after
+checking `--help`. `dibs-op` denotes the owner's operator-authenticated dibs
+invocation. Every operator command requires `--reason` for the audit trail.
+
+```sh
+dibs-op issue operator-release <id> --expected-version latest --reason "<why>"
+dibs-op issue operator-close <id> --resolution <done|cancelled> --expected-version latest --reason "<why>" [--note …]
+```
+
 ## Working from GitHub issues
 
 Run `dibs doctor` before using GitHub integration. The local CLI or
@@ -161,11 +178,9 @@ commands are for recovery or workloads that cannot fit that process boundary.
    the attempt ID is safe lifecycle correlation. An optional session ID must
    also be non-secret and never changes the acting identity.
 
-   Claiming increments the issue's version as a side effect. **Use the
-   `version` from this claim response — not one read earlier from `issue
-   get`** — as `--expected-version` on the close/handoff that ends this
-   attempt; a version read before claiming is stale the instant the claim
-   succeeds and will fail with `version_conflict` (exit code 2).
+   Claiming increments the issue version. A numeric close expects the version
+   from the claim or a fresh read after an intervening update, and reports the
+   current version and active generation on conflict.
 
    Default TTL is 3600s. Use `--ttl 900` for shorter leases.
 
@@ -219,38 +234,30 @@ commands are for recovery or workloads that cannot fit that process boundary.
 
 5. **Close or hand off**
    ```
-   dibs issue close <short_id> --resolution done --expected-version N --lease-generation <generation> \
+   dibs issue close <short_id> --resolution done --expected-version latest --lease-generation <generation> \
      --branch <branch> --pr-url <url> --commit-sha <sha> --note "what was done"
-   dibs issue handoff <short_id> --lease-generation <generation> \
+   dibs issue handoff <short_id> --expected-version latest --lease-generation <generation> \
      --note "HANDOFF: next agent starts here"
    ```
 
+   Close with `latest` reads current issue state in the daemon's write
+   transaction. Close, handoff, and release require the active token and
+   matching generation. Handoff and release use current state by default.
    Handoff requires a non-empty note beginning exactly `HANDOFF:` and commits
-   `note_added` before `issue_released` in one transaction. Use bare
-   `dibs issue release <short_id> --lease-generation <generation>` only for recovery or
-   compatibility. Ordinary close always requires the active matching lease token. For an
-   unclaimable epic or deliberate administrative resolution, use the explicit
-   local operator path instead; it requires a reason and never accepts a
-   dummy token:
-   ```
-   dibs issue operator-close <short_id> --resolution done --expected-version N \
-     --reason "all child work is complete"
-   dibs issue operator-reopen <short_id> --expected-version N \
-     --reason "new evidence requires follow-up"
-   ```
+   `note_added` before `issue_released` in one transaction. Use
+   `dibs issue release <short_id> --expected-version latest --lease-generation <generation>`
+   when releasing without a handoff. MCP callers can pass
+   `"expected_version": "latest"` to `close_issue` or `handoff_issue`.
 
-   If a claim's lease token was lost before its TTL naturally expired it —
-   a script crashed right after claiming and never persisted the token, or
-   never got as far as a heartbeat — the issue sits stuck `in_progress` and
-   invisible to `issue ready` until expiry. Recover it immediately instead
-   of waiting out the TTL:
+   For a lost token, report the issue to the owner. The owner can release it
+   back to `open` or resolve it with the recovery commands above. Owner
+   recovery uses operator credentials. Operator close also supports
+   unclaimable epics and administrative resolutions. To reopen terminal work,
+   the owner can run:
+
+   ```sh
+   dibs-op issue operator-reopen <short_id> --expected-version latest --reason "new evidence requires follow-up"
    ```
-   dibs issue operator-release <short_id> --expected-version N \
-     --reason "flaky-script crashed before persisting the lease token"
-   ```
-   This clears the lease and returns the issue to `open` without closing
-   it — unlike `operator-close` + `operator-reopen`, it never marks the
-   work done or cancelled. It only accepts an `in_progress` issue.
 
    To avoid needing this in the first place, prefer `dibs issue run` for
    any script that is just "do one thing, then close": it claims, execs
@@ -443,14 +450,13 @@ Commands with `--json` succeed or fail with typed exit codes so the caller can r
 
 ## Integration block migration (afc-176)
 
-`dibs init` writes `<!-- BEGIN DIBS INTEGRATION v:2 -->` and
-`<!-- END DIBS INTEGRATION -->`. It migrates legacy AF-COORDINATOR v:1
-blocks in place and reports `migrated` (also in JSON). `--dry-run` reports
-the same action without writing. Files containing both formats fail with
-both line ranges and remain unchanged. Legacy recognition stays for all
-v0.1.x releases; remove it only after a later explicit compatibility decision.
-After installing a release with this migration, operators run `dibs init`
-in each coordinated repository; the code change does not migrate other repos.
+`dibs init` writes `<!-- BEGIN DIBS INTEGRATION v:3 -->` and
+`<!-- END DIBS INTEGRATION -->`. It updates v:2 blocks in place and reports
+`updated`. It also migrates legacy AF-COORDINATOR v:1 blocks and reports
+`migrated`. `--dry-run` previews the action. Init rejects mixed, malformed,
+or duplicate markers before changing the file. Use `dibs doctor` to locate
+older blocks in local checkouts of registered repositories, and run
+`dibs init` in each affected checkout through its normal review flow.
 
 ## Failed runs and durable evidence (afc-185, afc-186)
 

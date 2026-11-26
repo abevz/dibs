@@ -7,17 +7,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/abevz/dibs/internal/integration"
 )
 
 //go:embed init-snippet.md
 var initSnippet string
 
 const (
-	beginMarker = "<!-- BEGIN DIBS INTEGRATION v:2 -->"
-	endMarker   = "<!-- END DIBS INTEGRATION -->"
-	// Recognize v:1 throughout v0.1.x; removal requires a later compatibility decision.
-	legacyBeginMarker = "<!-- BEGIN AF-COORDINATOR INTEGRATION v:1 -->"
-	legacyEndMarker   = "<!-- END AF-COORDINATOR INTEGRATION -->"
+	beginMarker = integration.BeginMarker
+	endMarker   = integration.EndMarker
+	// Keep recognizing older versions so worktrees can migrate in place.
+	legacyBeginMarker = integration.LegacyBeginMarker
+	legacyEndMarker   = integration.LegacyEndMarker
 )
 
 type initAction int
@@ -113,11 +115,11 @@ func applyBlock(path, block string, dryRun bool, flags map[string]string) (initA
 	}
 
 	content := string(data)
-	startIdx, endIdx, err := markerRange(content, beginMarker, endMarker)
+	startIdx, endIdx, err := markerRange(content, endMarker, beginMarker, integration.PreviousMarker)
 	if err != nil {
 		return 0, err
 	}
-	legacyStart, legacyEnd, err := markerRange(content, legacyBeginMarker, legacyEndMarker)
+	legacyStart, legacyEnd, err := markerRange(content, legacyEndMarker, legacyBeginMarker)
 	if err != nil {
 		return 0, err
 	}
@@ -166,14 +168,21 @@ func normalizeBlock(block string) string {
 	return strings.TrimSpace(block)
 }
 
-func markerRange(content, begin, end string) (int, int, error) {
-	starts, ends := strings.Count(content, begin), strings.Count(content, end)
+func markerRange(content, end string, begins ...string) (int, int, error) {
+	starts, ends := 0, strings.Count(content, end)
+	start := -1
+	for _, begin := range begins {
+		if count := strings.Count(content, begin); count != 0 {
+			starts += count
+			start = strings.Index(content, begin)
+		}
+	}
 	if starts == 0 && ends == 0 {
 		return -1, -1, nil
 	}
-	start, finish := strings.Index(content, begin), strings.Index(content, end)
+	finish := strings.Index(content, end)
 	if starts != 1 || ends != 1 || finish < start {
-		return -1, -1, fmt.Errorf("malformed or duplicate integration markers %q / %q; file left unchanged", begin, end)
+		return -1, -1, fmt.Errorf("malformed or duplicate integration markers %q / %q; file left unchanged", begins, end)
 	}
 	return start, finish, nil
 }

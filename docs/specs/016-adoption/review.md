@@ -508,3 +508,34 @@ changes. Full DIBS tests/build, release installer and post-merge fixtures pass.
 Evidence is in /tmp/afc-142-*.log. Independent final review is recorded in the
 handoff. No live daemon restart or database migration was performed. Local
 legacy symlink/unit retirement waits for source review and consumer deployment.
+
+## afc-187 and afc-188 — v0.2.0 lease lifecycle and integration guidance
+
+The implementation follows option (a) in [design.md](design.md). Latest close
+uses the version read in the lease-fenced write transaction. Handoff and
+release already operate on current state under the lease fence. The v:3
+block documents manual token-file cleanup and audited owner recovery.
+Init upgrades v:2 in place and doctor locates older blocks.
+
+Local verification passed formatting, `git diff --check`, `go build ./...`,
+`go test ./...`, `make vet`, `make lint`, and the release publication and
+annotated-tag fixtures. Store and HTTP tests cover a metadata revision before
+close, numeric version and generation diagnostics, token and generation
+rejection, and exact replay. MCP tests exercised latest close and handoff
+against a scratch daemon. Scratch-installed binaries verified lifecycle help,
+all three latest commands, token-file retention after a conflict, owner
+release and close with a reason, and the v:2 doctor warning and init upgrade.
+
+Independent review, GitHub CI, publication, published-binary verification
+and Homebrew sync are delivery checks tracked in the pull request and GitHub
+Actions. Local verification used Linux amd64 and scratch coordinator state.
+The live daemon switch and per-repository block rollouts remain operator work.
+
+Follow-ups through each repository's normal review flow:
+
+- Update v:2 blocks in `grammar-quest` and `devops-quests` (`dq`).
+- Migrate legacy v:1 blocks in `aion-forge`, `budget-tracker`,
+  `englishdrills`, `hybrid-cloud-optimizer`, `job-scout-bot`, `ops`,
+  `platform-iac`, `utils`, and `vault-bridge`.
+- Check `platform-iac-gitops` (`piac`), which afc-187 cited. The inspected
+  local checkout files did not contain a managed marker.

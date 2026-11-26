@@ -20,10 +20,10 @@ binaries, a temporary daemon, and temporary state; re-record it with
 ## Start in four commands
 
 From a Git repository not yet registered with dibs on Linux or macOS, install
-the versioned preview, initialize dibs, create a task, and claim it:
+the versioned release, initialize dibs, create a task, and claim it:
 
 ```sh
-curl -fsSL https://github.com/abevz/dibs/releases/download/v0.1.0-rc.6/install.sh | sh /dev/stdin
+curl -fsSL https://github.com/abevz/dibs/releases/download/v0.2.0/install.sh | sh /dev/stdin
 ~/.local/bin/dibs init
 ~/.local/bin/dibs issue create --project myapp --scope-kind project --title "First task"
 ~/.local/bin/dibs issue claim myapp-1 --holder "$USER"
@@ -42,14 +42,13 @@ and macOS architectures.
 If you prefer to inspect the script before running it:
 
 ```sh
-curl -fsSL -o install.sh https://github.com/abevz/dibs/releases/download/v0.1.0-rc.6/install.sh
+curl -fsSL -o install.sh https://github.com/abevz/dibs/releases/download/v0.2.0/install.sh
 less install.sh
 sh install.sh
 ```
 
 See [installation](docs/install.md) for PATH setup, Homebrew, version selection,
-repeat installation, and removal. The preview is a prerelease, so GitHub's
-`latest` release URL does not select it.
+repeat installation, and removal.
 
 ## How agents use it
 
@@ -69,7 +68,7 @@ wrapper use its HTTP API over a Unix socket. Specs and source code stay in Git;
 dibs stores the live execution state. It runs on one machine and does not sync
 leases across machines.
 
-The preview provides `dibs watch` with a project summary (ready, blocked,
+The release provides `dibs watch` with a project summary (ready, blocked,
 in progress, deferred, and last issue event); dormant projects sort last.
 Use ↑/↓ and Enter to open a project, then an issue with its description,
 dependencies and last five notes. Esc returns; q quits and r refreshes.
@@ -128,7 +127,7 @@ the agent, and the closing note and branch are posted publicly. See the
 
 ## Current scope
 
-The published preview supports local issue creation, dependencies, ready
+The published release supports local issue creation, dependencies, ready
 queries, claims, handoffs, audit events, live watch, and one-shot Claude Code
 and Codex hooks. From `v0.1.0-rc.4` it also imports single GitHub issues and
 publishes results back to them. Tracking source edits after import, label and

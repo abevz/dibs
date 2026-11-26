@@ -1509,8 +1509,6 @@ func closeIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 		return core.CloseIssueResult{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
 	}
 
-	nowTime := time.Now().UTC()
-	now := nowTime.Format(time.RFC3339)
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return core.CloseIssueResult{}, fmt.Errorf("begin tx: %w", err)
@@ -1524,9 +1522,24 @@ func closeIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 		return outcome, err
 	}
 
-	issue, err := getIssueForTerminalTransition(ctx, tx, issueID, req.ExpectedVersion)
+	nowTime := time.Now().UTC()
+	now := nowTime.Format(time.RFC3339)
+	issue, err := readTerminalIssue(ctx, tx, issueID)
 	if err != nil {
 		return core.CloseIssueResult{}, err
+	}
+	if req.ExpectedVersion != core.LatestIssueVersion && req.ExpectedVersion != issue.Version {
+		var generation int64
+		err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE((SELECT lease_generation FROM leases WHERE issue_id = ? AND expires_at > ?), 0)`,
+			issueID, now,
+		).Scan(&generation)
+		if err != nil {
+			return core.CloseIssueResult{}, fmt.Errorf("read current lease generation: %w", err)
+		}
+		return core.CloseIssueResult{}, core.NewAPIError(core.ErrConflict,
+			fmt.Sprintf("expected version %d, current version is %d, current lease generation is %d (0 means no active lease)",
+				req.ExpectedVersion, issue.Version, generation))
 	}
 	if isTerminalStatus(issue.Status) {
 		return core.CloseIssueResult{}, core.NewAPIError(core.ErrValidationFailed,
@@ -1896,6 +1909,18 @@ func validateOperatorRequest(expectedVersion int, actor, reason string) error {
 }
 
 func getIssueForTerminalTransition(ctx context.Context, tx *sql.Tx, issueID string, expectedVersion int) (core.Issue, error) {
+	issue, err := readTerminalIssue(ctx, tx, issueID)
+	if err != nil {
+		return core.Issue{}, err
+	}
+	if expectedVersion != issue.Version {
+		return core.Issue{}, core.NewAPIError(core.ErrConflict,
+			fmt.Sprintf("expected version %d, current version is %d", expectedVersion, issue.Version))
+	}
+	return issue, nil
+}
+
+func readTerminalIssue(ctx context.Context, tx *sql.Tx, issueID string) (core.Issue, error) {
 	var issue core.Issue
 	err := tx.QueryRowContext(ctx,
 		`SELECT id, status, external_key, version FROM issues WHERE id = ?`, issueID,
@@ -1905,10 +1930,6 @@ func getIssueForTerminalTransition(ctx context.Context, tx *sql.Tx, issueID stri
 	}
 	if err != nil {
 		return core.Issue{}, fmt.Errorf("select issue: %w", err)
-	}
-	if expectedVersion != issue.Version {
-		return core.Issue{}, core.NewAPIError(core.ErrConflict,
-			fmt.Sprintf("expected version %d, current version is %d", expectedVersion, issue.Version))
 	}
 	return issue, nil
 }

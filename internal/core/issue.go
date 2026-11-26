@@ -336,6 +336,10 @@ type UpdateIssueRequest struct {
 	OperationID        string `json:"operation_id,omitempty"`
 }
 
+// LatestIssueVersion selects the current issue version inside a lease-holder
+// close transaction. Operator and metadata mutations still require a version.
+const LatestIssueVersion = -1
+
 // CloseIssueRequest is the JSON body for POST /v1/issues/{issue_id}/close.
 type CloseIssueRequest struct {
 	RequireEvidence []string `json:"require_evidence,omitempty"`

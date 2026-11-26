@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/abevz/dibs/internal/config"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/abevz/dibs/internal/config"
+	"github.com/abevz/dibs/internal/integration"
 )
 
 func TestInitSnippetPointsToCanonicalProtocolAndHandoff(t *testing.T) {
@@ -20,6 +22,49 @@ func TestInitSnippetPointsToCanonicalProtocolAndHandoff(t *testing.T) {
 	}
 	if !strings.Contains(block, "handoff/close") {
 		t.Fatalf("init block does not describe the handoff/close session path: %q", block)
+	}
+}
+
+func TestInitSnippetManualTokenLifecycle(t *testing.T) {
+	block := formatBlock(initSnippet)
+	for _, want := range []string{
+		"<!-- BEGIN DIBS INTEGRATION v:3 -->",
+		"only after close, handoff, or release exits 0",
+		"`cmd && rm`, never `cmd; rm` or an always-on cleanup trap",
+		"On failure keep the file, reread the version and lease generation",
+		"check that the generation still matches your claim",
+		"fix the cause, and retry within the lease window",
+		"If the token is lost, stop and report. Never re-claim by holder name.",
+		`dibs-op issue operator-release <id> --expected-version latest --reason "<why>"`,
+		`dibs-op issue operator-close <id> --resolution <done|cancelled> --expected-version latest --reason "<why>" [--note …]`,
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("generated block missing %q", want)
+		}
+	}
+}
+
+func TestInitUpdatesV2InPlace(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "AGENTS.md")
+	oldBlock := integration.PreviousMarker + "\nold content\n" + endMarker
+	block := formatBlock(initSnippet)
+	before := "# Repo\n" + oldBlock + "\nFooter\n"
+	if err := os.WriteFile(path, []byte(before), 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, dryRun := range []bool{true, false} {
+		action, err := applyBlock(path, block, dryRun, nil)
+		if err != nil || action != initUpdated {
+			t.Fatalf("dry-run %v: action = %s, err = %v", dryRun, action, err)
+		}
+		want := before
+		if !dryRun {
+			want = "# Repo\n" + block + "Footer\n"
+		}
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != want {
+			t.Fatalf("dry-run %v: file = %q, err = %v", dryRun, got, err)
+		}
 	}
 }
 
@@ -159,7 +204,7 @@ func TestIntegrationMigrationPreservesSurroundings(t *testing.T) {
 func TestIntegrationConflictsDoNotWrite(t *testing.T) {
 	block := formatBlock("new")
 	legacy := legacyBeginMarker + "\nold\n" + legacyEndMarker + "\n"
-	for _, before := range []string{block + legacy, legacy + block, beginMarker, endMarker + beginMarker, block + block, legacy + legacy} {
+	for _, before := range []string{block + legacy, legacy + block, beginMarker, endMarker + beginMarker, block + block, legacy + legacy, integration.PreviousMarker + "\n" + block} {
 		for _, dry := range []bool{false, true} {
 			p := filepath.Join(t.TempDir(), "AGENTS.md")
 			if err := os.WriteFile(p, []byte(before), 0644); err != nil {

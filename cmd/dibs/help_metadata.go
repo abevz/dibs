@@ -127,11 +127,15 @@ var commandFlagHelpText = map[string]map[string]flagHelp{
 	"artifact register": {
 		"--status": {"text", "Free-form document metadata; issue review evidence accepts PASS or FAIL only."},
 	},
+	"issue release": {
+		"--expected-version": {"latest", "Use current issue state (the default). Requires the active lease."},
+	},
 	"issue handoff": {
-		"--note": {"text", "Required HANDOFF: note for the next worker."},
+		"--expected-version": {"latest", "Use current issue state (the default). Requires the active lease."},
+		"--note":             {"text", "Required HANDOFF: note for the next worker."},
 	},
 	"issue close": {
-		"--expected-version": {"number", "Current issue version required to avoid overwriting another update."},
+		"--expected-version": {"number|latest", "Require a specific version, or use the current version inside the lease-fenced close."},
 	},
 	"issue import": {
 		"--project":    {"key", "Target project; omitted uses the registered current Git repository."},
