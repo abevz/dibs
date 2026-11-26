@@ -444,6 +444,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			LeaseToken      string `json:"lease_token"`
 			LeaseGeneration int64  `json:"lease_generation"`
 			Note            string `json:"note"`
+			ExpectedVersion string `json:"expected_version"`
 			InvocationMode  string `json:"invocation_mode"`
 			OperationID     string `json:"operation_id"`
 		}
@@ -452,6 +453,9 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		}
 		if args.IssueID == "" || args.LeaseToken == "" {
 			return nil, fmt.Errorf("issue_id and lease_token are required")
+		}
+		if args.ExpectedVersion != "" && args.ExpectedVersion != "latest" {
+			return nil, fmt.Errorf("expected_version only accepts latest for handoff_issue")
 		}
 		if args.LeaseGeneration <= 0 {
 			return nil, fmt.Errorf("lease_generation is required")
@@ -590,25 +594,32 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		return operationOutcome(id, map[string]any{"issue": issue}, err)
 	case "close_issue":
 		var args struct {
-			IssueID         string `json:"issue_id"`
-			Resolution      string `json:"resolution"`
-			Branch          string `json:"branch"`
-			PRURL           string `json:"pr_url"`
-			CommitSHA       string `json:"commit_sha"`
-			ExpectedVersion int    `json:"expected_version"`
-			LeaseToken      string `json:"lease_token"`
-			LeaseGeneration int64  `json:"lease_generation"`
-			Actor           string `json:"actor"`
-			Note            string `json:"note"`
-			InvocationMode  string `json:"invocation_mode"`
-			OperationID     string `json:"operation_id"`
-			Publish         bool   `json:"publish"`
+			IssueID         string          `json:"issue_id"`
+			Resolution      string          `json:"resolution"`
+			Branch          string          `json:"branch"`
+			PRURL           string          `json:"pr_url"`
+			CommitSHA       string          `json:"commit_sha"`
+			ExpectedVersion json.RawMessage `json:"expected_version"`
+			LeaseToken      string          `json:"lease_token"`
+			LeaseGeneration int64           `json:"lease_generation"`
+			Actor           string          `json:"actor"`
+			Note            string          `json:"note"`
+			InvocationMode  string          `json:"invocation_mode"`
+			OperationID     string          `json:"operation_id"`
+			Publish         bool            `json:"publish"`
 		}
 		if err := unmarshalArgs(params.Arguments, &args); err != nil {
 			return nil, err
 		}
-		if args.IssueID == "" || args.Resolution == "" || args.ExpectedVersion <= 0 || args.LeaseToken == "" {
+		if args.IssueID == "" || args.Resolution == "" || len(args.ExpectedVersion) == 0 || args.LeaseToken == "" {
 			return nil, fmt.Errorf("issue_id, resolution, expected_version, and lease_token are required")
+		}
+		var expectedVersion int
+		var selector string
+		if json.Unmarshal(args.ExpectedVersion, &selector) == nil && selector == "latest" {
+			expectedVersion = core.LatestIssueVersion
+		} else if err := json.Unmarshal(args.ExpectedVersion, &expectedVersion); err != nil || expectedVersion <= 0 {
+			return nil, fmt.Errorf("expected_version must be a positive integer or latest")
 		}
 		if args.LeaseGeneration <= 0 {
 			return nil, fmt.Errorf("lease_generation is required")
@@ -635,7 +646,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			Branch:          args.Branch,
 			PRURL:           args.PRURL,
 			CommitSHA:       args.CommitSHA,
-			ExpectedVersion: args.ExpectedVersion,
+			ExpectedVersion: expectedVersion,
 			LeaseToken:      args.LeaseToken,
 			LeaseGeneration: args.LeaseGeneration,
 			Actor:           actor,
@@ -823,6 +834,7 @@ func (s *Server) tools() []map[string]any {
 			{name: "lease_token", fieldType: "string", description: "Active lease token.", required: true},
 			{name: "lease_generation", fieldType: "integer", description: "Fencing generation from the claim that created the lease.", required: true},
 			{name: "note", fieldType: "string", description: "Non-empty note beginning with HANDOFF:.", required: true},
+			{name: "expected_version", fieldType: "string", description: "Optional latest selector; handoff uses current issue state.", enum: []string{"latest"}},
 			invocationModeField(),
 			operationIDField(),
 		})),
@@ -869,7 +881,8 @@ func (s *Server) tools() []map[string]any {
 		toolDefinition("close_issue", "Close an issue through the daemon API with structured resolution metadata.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
 			{name: "resolution", fieldType: "string", description: "Resolution: done or cancelled.", required: true},
-			{name: "expected_version", fieldType: "integer", description: "Current issue version.", required: true},
+			{name: "expected_version", description: "Positive issue version or latest for a lease-fenced close.", required: true,
+				anyOf: []map[string]any{{"type": "integer", "minimum": 1}, {"type": "string", "enum": []string{"latest"}}}},
 			{name: "lease_token", fieldType: "string", description: "Active lease token.", required: true},
 			{name: "lease_generation", fieldType: "integer", description: "Fencing generation from the claim that created the lease.", required: true},
 			{name: "branch", fieldType: "string", description: "Optional branch name to record in close metadata."},
@@ -1045,6 +1058,7 @@ type schemaField struct {
 	// itemType is set for fieldType "array" to describe its element type.
 	itemType string
 	enum     []string
+	anyOf    []map[string]any
 }
 
 func invocationModeField() schemaField {
@@ -1067,9 +1081,11 @@ func objectSchema(fields []schemaField) map[string]any {
 	props := map[string]any{}
 	required := make([]string, 0)
 	for _, field := range fields {
-		prop := map[string]any{
-			"type":        field.fieldType,
-			"description": field.description,
+		prop := map[string]any{"description": field.description}
+		if len(field.anyOf) > 0 {
+			prop["anyOf"] = field.anyOf
+		} else {
+			prop["type"] = field.fieldType
 		}
 		if field.fieldType == "array" && field.itemType != "" {
 			prop["items"] = map[string]any{"type": field.itemType}

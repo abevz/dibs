@@ -97,7 +97,7 @@ func TestLifecycleToolsFenceGenerationAgainstDaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handoff := map[string]any{"issue_id": issue.ShortID, "lease_token": claim.LeaseToken, "note": "HANDOFF: test"}
+	handoff := map[string]any{"issue_id": issue.ShortID, "lease_token": claim.LeaseToken, "note": "HANDOFF: test", "expected_version": "latest"}
 	call("handoff_issue", handoff, true) // Zero generation must fail locally.
 	handoff["lease_generation"] = claim.LeaseGeneration + 1
 	call("handoff_issue", handoff, true) // Stale generation must fail at the daemon/store seam.
@@ -112,7 +112,7 @@ func TestLifecycleToolsFenceGenerationAgainstDaemon(t *testing.T) {
 		t.Fatal(err)
 	}
 	closeArgs := map[string]any{
-		"issue_id": issue.ShortID, "resolution": "done", "expected_version": claim.Version,
+		"issue_id": issue.ShortID, "resolution": "done", "expected_version": "latest",
 		"lease_token": claim.LeaseToken, "note": "done",
 	}
 	call("close_issue", closeArgs, true)

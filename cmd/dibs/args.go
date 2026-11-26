@@ -47,8 +47,8 @@ var commandRoutes = map[string]argRoute{
 	"issue get":         {"--full?", 1}, "issue list": {"--project --status --type --repo --worktree --assignee --external-key --tag --limit --offset --columns", 0},
 	"issue ready":     {"--project --repo --tag --columns", 0},
 	"issue claim":     {"--holder --actor --ttl --session-id --invocation-mode --operation-id --retry-last?", 1},
-	"issue heartbeat": {"--lease-token --lease-generation --ttl --operation-id", 1}, "issue release": {"--lease-token --lease-generation --operation-id", 1},
-	"issue handoff":          {"--lease-token --lease-generation --note --invocation-mode --operation-id", 1},
+	"issue heartbeat": {"--lease-token --lease-generation --ttl --operation-id", 1}, "issue release": {"--lease-token --lease-generation --expected-version --operation-id", 1},
+	"issue handoff":          {"--lease-token --lease-generation --expected-version --note --invocation-mode --operation-id", 1},
 	"issue run":              {"--actor --ttl --close-resolution --branch --pr-url --commit-sha --note --invocation-mode --require-complete? --publish?", 1},
 	"issue edit":             {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release? --operation-id", 1},
 	"issue update":           {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release? --operation-id", 1},
@@ -296,8 +296,13 @@ func validateFlagValue(command, flag, value string) error {
 			return argumentError(err.Error())
 		}
 	case "--priority", "--ttl", "--lease-generation", "--limit", "--offset", "--expected-version":
-		if flag == "--expected-version" && value == "latest" && command != "issue close" {
-			return nil
+		if flag == "--expected-version" {
+			if value == "latest" {
+				return nil
+			}
+			if command == "issue release" || command == "issue handoff" {
+				return argumentError("--expected-version only accepts latest for " + command)
+			}
 		}
 		n, err := strconv.Atoi(value)
 		if err != nil || (flag != "--priority" && flag != "--offset" && flag != "--limit" && n <= 0) ||

@@ -47,3 +47,10 @@ implementation review.
 - [x] afc-142 Migrate known consumers; preserve existing DB identity; test clean
   install, lifecycle variables, canonical-only config and consumer checks.
 - [x] afc-142 Record breaking change and retire the disabled legacy unit/path.
+
+## v0.2.0 lease lifecycle and integration guidance
+
+- [x] `afc-188` Implement and verify transaction-scoped latest close, the
+  lease-fenced handoff and release syntax, CLI help, MCP, and retry diagnostics.
+- [x] `afc-187` Implement and verify token-file handling guidance, v:3 init
+  and doctor, owner recovery commands, and the release upgrade notice.

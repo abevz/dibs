@@ -333,8 +333,12 @@ This is the compact route-to-implementation inventory for the current daemon.
   `expected_version`, plus `lease_token` if the issue is claimed. It cannot
   close or reopen an issue.
 - `POST /v1/issues/{issue_id}/close` — agent close; requires an active,
-  matching `lease_token` and `expected_version`. Body: `resolution` (`done`
-  | `cancelled`), optional `branch`, `pr_url`, `commit_sha`, and optional
+  matching `lease_token` and `lease_generation`. A positive
+  `expected_version` requires an exact match and conflicts report the current
+  version and active generation (0 when no lease is active). Set
+  `expected_version` to `-1` for the current version inside the close
+  transaction (CLI and MCP `latest`). Body: `resolution` (`done` |
+  `cancelled`), optional `branch`, `pr_url`, `commit_sha`, and optional
   `note` (appends note and closes atomically). Repeated, stale, expired, and
   unleased closes fail. The response echoes the structured close metadata and
   `closed_at`; when the issue already carries an `external_key`, the close
@@ -367,11 +371,8 @@ This is the compact route-to-implementation inventory for the current daemon.
   optional non-secret `session_id`; returns `lease_token`, `expires_at`,
   daemon-generated `attempt_id`, issue-local `lease_generation`, and `version`.
   Every fresh claim increments `lease_generation`; heartbeat does not.
-  Claiming increments the
-  issue's version as a side effect, so this returned `version` — not one
-  read earlier via `GET /v1/issues/{issue_id}` — is what a caller must use
-  as `expected_version` on the close/handoff that ends this attempt. The
-  attempt ID correlates lifecycle events; lifecycle events and issue reads
+  Claiming increments the issue's version. Use the returned version or a
+  subsequent read for numeric close. The attempt ID correlates lifecycle events; lifecycle events and issue reads
   expose the non-secret generation, while the lease token remains secret and
   never appears in events or issue reads. Claim fails `lease_held` if any
   unexpired lease exists, including when the caller repeats the same holder

@@ -127,3 +127,19 @@ Upgrade cleanup may remove only symlinks owned by the old installer, never
 unrelated executables. Existing database/socket path discovery stays intact.
 The disabled old service is retired as an explicit operator action; no live
 service restart or data migration is implied by this implementation.
+
+## Lease lifecycle and integration guidance for v0.2.0
+
+- **R-187** Preserve manual lease token files until close, handoff, or release
+  exits successfully. On failure, keep the file, reread the current version and
+  generation, correct the cause, and retry within the lease window. Loss of the
+  token requires stopping and reporting. The owner-side recovery examples must
+  include `--expected-version latest` and an audit `--reason`.
+- **R-187.1** Generate integration block v:3, detect older managed blocks in
+  doctor, and let init replace them in place. Record per-repository follow-ups.
+- **R-188** Accept `--expected-version latest` on lease-holder close, handoff,
+  and release. The active token and generation remain mandatory. Expose the
+  current issue version and lease generation on a lifecycle version conflict.
+  Support the equivalent value for MCP close and handoff.
+- **R-188.1** Keep numeric close and existing release/handoff callers working.
+  Verify holder success, token and generation rejection, and numeric conflicts.

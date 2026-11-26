@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/abevz/dibs/internal/core"
@@ -100,5 +102,62 @@ func TestLifecycleOperationHTTPReplayAndConflict(t *testing.T) {
 				t.Fatalf("mismatch error = %+v, decode = %v", envelope, err)
 			}
 		})
+	}
+}
+
+func TestCloseLatestHTTPRequiresLeaseAndReportsConflict(t *testing.T) {
+	server, db := newTestServer(t)
+	ctx := t.Context()
+	if _, err := sqlite.CreateProject(ctx, db, "latest", "Latest", ""); err != nil {
+		t.Fatal(err)
+	}
+	issue, err := sqlite.CreateIssue(ctx, db, "latest", core.CreateIssueRequest{ScopeKind: "project", Title: "Close"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := sqlite.ClaimIssue(ctx, db, issue.ID, "worker", 900)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		version int
+		token   string
+		status  int
+		code    string
+	}{
+		{core.LatestIssueVersion, "other", http.StatusGone, core.ErrLeaseExpired},
+		{issue.Version, claim.LeaseToken, http.StatusConflict, core.ErrConflict},
+		{core.LatestIssueVersion, claim.LeaseToken, http.StatusOK, ""},
+	} {
+		data, err := json.Marshal(core.CloseIssueRequest{
+			Resolution: "done", Actor: "worker", ExpectedVersion: tc.version,
+			LeaseToken: tc.token, LeaseGeneration: claim.LeaseGeneration,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.Post(server.URL+"/v1/issues/"+issue.ShortID+"/close", "application/json", bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil || resp.StatusCode != tc.status {
+			t.Fatalf("status = %d, want %d, body = %s, err = %v", resp.StatusCode, tc.status, body, err)
+		}
+		if tc.code != "" {
+			var envelope core.APIErrorResponse
+			if err := json.Unmarshal(body, &envelope); err != nil || envelope.Error.Code != tc.code {
+				t.Fatalf("close error = %s, want %s, decode = %v", body, tc.code, err)
+			}
+			if tc.code == core.ErrConflict {
+				for _, want := range []string{fmt.Sprintf("current version is %d", claim.Version),
+					fmt.Sprintf("current lease generation is %d", claim.LeaseGeneration)} {
+					if !strings.Contains(envelope.Error.Message, want) {
+						t.Errorf("conflict message = %q, missing %q", envelope.Error.Message, want)
+					}
+				}
+			}
+		}
 	}
 }

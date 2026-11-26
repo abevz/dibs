@@ -184,3 +184,27 @@ scripts use canonical variables but retain the existing backup unit names.
 Known consumer source changes land in isolated sibling worktrees and receive
 independent review and focused validation. Existing owner-only symlink/unit
 cleanup follows identity and inactive-state checks; no service switch.
+
+## Lease lifecycle and integration guidance for v0.2.0
+
+**Option (a) for afc-188.** Close reads current status, external key and
+version inside its SQLite write transaction, then applies the transition to
+that version. The token, generation and expiry predicate fences the terminal
+write. A prior metadata update can coexist with a close because close updates
+only terminal fields. The immediate transaction serializes the read and
+write with other mutations, so there is no client-side fetch-to-close race.
+Numeric close retains compare-and-set behavior. A conflict reports the current
+version and active lease generation from the transaction snapshot.
+
+The CLI and MCP map close's literal `latest` to a reserved expected-version
+value in the daemon request. Idempotency fingerprints retain that selector,
+so replay can resolve the original outcome after release. Handoff and release
+already transition current state in a single lease-fenced transaction. Their
+optional selector accepts `latest` and uses the existing request and replay
+semantics. MCP handoff accepts that same optional selector.
+
+The v:3 snippet is still embedded from one source. Init recognizes v:2 and
+legacy v:1, rejects mixed or malformed markers before writing, and replaces
+only the managed block. Doctor reads local registered checkout paths and
+reports stale markers with the init command to update them. Repository owners
+apply changes through their own review flow.

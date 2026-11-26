@@ -733,7 +733,7 @@ func runIssueClaim(ctx context.Context, c *client.Client, args []string) error {
 	fmt.Printf("Attempt ID:  %s\n", resp.AttemptID)
 	fmt.Printf("Generation:  %d\n", resp.LeaseGeneration)
 	fmt.Printf("Expires At:  %s\n", resp.ExpiresAt)
-	fmt.Printf("Version:     %d  (use this for --expected-version on close/handoff, not a value read from `issue get`)\n", resp.Version)
+	fmt.Printf("Version:     %d  (use this for numeric issue close, or choose latest)\n", resp.Version)
 	return nil
 }
 
@@ -830,7 +830,7 @@ func runIssueHeartbeat(ctx context.Context, c *client.Client, args []string) err
 	return nil
 }
 
-const issueReleaseUsage = "Usage: dibs issue release <issue-id> --lease-generation <generation> [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint
+const issueReleaseUsage = "Usage: dibs issue release <issue-id> --lease-generation <generation> [--expected-version latest] [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint
 
 func runIssueRelease(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -858,6 +858,11 @@ func runIssueRelease(ctx context.Context, c *client.Client, args []string) error
 				fmt.Sscanf(args[i+1], "%d", &leaseGeneration)
 				i++
 			}
+		case "--expected-version":
+			if i+1 >= len(args) || args[i+1] != "latest" {
+				return usageErr(issueReleaseUsage, "--expected-version only accepts latest")
+			}
+			i++
 		case "--operation-id":
 			if i+1 < len(args) {
 				operationID = args[i+1]
@@ -888,7 +893,7 @@ func runIssueRelease(ctx context.Context, c *client.Client, args []string) error
 	return nil
 }
 
-const issueHandoffUsage = "Usage: dibs issue handoff <issue-id> --lease-generation <generation> --note \"HANDOFF: next steps\" [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint
+const issueHandoffUsage = "Usage: dibs issue handoff <issue-id> --lease-generation <generation> --note \"HANDOFF: next steps\" [--invocation-mode interactive|scheduled|unknown] [--expected-version latest] [--operation-id <id>] [--lease-token <token>]\n" + lifecycleHint
 
 func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -927,6 +932,11 @@ func runIssueHandoff(ctx context.Context, c *client.Client, args []string) error
 				invocationMode = args[i+1]
 				i++
 			}
+		case "--expected-version":
+			if i+1 >= len(args) || args[i+1] != "latest" {
+				return usageErr(issueHandoffUsage, "--expected-version only accepts latest")
+			}
+			i++
 		case "--operation-id":
 			if i+1 < len(args) {
 				operationID = args[i+1]
@@ -1103,7 +1113,7 @@ func runIssueUpdate(ctx context.Context, c *client.Client, args []string) error 
 	return nil
 }
 
-const issueCloseUsage = "Usage: dibs issue close <issue-id> --resolution done|cancelled --expected-version N --lease-generation <generation> [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note \"what was done\"] [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>] [--publish] [--lease-token <token>]\n" + lifecycleHint
+const issueCloseUsage = "Usage: dibs issue close <issue-id> --resolution done|cancelled --expected-version N|latest --lease-generation <generation> [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note \"what was done\"] [--invocation-mode interactive|scheduled|unknown] [--operation-id <id>] [--publish] [--lease-token <token>]\n" + lifecycleHint
 
 func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 	if hasHelpFlag(args) {
@@ -1117,7 +1127,6 @@ func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 	issueID := args[0]
 	var req core.CloseIssueRequest
 	publish := false
-	req.ExpectedVersion = -1
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -1155,7 +1164,11 @@ func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 			}
 		case "--expected-version":
 			if i+1 < len(args) {
-				fmt.Sscanf(args[i+1], "%d", &req.ExpectedVersion)
+				if args[i+1] == "latest" {
+					req.ExpectedVersion = core.LatestIssueVersion
+				} else if version, err := strconv.Atoi(args[i+1]); err == nil && version > 0 {
+					req.ExpectedVersion = version
+				}
 				i++
 			}
 		case "--lease-token":
@@ -1189,8 +1202,8 @@ func runIssueClose(ctx context.Context, c *client.Client, args []string) error {
 	if req.Resolution == "" {
 		return usageErr(issueCloseUsage, "--resolution is required (done or cancelled)")
 	}
-	if req.ExpectedVersion < 0 {
-		return usageErr(issueCloseUsage, "--expected-version is required (use the Version from your most recent `issue claim` response)")
+	if req.ExpectedVersion == 0 {
+		return usageErr(issueCloseUsage, "--expected-version requires a positive version or latest")
 	}
 	if req.LeaseToken == "" {
 		var tokenErr error
