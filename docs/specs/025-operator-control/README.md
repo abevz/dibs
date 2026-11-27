@@ -1,9 +1,9 @@
 # Operator control for running agents
 
 Scope for afc-189 is an operator-only pause, stop, and resume for running
-agents. Phase 1 proposes the contract in [requirements](requirements.md),
-[design](design.md), and [tasks](tasks.md). [Review](review.md) records the
-approval gate and validation limits.
+agents. [Requirements](requirements.md), [design](design.md), and
+[tasks](tasks.md) record the approved contract and the owner decisions.
+[Review](review.md) records validation and limits. The
+[operator guide](../../operator-control.md) covers enrollment and the hook.
 
-The owner must approve the packet before implementation and owns the merge
-decision. The coordinator issue stays open at handoff.
+The coordinator issue stays open at handoff and the owner owns the merge.

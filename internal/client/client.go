@@ -384,13 +384,14 @@ func (c *Client) HeartbeatLease(ctx context.Context, issueID, leaseToken string,
 }
 
 func (c *Client) HeartbeatLeaseWithOperation(ctx context.Context, issueID string, body core.HeartbeatRequest) (string, error) {
-	var result struct {
-		ExpiresAt string `json:"expires_at"`
-	}
-	if err := c.doJSON(ctx, http.MethodPost, "/v1/issues/"+issueID+"/heartbeat", body, &result); err != nil {
-		return "", err
-	}
-	return result.ExpiresAt, nil
+	result, err := c.HeartbeatLeaseStatus(ctx, issueID, body)
+	return result.ExpiresAt, err
+}
+
+func (c *Client) HeartbeatLeaseStatus(ctx context.Context, issueID string, body core.HeartbeatRequest) (core.HeartbeatResponse, error) {
+	var result core.HeartbeatResponse
+	err := c.doJSON(ctx, http.MethodPost, "/v1/issues/"+issueID+"/heartbeat", body, &result)
+	return result, err
 }
 
 // ReleaseLease sends a POST /v1/issues/{issueID}/release request with the
@@ -699,7 +700,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, targ
 		if decodeErr := json.NewDecoder(resp.Body).Decode(&errResp); decodeErr == nil && errResp.Error.Code != "" {
 			return &ClientError{Code: errResp.Error.Code, Message: errResp.Error.Message, Details: errResp.Error.Details}
 		}
-		return fmt.Errorf("unexpected status: %s", resp.Status)
+		return &httpStatusError{code: resp.StatusCode, status: resp.Status}
 	}
 
 	if target != nil {

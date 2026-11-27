@@ -71,6 +71,7 @@ func registerRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.Logger) {
 	mux.HandleFunc("GET /v1/issues/ready", handleListReadyIssues(st, logger))
 	mux.HandleFunc("GET /v1/issues/{issue_id}", handleGetIssue(st, logger))
 	mux.HandleFunc("POST /v1/issues/{issue_id}/claim", handleClaimIssue(st, logger))
+	registerControlRoutes(mux, st, logger)
 	mux.HandleFunc("POST /v1/issues/{issue_id}/heartbeat", handleHeartbeatLease(st, logger))
 	mux.HandleFunc("POST /v1/issues/{issue_id}/release", handleReleaseLease(st, logger))
 	mux.HandleFunc("POST /v1/issues/{issue_id}/handoff", handleHandoffLease(st, logger))

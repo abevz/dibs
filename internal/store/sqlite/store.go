@@ -139,7 +139,12 @@ func (s *Store) HeartbeatLease(ctx context.Context, issueID, leaseToken string, 
 }
 
 func (s *Store) HeartbeatLeaseWithOperation(ctx context.Context, issueID string, req core.HeartbeatRequest, now time.Time) (string, error) {
-	out, err := HeartbeatLeaseWithOperation(ctx, s.db, issueID, req, now)
+	out, err := s.HeartbeatLeaseStatus(ctx, issueID, req, now)
+	return out.ExpiresAt, err
+}
+
+func (s *Store) HeartbeatLeaseStatus(ctx context.Context, issueID string, req core.HeartbeatRequest, now time.Time) (core.HeartbeatResponse, error) {
+	out, err := HeartbeatLeaseStatus(ctx, s.db, issueID, req, now)
 	s.recordStaleRejection(issueID, "heartbeat", "", "", req.LeaseGeneration, err)
 	return out, err
 }

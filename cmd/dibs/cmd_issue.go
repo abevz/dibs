@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/abevz/dibs/internal/client"
 	"github.com/abevz/dibs/internal/config"
@@ -818,15 +819,34 @@ func runIssueHeartbeat(ctx context.Context, c *client.Client, args []string) err
 		return usageErr(issueHeartbeatUsage, "--lease-generation is required")
 	}
 
-	expiresAt, err := c.HeartbeatLeaseWithOperation(ctx, issueID, core.HeartbeatRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, TTLSeconds: ttl, OperationID: operationID})
+	result, err := c.HeartbeatLeaseStatus(ctx, issueID, core.HeartbeatRequest{LeaseToken: leaseToken, LeaseGeneration: leaseGeneration, TTLSeconds: ttl, OperationID: operationID})
 	if err != nil {
 		fail(err)
 	}
+	// An enrolled, ID-less manual heartbeat is necessarily fresh. An explicit
+	// operation ID may be a historical replay, so leave the live cache alone.
+	if operationID == "" && result.HeartbeatCount != nil {
+		gate, err := localControlGate(c)
+		if err != nil {
+			return err
+		}
+		expiry, err := time.Parse(time.RFC3339, result.ExpiresAt)
+		if err != nil {
+			return fmt.Errorf("heartbeat returned an invalid lease deadline")
+		}
+		scope := core.ControlStatusRequest{IssueID: issueID, LeaseToken: leaseToken, LeaseGeneration: leaseGeneration}
+		if err := gate.Heartbeat(ctx, scope, result, expiry); err != nil {
+			return fmt.Errorf("heartbeat committed but could not persist control state: %w", err)
+		}
+	}
 	if jsonOutput {
-		json.NewEncoder(os.Stdout).Encode(map[string]string{"expires_at": expiresAt})
+		json.NewEncoder(os.Stdout).Encode(result)
 		return nil
 	}
-	fmt.Printf("Expires At: %s\n", expiresAt)
+	fmt.Printf("Expires At: %s\n", result.ExpiresAt)
+	if reason := core.ControlReason(result.Reason); result.Ref != nil && reason != "" && core.ControlSeverity(result.Control) > 0 {
+		fmt.Printf("Control: %s (%s)\n", result.Control, reason)
+	}
 	return nil
 }
 

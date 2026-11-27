@@ -14,9 +14,10 @@ import (
 
 	"github.com/abevz/dibs/internal/client"
 	"github.com/abevz/dibs/internal/core"
+	"github.com/abevz/dibs/internal/operatorcontrol"
 )
 
-const issueRunUsage = "Usage: dibs issue run <issue-id> [--actor <name>] [--ttl <seconds>] [--require-complete] [--close-resolution done|cancelled] [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note <text>] [--invocation-mode interactive|scheduled|unknown] [--publish] -- <command> [args...]\n" + lifecycleHint +
+const issueRunUsage = "Usage: dibs issue run <issue-id> [--actor <name>] [--ttl <seconds>] [--require-complete] [--operator-control] [--close-resolution done|cancelled] [--branch <name>] [--pr-url <url>] [--commit-sha <sha>] [--note <text>] [--invocation-mode interactive|scheduled|unknown] [--publish] -- <command> [args...]\n" + lifecycleHint +
 	"\nOwns claim -> heartbeat -> close/handoff around a single subprocess; the child receives the lease token in its environment, never in argv. On exit 0, closes with --close-resolution (default done). On any other exit, Ctrl-C, or missing explicit completion, records recovery context and retains the lease until its TTL; deliberate handoff remains an explicit action. On confirmed lease ownership loss (heartbeat rejected with lease_expired, or the lease window closing without proof), the child is terminated and the CLI exits non-zero with lease_expired without sending a close request."
 
 // runIssueRun claims issueID, execs the given command with the lease
@@ -59,6 +60,7 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	invocationMode := ""
 	requireComplete := false
 	publish := false
+	controlEnabled := false
 
 	for i := 1; i < len(flagArgs); i++ {
 		switch flagArgs[i] {
@@ -104,6 +106,8 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 			}
 		case "--require-complete":
 			requireComplete = true
+		case "--operator-control":
+			controlEnabled = true
 		case "--publish":
 			publish = true
 		default:
@@ -144,6 +148,26 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		}
 	}
 
+	var gate operatorcontrol.Gate
+	var controlReq core.ControlStatusRequest
+	if controlEnabled {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		controlReq.WorktreePath, err = controlCheckoutRoot(ctx, cwd)
+		if err != nil {
+			return err
+		}
+		if controlReq.WorktreePath == "" {
+			return argumentError("--operator-control requires a registered Git checkout")
+		}
+		gate, err = localControlGate(c)
+		if err != nil {
+			return err
+		}
+	}
+
 	// session_id is advisory process metadata for watch, not an ownership key.
 	// The PID belongs to this supervisor, which maintains the lease heartbeat.
 	sessionID := ""
@@ -172,6 +196,39 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		return fmt.Errorf("issue run: invalid claim lease expiry: %w", err)
 	}
 
+	var observe func(context.Context, core.HeartbeatResponse, time.Time) error
+	if controlEnabled {
+		controlReq.IssueID = issueID
+		controlReq.LeaseToken = claim.LeaseToken
+		controlReq.LeaseGeneration = claim.LeaseGeneration
+		status, err := enrollControl(ctx, c, gate, controlReq)
+		if err != nil {
+			releaseErr := c.ReleaseLease(context.Background(), issueID, claim.LeaseToken, claim.LeaseGeneration)
+			if releaseErr != nil {
+				path, saveErr := saveRunRecovery(issueID, claim)
+				if saveErr == nil {
+					fmt.Fprintf(os.Stderr, "Recovery: private token file %q, generation %d\n", path, claim.LeaseGeneration)
+				}
+				return errors.Join(err, releaseErr, saveErr)
+			}
+			return fmt.Errorf("enroll operator control: %w", err)
+		}
+		if status.Ref != nil {
+			fmt.Fprintf(os.Stderr, "issue run: operator control %s is active\n", status.Control)
+		}
+		var lastStop int64
+		observe = func(ctx context.Context, result core.HeartbeatResponse, expiry time.Time) error {
+			if err := gate.Heartbeat(ctx, controlReq, result, expiry); err != nil {
+				return err
+			}
+			if result.Control == core.ControlStop && result.Ref.Revision > lastStop {
+				fmt.Fprintln(os.Stderr, "issue run: operator stop pending until a trusted driver proves quiescence")
+				lastStop = result.Ref.Revision
+			}
+			return nil
+		}
+	}
+
 	// childCtx lets the heartbeat goroutine cancel the child the moment
 	// ownership is lost; exec.CommandContext turns that cancel into SIGTERM
 	// followed by a bounded WaitDelay kill.
@@ -191,7 +248,7 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	hbWG.Add(1)
 	go func() {
 		defer hbWG.Done()
-		runHeartbeat(hbCtx, c, issueID, claim.LeaseToken, claim.LeaseGeneration, ttl, heartbeatInterval, knownExpiry, childCancel, lostCh)
+		runHeartbeat(hbCtx, c, issueID, claim.LeaseToken, claim.LeaseGeneration, ttl, heartbeatInterval, knownExpiry, childCancel, lostCh, observe)
 	}()
 
 	cmd := exec.CommandContext(childCtx, cmdArgs[0], cmdArgs[1:]...)
@@ -233,8 +290,9 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	select {
 	case runErr = <-runErrCh:
 	case lossErr = <-lostCh:
-		// Ownership loss already cancelled the child; wait for it to finish
-		// terminating so no orphan process is left behind.
+		// Ownership loss cancels the workload. A deliberate controlled stop
+		// retires the attempt and lets the gated interactive terminal remain
+		// open until its user exits.
 		runErr = <-runErrCh
 	}
 	// WaitDelay can force the process leader to exit while a descendant that
@@ -271,6 +329,16 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		return fmt.Errorf("clean up cancelled issue run process group: %w", cleanupErr)
 	}
 
+	if controlEnabled {
+		checkCtx, cancel := context.WithTimeout(context.Background(), controlLookupTimeout)
+		_, err := c.ControlStatus(checkCtx, controlReq)
+		cancel()
+		var controlErr *client.ClientError
+		if errors.As(err, &controlErr) && controlErr.Code == core.ErrControlStopped {
+			return controlErr
+		}
+	}
+
 	background := context.Background()
 
 	if runErr == nil && requireComplete {
@@ -294,49 +362,30 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 		}
 	}
 	if runErr == nil {
+		expectedVersion := claim.Version
+		if controlEnabled {
+			expectedVersion = core.LatestIssueVersion
+		}
 		result, err := c.CloseIssue(background, issueID, core.CloseIssueRequest{
 			Resolution:      closeResolution,
 			Branch:          branch,
 			PRURL:           prURL,
 			CommitSHA:       commitSHA,
-			ExpectedVersion: claim.Version,
+			ExpectedVersion: expectedVersion,
 			LeaseToken:      claim.LeaseToken,
 			LeaseGeneration: claim.LeaseGeneration,
 			Actor:           holder,
 			Note:            note,
 			InvocationMode:  invocationMode,
 		})
-		if err != nil {
+		if err == nil {
+			return printRunClose(background, c, result, issueID, claim.LeaseToken, publish)
+		}
+		var controlErr *client.ClientError
+		if !controlEnabled || !errors.As(err, &controlErr) || controlErr.Code != core.ErrControlRestricted {
 			return fmt.Errorf("command succeeded but close failed: %w", err)
 		}
-		var publication *publishResult
-		if publish {
-			outcome := publishAfterClose(background, c, issueID, claim.LeaseToken)
-			publication = &outcome
-		}
-		if jsonOutput {
-			var encodeErr error
-			if publication != nil {
-				encodeErr = json.NewEncoder(os.Stdout).Encode(struct {
-					core.CloseIssueResult
-					Publish *publishResult `json:"publish"`
-				}{result, publication})
-			} else {
-				encodeErr = json.NewEncoder(os.Stdout).Encode(result)
-			}
-			if encodeErr != nil {
-				return encodeErr
-			}
-			if publication != nil && !publication.OK {
-				printPublishResult(*publication, issueID)
-			}
-			return nil
-		}
-		fmt.Println("Issue closed.")
-		if publication != nil {
-			printPublishResult(*publication, issueID)
-		}
-		return nil
+		runErr = controlErr
 	}
 
 	exitCode := 1
@@ -376,6 +425,37 @@ func runIssueRun(ctx context.Context, c *client.Client, args []string) error {
 	return nil // unreachable
 }
 
+func printRunClose(background context.Context, c *client.Client, result core.CloseIssueResult, issueID, token string, publish bool) error {
+	var publication *publishResult
+	if publish {
+		outcome := publishAfterClose(background, c, issueID, token)
+		publication = &outcome
+	}
+	if jsonOutput {
+		var encodeErr error
+		if publication != nil {
+			encodeErr = json.NewEncoder(os.Stdout).Encode(struct {
+				core.CloseIssueResult
+				Publish *publishResult `json:"publish"`
+			}{result, publication})
+		} else {
+			encodeErr = json.NewEncoder(os.Stdout).Encode(result)
+		}
+		if encodeErr != nil {
+			return encodeErr
+		}
+		if publication != nil && !publication.OK {
+			printPublishResult(*publication, issueID)
+		}
+		return nil
+	}
+	fmt.Println("Issue closed.")
+	if publication != nil {
+		printPublishResult(*publication, issueID)
+	}
+	return nil
+}
+
 func signalCommandProcessGroup(cmd *exec.Cmd, signal syscall.Signal) error {
 	if cmd.Process == nil {
 		return os.ErrProcessDone
@@ -394,7 +474,7 @@ func signalCommandProcessGroup(cmd *exec.Cmd, signal syscall.Signal) error {
 // loss it terminates the child (stopChild) and reports a distinct
 // ownership-loss error on lostCh before returning, so the run loop can join it
 // and never close after ownership moved.
-func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int, interval time.Duration, knownExpiry time.Time, stopChild func(), lostCh chan<- *client.ClientError) {
+func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken string, leaseGeneration int64, ttlSeconds int, interval time.Duration, knownExpiry time.Time, stopChild func(), lostCh chan<- *client.ClientError, observe func(context.Context, core.HeartbeatResponse, time.Time) error) {
 	const initialRetryDelay = time.Second
 	const maxRetryDelay = 5 * time.Second
 
@@ -419,7 +499,7 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 				return false
 			}
 			requestCtx, cancel := context.WithDeadline(ctx, knownExpiry)
-			newExpiry, err := c.HeartbeatLeaseWithOperation(requestCtx, issueID, core.HeartbeatRequest{
+			result, err := c.HeartbeatLeaseStatus(requestCtx, issueID, core.HeartbeatRequest{
 				LeaseToken: leaseToken, LeaseGeneration: leaseGeneration,
 				TTLSeconds: ttlSeconds, OperationID: operationID,
 			})
@@ -432,12 +512,19 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 					ambiguous = false
 					continue
 				}
-				parsed, perr := time.Parse(time.RFC3339, newExpiry)
+				parsed, perr := time.Parse(time.RFC3339, result.ExpiresAt)
 				if perr != nil || !time.Now().Before(parsed) {
 					reportLoss("fresh heartbeat returned no future lease deadline")
 					return false
 				}
 				knownExpiry = parsed
+				if observe != nil {
+					if err := observe(ctx, result, parsed); err != nil {
+						stopChild()
+						lostCh <- &client.ClientError{Code: "control_check_failed", Message: "could not persist trusted operator control state"}
+						return false
+					}
+				}
 				retryDelay = initialRetryDelay
 				return true
 			}
@@ -445,6 +532,10 @@ func runHeartbeat(ctx context.Context, c *client.Client, issueID, leaseToken str
 				return false
 			}
 			var clientErr *client.ClientError
+			if errors.As(err, &clientErr) && clientErr.Code == core.ErrControlStopped {
+				lostCh <- clientErr
+				return false
+			}
 			if errors.As(err, &clientErr) && clientErr.Code == core.ErrLeaseExpired {
 				reportLoss(fmt.Sprintf("heartbeat rejected: %s", clientErr.Message))
 				return false
@@ -501,7 +592,7 @@ func canonicalRunEnvironment(environment []string) []string {
 	for _, entry := range environment {
 		key, _, _ := strings.Cut(entry, "=")
 		switch key {
-		case "AF_LEASE_TOKEN", "AF_LEASE_GENERATION", "AF_ATTEMPT_ID", "AF_ISSUE_ID", "AF_EXPECTED_VERSION":
+		case "AF_LEASE_TOKEN", "AF_LEASE_GENERATION", "AF_ATTEMPT_ID", "AF_ISSUE_ID", "AF_EXPECTED_VERSION", "DIBS_OPERATOR_TOKEN":
 			continue
 		}
 		result = append(result, entry)

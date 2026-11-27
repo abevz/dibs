@@ -25,6 +25,9 @@ const (
 
 // CoordinatorClient describes the daemon API surface used by the MCP wrapper.
 type CoordinatorClient interface {
+	HeartbeatLeaseStatus(context.Context, string, core.HeartbeatRequest) (core.HeartbeatResponse, error)
+	ChangeControl(context.Context, core.ControlChangeRequest) (core.ControlChange, error)
+
 	Health(ctx context.Context) (core.Health, error)
 	ListProjects(ctx context.Context) ([]core.Project, error)
 	ListRepos(ctx context.Context, project string) ([]core.Repository, error)
@@ -58,11 +61,12 @@ type CoordinatorClient interface {
 
 // Server is a tiny MCP stdio server that wraps the daemon API.
 type Server struct {
-	client  CoordinatorClient
-	github  github.Client
-	actor   string
-	name    string
-	version string
+	operatorControl bool
+	client          CoordinatorClient
+	github          github.Client
+	actor           string
+	name            string
+	version         string
 }
 
 // NewServer constructs a new MCP wrapper server.
@@ -80,6 +84,10 @@ func NewServerWithGitHub(c CoordinatorClient, gh github.Client, actor, version s
 		version: version,
 	}
 }
+
+// EnableOperatorControl is for a separately configured operator-only server.
+// The daemon still authorizes each request using the client's bearer.
+func (s *Server) EnableOperatorControl() { s.operatorControl = true }
 
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -391,6 +399,12 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 			InvocationMode: mode, OperationID: id,
 		})
 		return operationOutcome(id, claim, err)
+	case "control_pause", "control_stop", "control_resume":
+		if !s.operatorControl {
+			return nil, fmt.Errorf("operator control requires a separate operator-only MCP instance")
+		}
+		return s.changeControl(ctx, params)
+
 	case "heartbeat_issue":
 		var args struct {
 			IssueID         string `json:"issue_id"`
@@ -412,11 +426,11 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 		if err != nil {
 			return nil, err
 		}
-		expiresAt, err := s.client.HeartbeatLeaseWithOperation(ctx, args.IssueID, core.HeartbeatRequest{
+		heartbeat, err := s.client.HeartbeatLeaseStatus(ctx, args.IssueID, core.HeartbeatRequest{
 			LeaseToken: args.LeaseToken, LeaseGeneration: args.LeaseGeneration,
 			TTLSeconds: args.TTLSeconds, OperationID: id,
 		})
-		return operationOutcome(id, map[string]any{"expires_at": expiresAt}, err)
+		return operationOutcome(id, heartbeat, err)
 	case "release_issue":
 		var args struct {
 			IssueID         string `json:"issue_id"`
@@ -746,7 +760,7 @@ func (s *Server) callTool(ctx context.Context, params toolCallParams) (any, erro
 }
 
 func (s *Server) tools() []map[string]any {
-	return []map[string]any{
+	tools := []map[string]any{
 		toolDefinition("health", "Return daemon health from GET /healthz.", objectSchema(nil)),
 		toolDefinition("get_issue", "Fetch one issue plus its active lease, if any.", objectSchema([]schemaField{
 			{name: "issue_id", fieldType: "string", description: "Issue UUID or short id.", required: true},
@@ -915,6 +929,10 @@ func (s *Server) tools() []map[string]any {
 			{name: "actor", fieldType: "string", description: "Optional operator identity; falls back to DIBS_ACTOR."},
 		})),
 	}
+	if s.operatorControl {
+		tools = append(tools, operatorControlTools()...)
+	}
+	return tools
 }
 
 func (s *Server) resolveActor(primary, fallback string) (string, error) {

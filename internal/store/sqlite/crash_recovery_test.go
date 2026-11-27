@@ -62,12 +62,12 @@ func (s *crashProofStore) ClaimIssueWithOperation(ctx context.Context, issueID s
 	return claim, err
 }
 
-func (s *crashProofStore) HeartbeatLeaseWithOperation(ctx context.Context, issueID string, req core.HeartbeatRequest, now time.Time) (string, error) {
-	expiry, err := s.Store.HeartbeatLeaseWithOperation(s.proofContext(ctx), issueID, req, now)
+func (s *crashProofStore) HeartbeatLeaseStatus(ctx context.Context, issueID string, req core.HeartbeatRequest, now time.Time) (core.HeartbeatResponse, error) {
+	outcome, err := s.Store.HeartbeatLeaseStatus(s.proofContext(ctx), issueID, req, now)
 	if err == nil {
 		s.pause("heartbeat_after_commit")
 	}
-	return expiry, err
+	return outcome, err
 }
 
 func (s *crashProofStore) HandoffLease(ctx context.Context, issueID string, req core.HandoffRequest) (core.HandoffResponse, error) {

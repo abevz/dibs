@@ -24,8 +24,14 @@ type argRoute struct {
 }
 
 var commandRoutes = map[string]argRoute{
-	"update": {"--check? --rollback? --prerelease? --yes? --restart?", 0},
-	"health": {"", 0}, "doctor": {"", 0}, "protocol": {"", 0}, "version": {"", 0},
+	"control pause":  {"--issue --repo --worktree --global? --reason --operation-id", 0},
+	"control stop":   {"--issue --repo --worktree --global? --reason --operation-id", 0},
+	"control resume": {"--issue --repo --worktree --global? --operation-id", 0},
+	"control status": {"", 0},
+	"control enroll": {"", 0},
+	"control hook":   {"--serial?", 0},
+	"update":         {"--check? --rollback? --prerelease? --yes? --restart?", 0},
+	"health":         {"", 0}, "doctor": {"", 0}, "protocol": {"", 0}, "version": {"", 0},
 	"init":                {"--path --dry-run? --project --repo --default-branch", 0},
 	"watch":               {"--project --interval --once?", 0},
 	"hooks install":       {"--agent --path", 0},
@@ -49,7 +55,7 @@ var commandRoutes = map[string]argRoute{
 	"issue claim":     {"--holder --actor --ttl --session-id --invocation-mode --operation-id --retry-last?", 1},
 	"issue heartbeat": {"--lease-token --lease-generation --ttl --operation-id", 1}, "issue release": {"--lease-token --lease-generation --expected-version --operation-id", 1},
 	"issue handoff":          {"--lease-token --lease-generation --expected-version --note --invocation-mode --operation-id", 1},
-	"issue run":              {"--actor --ttl --close-resolution --branch --pr-url --commit-sha --note --invocation-mode --require-complete? --publish?", 1},
+	"issue run":              {"--actor --ttl --close-resolution --branch --pr-url --commit-sha --note --invocation-mode --require-complete? --operator-control? --publish?", 1},
 	"issue edit":             {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release? --operation-id", 1},
 	"issue update":           {"--title --type --external-key --description --acceptance --priority --assignee --status --expected-version --force? --lease-token --lease-generation --release? --operation-id", 1},
 	"issue close":            {"--resolution --expected-version --lease-token --lease-generation --branch --pr-url --commit-sha --note --invocation-mode --operation-id --publish? --require-evidence --diff-hash", 1},
@@ -96,7 +102,7 @@ func validateCommandArgs(args []string) error {
 	}
 	path := []string{args[0]}
 	switch args[0] {
-	case "project", "repo", "worktree", "artifact-root", "artifact", "export", "daemon", "hooks":
+	case "project", "repo", "worktree", "artifact-root", "artifact", "export", "daemon", "hooks", "control":
 		if len(args) < 2 {
 			return argumentError(args[0] + " subcommand is required")
 		}
