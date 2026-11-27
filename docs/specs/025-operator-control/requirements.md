@@ -36,8 +36,8 @@
   trusted hook and covers future tool admission.
   Record the available Codex hook and its coverage limits.
 - **R6. Restricted data.** Admit only defined control values and reason codes.
-  Include `ask_owner` in the restrictive vocabulary, with its public setter
-  subject to owner approval. Render fixed messages for the model. Informational
+  Include `ask_owner` in the restrictive vocabulary, with no public setter or notification
+  integration in v1. Render fixed messages for the model. Informational
   and explanatory text belongs in issue notes. The safety path must never
   parse issue notes as control or forward their contents into hook output.
 - **R7. Verification.** Cover authorization, scope overlap, pause and lease

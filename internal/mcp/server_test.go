@@ -22,6 +22,8 @@ type fakeClient struct {
 	createResp             core.Issue
 	claimResp              core.ClaimResponse
 	heartbeatResp          string
+	heartbeatSignal        core.ControlSignal
+	lastControlReq         core.ControlChangeRequest
 	handoffResp            core.HandoffResponse
 	updateResp             core.Issue
 	noteResp               core.Note
@@ -110,6 +112,15 @@ func (f *fakeClient) HeartbeatLeaseWithOperation(ctx context.Context, issueID st
 	f.lastHeartbeatReq = req
 	return f.HeartbeatLease(ctx, issueID, req.LeaseToken, req.LeaseGeneration, req.TTLSeconds)
 }
+func (f *fakeClient) HeartbeatLeaseStatus(ctx context.Context, issueID string, req core.HeartbeatRequest) (core.HeartbeatResponse, error) {
+	expiry, err := f.HeartbeatLeaseWithOperation(ctx, issueID, req)
+	return core.HeartbeatResponse{ExpiresAt: expiry, ControlSignal: f.heartbeatSignal}, err
+}
+func (f *fakeClient) ChangeControl(_ context.Context, req core.ControlChangeRequest) (core.ControlChange, error) {
+	f.lastControlReq = req
+	return core.ControlChange{Action: req.Action, SetBy: "operator"}, nil
+}
+
 func (f *fakeClient) ReleaseLeaseWithOperation(_ context.Context, issueID string, req core.ReleaseRequest) error {
 	f.lastIssueID, f.lastReleaseReq = issueID, req
 	return nil
@@ -423,5 +434,44 @@ func TestRunProcessesNewlineMessages(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"status":"ok"`) {
 		t.Fatalf("expected health payload in response, got %q", out.String())
+	}
+}
+
+func TestMCPControlToolsNeedOperatorMode(t *testing.T) {
+	fake := &fakeClient{}
+	s := NewServer(fake, "owner-label", "fixture")
+	params := toolCallParams{Name: "control_pause", Arguments: json.RawMessage(
+		`{"target_kind":"global","reason":"maintenance","operation_id":"mcp-control-pause"}`)}
+	if _, err := s.callTool(t.Context(), params); err == nil || fake.lastControlReq.Action != "" {
+		t.Fatalf("ordinary MCP used operator control: %v", err)
+	}
+	for _, tool := range s.tools() {
+		if strings.HasPrefix(tool["name"].(string), "control_") {
+			t.Fatalf("ordinary MCP advertised %v", tool["name"])
+		}
+	}
+	s.EnableOperatorControl()
+	got, err := s.callTool(t.Context(), params)
+	if err != nil || fake.lastControlReq.Action != core.ControlPause || fake.lastControlReq.Actor != "owner-label" {
+		t.Fatalf("operator tool = %v, request = %+v, err = %v", got, fake.lastControlReq, err)
+	}
+}
+
+func TestMCPHeartbeatKeepsControlReference(t *testing.T) {
+	fake := &fakeClient{
+		heartbeatResp: "2026-11-27T20:00:00Z",
+		heartbeatSignal: core.ControlSignal{Control: core.ControlPause, Reason: "maintenance",
+			Ref: &core.ControlRef{ControlTarget: core.ControlTarget{Kind: "global"}, Revision: 42}},
+	}
+	s := NewServer(fake, "worker", "fixture")
+	result, err := s.callTool(t.Context(), toolCallParams{Name: "heartbeat_issue", Arguments: json.RawMessage(
+		`{"issue_id":"demo-1","lease_token":"fixture","lease_generation":1,"ttl_seconds":600}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	typed := result.(map[string]any)
+	ref, ok := typed["control_ref"].(map[string]any)
+	if !ok || ref["revision"] != float64(42) || typed["expires_at"] != fake.heartbeatResp {
+		t.Fatalf("heartbeat result = %v", result)
 	}
 }

@@ -16,6 +16,11 @@ import (
 // handlers independent from SQLite package details without promising multiple
 // database backends.
 type CoordinatorStore interface {
+	ChangeControl(context.Context, core.ControlChangeRequest) (core.ControlChange, error)
+	ControlStatus(context.Context, core.ControlStatusRequest, bool) (core.ControlStatus, error)
+	AcknowledgeControl(context.Context, core.ControlAckRequest) (core.ControlAck, error)
+	HeartbeatLeaseStatus(context.Context, string, core.HeartbeatRequest, time.Time) (core.HeartbeatResponse, error)
+
 	RegisterEvidence(context.Context, string, core.RegisterEvidenceRequest) (core.Evidence, error)
 	ListEvidence(context.Context, string) ([]core.Evidence, error)
 	PruneEvidence(context.Context, core.EvidenceMaintenanceRequest) ([]core.Evidence, error)

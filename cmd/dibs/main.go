@@ -149,6 +149,8 @@ func main() {
 		err = runWatch(ctx, c, filtered[1:])
 	case "hooks":
 		err = runHooks(ctx, c, filtered[1:])
+	case "control":
+		exitCode, err = runControl(ctx, c, filtered[1:])
 	case "issue":
 		err = runIssue(ctx, c, filtered[1:])
 	case "dependency":
@@ -173,7 +175,7 @@ func main() {
 
 func commandNeedsDaemon(args []string) bool {
 	switch args[0] {
-	case "version", "protocol", "health", "doctor", "daemon", "init", "watch", "update":
+	case "version", "protocol", "health", "doctor", "daemon", "init", "watch", "update", "control":
 		return false
 	case "hooks":
 		return len(args) > 1 && args[1] == "session-start"
@@ -183,7 +185,7 @@ func commandNeedsDaemon(args []string) bool {
 }
 
 func shouldCheckDaemonRevision(args []string) bool {
-	if len(args) == 0 || args[0] == "init" || args[0] == "protocol" || args[0] == "version" || args[0] == "watch" || args[0] == "update" {
+	if len(args) == 0 || args[0] == "init" || args[0] == "protocol" || args[0] == "version" || args[0] == "watch" || args[0] == "update" || args[0] == "control" {
 		return false
 	}
 	for _, arg := range args {
@@ -273,7 +275,7 @@ func mapExitCode(code string) int {
 		return 5
 	case core.ErrLeaseHeld:
 		return 3
-	case core.ErrLeaseExpired:
+	case core.ErrLeaseExpired, core.ErrControlStopped:
 		return 4
 	case core.ErrConflict:
 		return 2

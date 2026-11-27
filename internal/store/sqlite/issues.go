@@ -761,8 +761,13 @@ func HeartbeatLease(ctx context.Context, db *sql.DB, issueID, leaseToken string,
 }
 
 func HeartbeatLeaseWithOperation(ctx context.Context, db *sql.DB, issueID string, req core.HeartbeatRequest, now time.Time) (string, error) {
+	resp, err := HeartbeatLeaseStatus(ctx, db, issueID, req, now)
+	return resp.ExpiresAt, err
+}
+
+func HeartbeatLeaseStatus(ctx context.Context, db *sql.DB, issueID string, req core.HeartbeatRequest, now time.Time) (core.HeartbeatResponse, error) {
 	if err := core.ValidateOperationID(req.OperationID); err != nil {
-		return "", core.NewAPIError(core.ErrValidationFailed, err.Error())
+		return core.HeartbeatResponse{}, core.NewAPIError(core.ErrValidationFailed, err.Error())
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		outcome, err := heartbeatLeaseAttempt(ctx, db, issueID, req, now)
@@ -771,19 +776,19 @@ func HeartbeatLeaseWithOperation(ctx context.Context, db *sql.DB, issueID string
 		}
 		return outcome, err
 	}
-	return "", core.NewAPIError(core.ErrConflict, "heartbeat raced a concurrent operation; retry")
+	return core.HeartbeatResponse{}, core.NewAPIError(core.ErrConflict, "heartbeat raced a concurrent operation; retry")
 }
 
-func heartbeatLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req core.HeartbeatRequest, now time.Time) (string, error) {
+func heartbeatLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req core.HeartbeatRequest, now time.Time) (core.HeartbeatResponse, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", fmt.Errorf("begin tx: %w", err)
+		return core.HeartbeatResponse{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	fingerprintReq := req
 	fingerprintReq.OperationID = ""
 	fingerprint := requestFingerprint(fingerprintReq)
-	if outcome, found, err := replayOperation[string](ctx, tx, req.OperationID, core.OperationKindHeartbeat, issueID, fingerprint); err != nil || found {
+	if outcome, found, err := replayOperation[core.HeartbeatResponse](ctx, tx, req.OperationID, core.OperationKindHeartbeat, issueID, fingerprint); err != nil || found {
 		return outcome, err
 	}
 
@@ -797,26 +802,45 @@ func heartbeatLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req 
 		newExpiresAt, nowStr, nowStr, issueID, req.LeaseToken, req.LeaseGeneration, nowStr,
 	)
 	if err != nil {
-		return "", fmt.Errorf("update lease: %w", err)
+		return core.HeartbeatResponse{}, fmt.Errorf("update lease: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return "", fmt.Errorf("heartbeat rows affected: %w", err)
+		return core.HeartbeatResponse{}, fmt.Errorf("heartbeat rows affected: %w", err)
 	}
 	if rows != 1 {
-		return "", leaseOwnershipError(ctx, tx, issueID, req.LeaseToken, req.LeaseGeneration)
+		return core.HeartbeatResponse{}, controlOwnershipError(ctx, tx, issueID, req.LeaseToken, req.LeaseGeneration)
 	}
 
+	targets, err := controlTargets(ctx, tx, issueID, req.LeaseGeneration)
+	if err != nil {
+		return core.HeartbeatResponse{}, err
+	}
+	signal, err := effectiveControl(ctx, tx, scopedControlTargets(targets, controlWorktree{}))
+	if err != nil {
+		return core.HeartbeatResponse{}, err
+	}
+	outcome := core.HeartbeatResponse{ExpiresAt: newExpiresAt, ControlSignal: signal}
+	var enrolled bool
+	var count int64
+	if err := tx.QueryRowContext(ctx, `SELECT heartbeat_count,
+		EXISTS (SELECT 1 FROM control_bindings b WHERE b.issue_id=l.issue_id AND b.lease_generation=l.lease_generation)
+		FROM leases l WHERE l.issue_id=?`, issueID).Scan(&count, &enrolled); err != nil {
+		return core.HeartbeatResponse{}, err
+	}
+	if enrolled {
+		outcome.HeartbeatCount = &count
+	}
 	runCoordinationProofHook(ctx, coordinationProofHeartbeatBeforeCommit)
 	if req.OperationID != "" {
-		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindHeartbeat, issueID, "", fingerprint, newExpiresAt, now); err != nil {
-			return "", err
+		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindHeartbeat, issueID, "", fingerprint, outcome, now); err != nil {
+			return core.HeartbeatResponse{}, err
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return "", fmt.Errorf("commit tx: %w", err)
+		return core.HeartbeatResponse{}, fmt.Errorf("commit tx: %w", err)
 	}
-	return newExpiresAt, nil
+	return outcome, nil
 }
 
 // ReleaseLease releases the current unexpired lease and returns the issue to
@@ -1016,11 +1040,27 @@ func handoffLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req co
 	}
 
 	nowTime := time.Now().UTC()
+	outcome, err := handoffLeaseInTx(ctx, tx, issueID, req, invocationMode, nowTime, "handoff")
+	if err != nil {
+		return core.HandoffResponse{}, err
+	}
+	if req.OperationID != "" {
+		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindHandoff, issueID, outcome.Note.Author, fingerprint, outcome, nowTime); err != nil {
+			return core.HandoffResponse{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return core.HandoffResponse{}, fmt.Errorf("commit handoff: %w", err)
+	}
+	return outcome, nil
+}
+
+func handoffLeaseInTx(ctx context.Context, tx *sql.Tx, issueID string, req core.HandoffRequest, invocationMode string, nowTime time.Time, endReason string) (core.HandoffResponse, error) {
 	now := nowTime.Format(time.RFC3339)
 	var holder, attemptID, lastHeartbeat string
 	var leaseGeneration int64
 	var heartbeatCount int64
-	err = tx.QueryRowContext(ctx,
+	err := tx.QueryRowContext(ctx,
 		`SELECT holder, attempt_id, lease_generation, heartbeat_count, last_heartbeat_at FROM leases
 		 WHERE issue_id = ? AND lease_token = ? AND lease_generation = ? AND expires_at > ?`,
 		issueID, req.LeaseToken, req.LeaseGeneration, now,
@@ -1082,7 +1122,7 @@ func handoffLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req co
 	if err := insertEvent(ctx, tx, issueID, holder, "issue_released", map[string]any{
 		"attempt_id":        attemptID,
 		"lease_generation":  leaseGeneration,
-		"end_reason":        "handoff",
+		"end_reason":        endReason,
 		"heartbeat_count":   heartbeatCount,
 		"last_heartbeat_at": lastHeartbeat,
 	}, now); err != nil {
@@ -1097,16 +1137,7 @@ func handoffLeaseAttempt(ctx context.Context, db *sql.DB, issueID string, req co
 	if len(items) == 0 {
 		items = nil
 	}
-	outcome := core.HandoffResponse{Note: note, Evidence: items}
-	if req.OperationID != "" {
-		if err := recordOperation(ctx, tx, req.OperationID, core.OperationKindHandoff, issueID, holder, fingerprint, outcome, nowTime); err != nil {
-			return core.HandoffResponse{}, err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return core.HandoffResponse{}, fmt.Errorf("commit handoff: %w", err)
-	}
-	return outcome, nil
+	return core.HandoffResponse{Note: note, Evidence: items}, nil
 }
 
 func getActiveLease(ctx context.Context, db *sql.DB, issueID string) (*core.IssueLease, error) {
@@ -1556,8 +1587,7 @@ func closeIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 		issueID, now,
 	).Scan(&leaseToken, &attemptID, &leaseGeneration)
 	if err == sql.ErrNoRows {
-		return core.CloseIssueResult{}, core.NewAPIError(core.ErrLeaseExpired,
-			"an active lease is required to close an issue")
+		return core.CloseIssueResult{}, controlOwnershipError(ctx, tx, issueID, req.LeaseToken, req.LeaseGeneration)
 	}
 	if err != nil {
 		return core.CloseIssueResult{}, fmt.Errorf("select lease: %w", err)
@@ -1569,6 +1599,9 @@ func closeIssueAttempt(ctx context.Context, db *sql.DB, issueID string, req core
 	if leaseGeneration != req.LeaseGeneration {
 		return core.CloseIssueResult{}, core.NewAPIError(core.ErrLeaseExpired,
 			"lease_generation does not match the active lease")
+	}
+	if err := checkControlClose(ctx, tx, issueID, leaseGeneration); err != nil {
+		return core.CloseIssueResult{}, err
 	}
 	heartbeatCount, lastHeartbeat, err := leaseHeartbeatSummary(ctx, tx, issueID)
 	if err != nil {

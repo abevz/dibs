@@ -83,6 +83,10 @@ func CreateRepo(ctx context.Context, db *sql.DB, projectKey string, req core.Cre
 
 // GetRepo retrieves a repository by ID or logical name.
 func GetRepo(ctx context.Context, db *sql.DB, idOrName string) (core.Repository, error) {
+	return getRepoWith(ctx, db, idOrName)
+}
+
+func getRepoWith(ctx context.Context, db queryContext, idOrName string) (core.Repository, error) {
 	if repo, ok, err := lookupRepoByID(ctx, db, idOrName); err != nil {
 		return core.Repository{}, err
 	} else if ok {
@@ -157,7 +161,7 @@ func ListReposByProjectKey(ctx context.Context, db *sql.DB, projectKey string) (
 	return ListRepos(ctx, db, proj.ID)
 }
 
-func lookupRepoByID(ctx context.Context, db *sql.DB, id string) (core.Repository, bool, error) {
+func lookupRepoByID(ctx context.Context, db queryContext, id string) (core.Repository, bool, error) {
 	row := db.QueryRowContext(ctx,
 		`SELECT id, project_id, logical_name, canonical_git_dir, default_branch, hosting_kind, hosting_slug, created_at, updated_at
 		 FROM repositories WHERE id = ?`, id,
@@ -172,7 +176,7 @@ func lookupRepoByID(ctx context.Context, db *sql.DB, id string) (core.Repository
 	return repo, true, nil
 }
 
-func lookupRepoByLogicalName(ctx context.Context, db *sql.DB, projectID, logicalName string) (core.Repository, error) {
+func lookupRepoByLogicalName(ctx context.Context, db queryContext, projectID, logicalName string) (core.Repository, error) {
 	query := `SELECT id, project_id, logical_name, canonical_git_dir, default_branch, hosting_kind, hosting_slug, created_at, updated_at
 		FROM repositories WHERE logical_name = ?`
 	args := []any{logicalName}

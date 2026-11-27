@@ -3,6 +3,13 @@ package main
 // commandDescriptions is the compiled help catalog for root, group, and leaf
 // commands. Keys use canonical route paths, plus explicit CLI aliases.
 var commandDescriptions = map[string]string{
+	"control":                 "Manage operator restrictions and enrolled tool gates.",
+	"control pause":           "Pause covered tools while retaining the active lease.",
+	"control stop":            "Stop covered tools and hand off at a verified safe point.",
+	"control resume":          "Clear the matching operator restriction.",
+	"control status":          "Read control status for the current checkout or active lease.",
+	"control enroll":          "Bind an active lease to the registered current checkout.",
+	"control hook":            "Run the reference Claude Code PreToolUse gate.",
 	"update":                  "Check releases, upgrade all binaries with rollback, or restore the previous binaries.",
 	"health":                  "Check daemon health.",
 	"doctor":                  "Run environment diagnostics.",

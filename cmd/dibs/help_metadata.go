@@ -10,6 +10,9 @@ type flagHelp struct {
 // flagHelpText is the shared vocabulary for the flags in commandRoutes.
 // Command-specific meanings belong in commandFlagHelpText below.
 var flagHelpText = map[string]flagHelp{
+	"--global":            {"", "Target this daemon globally."},
+	"--serial":            {"", "Trusted assertion that no in-flight/background tools or subagents exist at the gate."},
+	"--operator-control":  {"", "Enroll the child in operator control for a registered checkout."},
 	"--check":             {"", "Check installed vs latest release; exits 0 current, 10 available, 1 failed."},
 	"--rollback":          {"", "Restore the previous binary set without network or database changes."},
 	"--prerelease":        {"", "Include prereleases (automatic when the installed version is a prerelease)."},
@@ -99,6 +102,8 @@ var flagHelpText = map[string]flagHelp{
 }
 
 var commandFlagHelpText = map[string]map[string]flagHelp{
+	"control pause": {"--reason": {"code", "One of operator_requested, operator_review, maintenance."}},
+	"control stop":  {"--reason": {"code", "One of operator_requested, operator_review, maintenance."}},
 	"init": {
 		"--path":           {"path", "AGENTS.md path to create or update (default: ./AGENTS.md)."},
 		"--project":        {"key", "Use this project key when Git context is ambiguous."},

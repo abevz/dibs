@@ -514,3 +514,30 @@ func asError[T error](t *testing.T, err error, target *T) bool {
 	t.Helper()
 	return errors.As(err, target)
 }
+
+func TestControlUnavailableDistinguishesLegacyEndpointFromMalformedStatus(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		status      int
+		body        string
+		unavailable bool
+	}{
+		{"legacy route", http.StatusNotFound, "404 page not found\n", true},
+		{"typed missing target", http.StatusNotFound, `{"error":{"code":"not_found","message":"issue missing"}}`, false},
+		{"malformed reply", http.StatusOK, "{", false},
+		{"expired lease", http.StatusGone, `{"error":{"code":"lease_expired","message":"lease expired"}}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(srv.Close)
+			_, err := testClient(t, srv).ControlStatus(t.Context(), core.ControlStatusRequest{})
+			if err == nil || ControlUnavailable(err) != tc.unavailable {
+				t.Fatalf("error = %v, want unavailable=%t", err, tc.unavailable)
+			}
+		})
+	}
+}

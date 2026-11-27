@@ -282,15 +282,15 @@ func handleHeartbeatLease(st store.CoordinatorStore, logger *slog.Logger) http.H
 			writeError(w, http.StatusBadRequest, core.ErrValidationFailed, err.Error())
 			return
 		}
-		newExpiresAt, err := st.HeartbeatLeaseWithOperation(r.Context(), issueID, req, time.Now().UTC())
+		response, err := st.HeartbeatLeaseStatus(r.Context(), issueID, req, time.Now().UTC())
 		if err != nil {
 			if apiErr, ok := errAsAPIError(err); ok {
 				switch apiErr.Code {
 				case core.ErrIdempotencyConflict, core.ErrConflict:
 					writeError(w, http.StatusConflict, apiErr.Code, apiErr.Message)
 					return
-				case core.ErrLeaseExpired:
-					writeError(w, http.StatusGone, core.ErrLeaseExpired, apiErr.Message)
+				case core.ErrLeaseExpired, core.ErrControlStopped:
+					writeError(w, http.StatusGone, apiErr.Code, apiErr.Message)
 					return
 				case core.ErrNotFound:
 					writeError(w, http.StatusNotFound, core.ErrNotFound, apiErr.Message)
@@ -301,7 +301,7 @@ func handleHeartbeatLease(st store.CoordinatorStore, logger *slog.Logger) http.H
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{"expires_at": newExpiresAt})
+		writeJSON(w, http.StatusOK, response)
 	}
 }
 
@@ -561,6 +561,12 @@ func handleCloseIssue(st store.CoordinatorStore, logger *slog.Logger) http.Handl
 					return
 				case core.ErrConflict:
 					writeError(w, http.StatusConflict, core.ErrConflict, apiErr.Message)
+					return
+				case core.ErrControlRestricted:
+					writeError(w, http.StatusConflict, apiErr.Code, apiErr.Message)
+					return
+				case core.ErrControlStopped:
+					writeError(w, http.StatusGone, apiErr.Code, apiErr.Message)
 					return
 				case core.ErrLeaseExpired:
 					writeError(w, http.StatusGone, core.ErrLeaseExpired, apiErr.Message)
