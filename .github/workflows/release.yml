@@ -31,9 +31,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Require a CHANGELOG section for the tag
+        if: github.ref_type == 'tag'
+        run: sh contrib/install/check-changelog-section.sh "$GITHUB_REF_NAME"
       - run: go test ./...
       - run: sh contrib/install/test-publish-release.sh
       - run: sh contrib/install/test-restore-annotated-tag.sh
+      - run: sh contrib/install/test-check-changelog-section.sh
 
   build:
     needs: test
