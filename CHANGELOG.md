@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## v0.3.1 — 2026-11-27
+
+### Fixed
+
+- `dibs update` from v0.2.0 failed with "CHANGELOG has no section between
+  v0.2.0 and v0.3.0", because the v0.3.0 tag was cut without a CHANGELOG
+  section. This release adds the missing v0.3.0 notes. The release workflow
+  now fails when CHANGELOG.md at the tagged commit has no section for the tag.
+
+## v0.3.0 — 2026-11-27
+
+### Upgrading from v0.2.0
+
+Back up the database before upgrading (`VACUUM INTO`, see
+[operations](docs/operations.md#backup)) and install matching `dibs`,
+`dibsd` and `dibs-mcp` binaries. Migration 0013 adds operator-control state.
+Rolling back to v0.2.0 after the migration requires restoring the
+pre-upgrade database backup together with the older binaries.
+
+### Added
+
+- Operators can pause, stop and resume enrolled agents by issue, repository,
+  worktree or daemon-wide, through the CLI or a dedicated operator MCP
+  instance (afc-189, [operator guide](docs/operator-control.md)).
+- The Claude Code PreToolUse hook blocks new tool calls after pause or stop.
+  Pause keeps the lease renewing. Stop records a handoff and releases the
+  lease once the runtime confirms its work has stopped.
+- Fresh heartbeats carry optional control metadata. During a daemon outage,
+  a pause or stop that was already observed stays in effect until an
+  explicit resume is confirmed. With no known restriction, the hook warns and
+  leaves normal tool permissions in effect.
+
 ## v0.2.0 — 2026-11-26
 
 ### Upgrading from v0.1.0-rc.x
