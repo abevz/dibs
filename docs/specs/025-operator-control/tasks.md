@@ -16,8 +16,10 @@ daemon with real migrations and worktrees.
   checkout paths, cwd changes, unclaimed sessions, subagent bindings, and stale
   generations. Prove status reads do not extend TTL. Test old CLI/MCP response
   decoding, new clients against expiry-only responses, and exact replay of
-  both historical string and new typed outcomes. Change control between
-  heartbeats and show only a new operation ID and the live lookup see it.
+  both historical string and new typed outcomes. Verify the wire, CLI JSON,
+  and MCP results preserve `control_ref` when present, including on replay.
+  Change control between heartbeats and show only a new operation ID and
+  the live lookup see it.
 - [ ] **T3. Lifecycle and surfaces (R2, R3, R4, R6).** Wire CLI, operator MCP,
   and holder acknowledgement. Cover one note per revision and generation
   under concurrent heartbeat/hook observations, pause beyond the original TTL
@@ -29,11 +31,25 @@ daemon with real migrations and worktrees.
   Verify controlled stop suppresses auto-close and publication. Test managed
   children and unprivileged MCP cannot access the operator credential.
 - [ ] **T4. Claude Code hook and install guide (R5, R7).** Test explicit
-  denial for each supported tool class and subagents. Exercise timeout,
-  unavailable daemon, malformed reply, missing helper, old daemon and invalid
-  binding. Verify the fixed reason and absence of credentials, raw errors,
-  or note text in hook output. Test in-flight boundaries and pending stop when
-  concurrent activity cannot be drained. Record client versions and hook
+  denial for each supported tool class and subagents. Verify a cached pause
+  and a cached stop each deny during disconnect, timeout, and helper restart,
+  including signals first seen by heartbeat. Check cache matching for
+  issue, repo, worktree, and global restrictions. Cover concurrent
+  observations, restart persistence, historical replay, and a resume
+  issued while the client was offline. Require a newer explicit resume for
+  the matching target before removing a cached restriction. Verify that
+  an unrelated resume, omitted live signal, or late older resume leaves a
+  newer restriction in effect, and that a late older restriction cannot
+  reapply after a newer resume. With an empty or clear cache, test that disconnect, timeout,
+  and an older daemon leave normal permissions in effect and show the
+  fixed warning. Verify both paths preserve the original lease deadline
+  and that an expired or retired attempt still blocks. Exercise malformed
+  replies, invalid binding, and unreadable cache as fixed denial cases.
+  Verify the fixed reason and absence of credentials, raw response errors,
+  or note text in helper output. Separately, confirm a missing helper blocks
+  through Claude Code's `onFailure` setting and produces its own runtime
+  diagnostic. Test in-flight boundaries and pending stop when concurrent
+  activity cannot be drained. Record client versions and hook
   failure behavior. Document Codex coverage and the enforcement boundary.
 - [ ] **T5. End-to-end demo and independent review (R2, R3, R7).** Record
   versioned, sanitized evidence under a scratch operator and agent setup.

@@ -28,9 +28,11 @@ Store durable control state by target kind and ID. A setter chooses exactly
 one of `--issue`, `--repo`, `--worktree`, or `--global`. Resolve names to
 stable IDs server-side and reject ambiguous or nonexistent targets. A global
 setting covers one daemon. Serialize changes, record who set or cleared the
-target and when, and assign each change an opaque revision for conditional
-acknowledgement. A same-operation retry returns the original result.
-`resume` clears that target alone and succeeds if already clear.
+target and when, and assign each change a daemon-wide, monotonically
+increasing revision for conditional acknowledgement and cache ordering. A same-operation retry returns the original result.
+`resume` clears that target alone and succeeds if already clear. Retain the
+latest explicit resume revision for each target so a hook that missed the
+mutation can verify the clear after reconnecting.
 
 Match the claimed issue and its recorded repo/worktree, plus the actual
 execution worktree and its repo. Bind the registered execution checkout to
@@ -87,13 +89,20 @@ legacy expiry field. Example:
   "control": "pause",
   "reason": "operator_review",
   "set_by": "operator",
-  "set_at": "2026-11-27T19:00:00Z"
+  "set_at": "2026-11-27T19:00:00Z",
+  "control_ref": {
+    "target_kind": "issue",
+    "target_id": "11111111-1111-4111-8111-111111111111",
+    "revision": 42
+  }
 }
 ```
 
-Use UTC RFC 3339 for timestamps. Omit all four fields when clear. A
-restricted response carries a known reason code, defaulting to
-`operator_requested`. Start with a small fixed code table such as
+Use UTC RFC 3339 for timestamps. Omit control metadata when clear. The
+additive `control_ref` identifies the winning target and revision for
+cache reconciliation. It is coordination metadata and never appears in
+hook output. A restricted response carries a known reason code, defaulting
+to `operator_requested`. Start with a small fixed code table such as
 `operator_requested`, `operator_review`, and `maintenance`. Reject arbitrary
 reason text, unknown values, and extra request fields. Render messages
 using a local lookup, for example `Paused by the operator (review).`
@@ -110,9 +119,9 @@ text. New CLI text can additionally display the fixed reason. Older
 clients ignore the extra keys, renew normally, and provide no enforcement
 guarantee. A new enrolled hook treats a legacy daemon with no control
 status endpoint as unavailable. An exact heartbeat retry is a historical
-snapshot and must never authorize tools, clear a block, or trigger a fresh
-handoff. A new operation ID proves current lease ownership under the
-usual deadline. The hook uses a separate live status request even on a
+snapshot and must never authorize tools, update the live control cache, or
+trigger a fresh handoff. A successful heartbeat with a new operation ID
+proves current lease ownership under the usual deadline. The hook uses a separate live status request even on a
 healthy heartbeat loop.
 
 ## Pause, stop, and resume
@@ -163,7 +172,8 @@ confirmed loss, report recovery context and leave `operator-release` to the
 operator. Keep the worktree and branch for recovery throughout.
 
 **Resume.** Clear just the selected target. A live paused holder proceeds on
-its next tool attempt after a fresh clear status. A denied call is retried
+its next tool attempt once live status confirms an explicit resume for the
+cached pause and no other restriction applies. A denied call is retried
 explicitly by the user or agent. A stopped or expired attempt requires a
 new authorized claim and launch. Flags persist through daemon restarts and
 lease turnover until cleared. This packet leaves scheduler and ready/claim
@@ -187,21 +197,57 @@ supported, uses a separate holder-authorized operation. Keep helper
 prerequisites and runbook instructions outside repository-controlled
 settings. [Claude Code hook input and output](https://code.claude.com/docs/en/hooks#hook-input-and-output).
 
-Emit the fixed reason with an explicit denial, such as exit 2 and stderr
-for Claude Code. Choose **fail closed** for enrolled sessions. A local
-outage may overlap an operator's attempt to stop work. A still-valid lease
-proves ownership and cannot prove the absence of a new restriction.
-Timeouts, unreachable daemon, invalid responses, and missing required
-context produce a fixed denial. Use a helper timeout shorter than the hook
-deadline and set `onFailure: "block"` (Claude Code 2.1.295 or later).
-Status reads do not perform a heartbeat or cache an allow decision. The
-daemon's status snapshot is the admission point. A snapshot taken after
+The owner decided the daemon outage behavior on afc-189 on 2026-11-27.
+A delivered pause or stop must survive an outage. An outage with no known
+restriction should leave normal tool handling available with a warning.
+
+- **Record observations.** The trusted hook and heartbeat consumer share a
+  local cache indexed by stable daemon identity, issue ID, and registered
+  worktree ID as applicable. Retain the source target and revision of each observed
+  restriction. Apply cached observations only to matching issue or worktree
+  contexts. Persist fresh observations before returning a hook decision or
+  acknowledging control. Use private local state outside the checkout,
+  serialize updates across processes, and retain observations across helper
+  restarts. Ignore historical heartbeat replays.
+- **Require an explicit resume.** A live status read checks the supplied
+  cached control references and confirms a newer, explicit resume for each
+  matching source target it can clear. An omitted signal, an unrelated
+  resume, or a stale response cannot clear a cached pause or stop. Apply
+  the current effective signal and any remaining cached restrictions after
+  reconciliation. Compare numeric revisions per source target and persist
+  the latest accepted revision even after a resume clears its restriction.
+  A delayed restriction cannot overwrite a newer resume, and a delayed
+  resume cannot clear a newer restriction. A stopped or expired attempt
+  remains retired under the existing lease rules.
+- **Handle an unavailable daemon.** Treat a connection failure, bounded
+  lookup timeout, or legacy daemon missing the status endpoint as
+  unavailable. If a matching restriction is cached, deny with its fixed
+  reason. If the cache is empty for the context or its last known state is
+  clear, return exit 0 with the fixed `systemMessage` warning
+  `Dibs is unreachable. Operator control could not be checked.` Leave normal
+  tool permissions in effect. This degraded path does not renew, extend, or
+  revive a lease. For a claimed session, pass the claim's proven deadline
+  to the helper in trusted launch state and refresh it only on fresh lease
+  proof. Confirmed loss or passing the last proven deadline still blocks
+  that session.
+- **Handle a broken check.** Malformed replies, missing required context,
+  and unreadable cache data produce a fixed denial. Use a daemon lookup
+  timeout shorter than the hook deadline so the helper can return either
+  outage verdict. Set Claude Code `onFailure: "block"` (2.1.295 or later)
+  for failures of the helper itself. Claude Code supplies its own
+  diagnostic if the helper cannot start or cannot return a verdict. A helper
+  that runs returns explicit denials, such as exit 2 with the fixed reason
+  on stderr.
+
+Status reads do not perform a heartbeat or reuse an earlier allow decision.
+The daemon's status snapshot is the admission point. A snapshot taken after
 the control mutation commits must observe that mutation or a later one.
 A previously admitted tool can start or finish after the commit, including
 parallel calls that already obtained permission. The latency guarantee
 applies at the admission check for each covered tool. Tool hooks cannot revoke an
 already running shell or fence external effects. Document the supported
 hook configuration and test inheritance by subagents before promising it.
+[Claude Code warning output](https://code.claude.com/docs/en/hooks#json-output),
 [Claude Code PreToolUse and hook failure behavior](https://code.claude.com/docs/en/hooks#pretooluse),
 [Claude Code block on hook failure](https://code.claude.com/docs/en/hooks#block-the-action-when-a-hook-fails).
 
@@ -210,9 +256,9 @@ hook configuration and test inheritance by subagents before promising it.
 tools such as WebSearch and input or polling for an existing unified-exec
 session skip that hook. Some specialized tool paths can also opt out.
 Codex documents that a failed or malformed hook may let a tool run. A
-future adapter must return an explicit denial on daemon errors and test
-its supported surface and versions. The Claude Code reference hook and
-demo are the proposed implementation deliverables. The v0.172.0 source
+future adapter must apply the same outage policy, explicitly deny a known
+restriction, and test its supported surface and versions. The Claude Code
+reference hook and demo are the proposed implementation deliverables. The v0.172.0 source
 tests the structured denial. [Codex v0.172.0 denial test](https://github.com/openai/codex/blob/rust-v0.172.0/codex-rs/hooks/src/events/pre_tool_use.rs#L356-L375),
 [Codex tool coverage](https://learn.chatgpt.com/docs/hooks#tool-coverage),
 [Codex PreToolUse contract](https://learn.chatgpt.com/docs/hooks#pretooluse).

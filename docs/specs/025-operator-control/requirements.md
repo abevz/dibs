@@ -18,15 +18,22 @@
   cannot be used to hand off. An unclaimed worktree can be blocked, but has
   no issue lease to release or issue on which to write a note.
 - **R4. Delivery.** Extend the successful heartbeat result with optional
-  `control`, `reason`, `set_by`, and `set_at`. Preserve `expires_at` and the
-  existing idempotency contract. Expose the signal on CLI and MCP heartbeat
+  `control`, `reason`, `set_by`, and `set_at`. Include a `control_ref` with
+  the source target and revision when a restriction is present so the hook
+  can reconcile cached observations. Preserve `expires_at` and the existing
+  idempotency contract. Expose the signal on CLI and MCP heartbeat
   results and provide an independent live read for hooks. Older clients can
   continue to renew leases and will ignore the new signal.
 - **R5. Enforcement.** Ship and document a reference Claude Code
   `PreToolUse` hook. It uses the claimed issue or registered checkout, reads
-  current state for every covered attempt, denies with a fixed reason, and
-  fails closed on an unavailable or invalid check in an enrolled session.
-  Enforcement requires a trusted hook and covers future tool admission.
+  current state for every covered attempt, and denies with a fixed reason
+  when control applies. Cache observed pause and stop locally by issue and
+  worktree. Keep blocking until a fresh response confirms an explicit
+  resume for the matching restriction, including when the daemon is
+  unreachable. On daemon unavailability with no known restriction, let
+  normal tool handling proceed and show a warning that control could not be
+  checked. Lease-loss handling still applies. Enforcement requires a
+  trusted hook and covers future tool admission.
   Record the available Codex hook and its coverage limits.
 - **R6. Restricted data.** Admit only defined control values and reason codes.
   Include `ask_owner` in the restrictive vocabulary, with its public setter
@@ -34,7 +41,8 @@
   and explanatory text belongs in issue notes. The safety path must never
   parse issue notes as control or forward their contents into hook output.
 - **R7. Verification.** Cover authorization, scope overlap, pause and lease
-  renewal, resume, stop and handoff, outage, historical heartbeat replay,
-  and old-client compatibility. Demonstrate a real running Claude Code
-  session blocked on its first covered post-pause tool attempt and able to
-  execute a new attempt after resume. Use a scratch daemon.
+  renewal, resume, stop and handoff, outage with and without a known
+  restriction, historical heartbeat replay, and old-client compatibility.
+  Demonstrate a real running Claude Code session blocked on its first
+  covered post-pause tool attempt and able to execute a new attempt after
+  resume. Use a scratch daemon.
